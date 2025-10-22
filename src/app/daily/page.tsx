@@ -17,7 +17,8 @@ export default function DailyPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetch('/api/bars/daily')
+        // Add cache busting parameter to force fresh data
+        const response = await fetch(`/api/bars/daily?t=${Date.now()}`)
         const result = await response.json()
         setData(result)
       } catch (err) {

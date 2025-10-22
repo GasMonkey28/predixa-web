@@ -28,7 +28,8 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
   useEffect(() => {
     async function fetchTiers() {
       try {
-        const response = await fetch('/api/tiers/daily')
+        // Add cache busting parameter to force fresh data
+        const response = await fetch(`/api/tiers/daily?t=${Date.now()}`)
         const data = await response.json()
         
         if (!response.ok) {

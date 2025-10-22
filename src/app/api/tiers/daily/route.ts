@@ -70,9 +70,18 @@ export async function GET() {
         disclaimer: cleanText(s3Data.disclaimer || s3Data.DISCLAIMER || 'Data provided for informational purposes only.')
       }
       
-      return NextResponse.json(transformedData)
+      return NextResponse.json(transformedData, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'Surrogate-Control': 'no-store'
+        }
+      })
     } catch (s3Error) {
-      console.log(`S3 data not available for ${today}, trying yesterday: ${yesterdayStr}`)
+      console.error(`S3 data not available for ${today}, trying yesterday: ${yesterdayStr}`)
+      console.error('S3 Error details:', s3Error.message)
+      console.error('BUCKET:', BUCKET)
       
       // Try yesterday's data as fallback
       try {
@@ -104,9 +113,18 @@ export async function GET() {
           disclaimer: cleanText(s3Data.disclaimer || s3Data.DISCLAIMER || 'Data provided for informational purposes only.')
         }
         
-        return NextResponse.json(transformedData)
+        return NextResponse.json(transformedData, {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'Surrogate-Control': 'no-store'
+          }
+        })
       } catch (yesterdayError) {
-        console.log(`Yesterday's data also not available, using mock data`)
+        console.error(`Yesterday's data also not available, using mock data`)
+        console.error('Yesterday Error details:', yesterdayError.message)
+        console.error('BUCKET:', BUCKET)
         
         // Fallback to mock data if both today and yesterday are not available
         const mockData = {
@@ -127,7 +145,14 @@ export async function GET() {
           disclaimer: 'Tier rankings are probabilistic predictions, not guarantees. Always use proper risk management.'
         }
         
-        return NextResponse.json(mockData)
+        return NextResponse.json(mockData, {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'Surrogate-Control': 'no-store'
+          }
+        })
       }
     }
   } catch (error) {
