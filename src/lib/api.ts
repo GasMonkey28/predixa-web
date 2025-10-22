@@ -3,6 +3,9 @@ import axios from 'axios'
 const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET!
 const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
 
+// Force lowercase ticker for S3 access - S3 is case sensitive
+const S3_TICKER = TICKER.toLowerCase()
+
 export type Bar = { t: string; o: number; h: number; l: number; c: number; v?: number }
 export type BarsPayload = {
   ticker: string
@@ -14,7 +17,7 @@ export type BarsPayload = {
 export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
   // Using s3.amazonaws.com format for public access - S3 is case sensitive
   // Force clean build - timestamp: 2025-10-22
-  const url = `https://s3.amazonaws.com/${BUCKET}/bars/${TICKER.toLowerCase()}/15min/latest.json`
+  const url = `https://s3.amazonaws.com/${BUCKET}/bars/${S3_TICKER}/15min/latest.json`
   
   try {
     console.log('Environment check:', {
@@ -28,6 +31,7 @@ export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
     console.log(`Fetching bars from: ${url}`)
     console.log(`BUCKET: ${BUCKET}`)
     console.log(`TICKER: ${TICKER}`)
+    console.log(`S3_TICKER: ${S3_TICKER}`)
     console.log('FORCE CLEAN BUILD - Using s3.amazonaws.com format with lowercase ticker')
     const resp = await axios.get(url, { 
       headers: {
@@ -70,7 +74,7 @@ export async function fetchDailyBars(force = false): Promise<BarsPayload> {
 }
 
 export async function fetchFuture(dateISO: string): Promise<any> {
-  const url = `https://s3.amazonaws.com/${BUCKET}/charts/${dateISO}/${TICKER}.json`
+  const url = `https://s3.amazonaws.com/${BUCKET}/charts/${dateISO}/${S3_TICKER}.json`
   const resp = await axios.get(url, { headers: noCacheHeaders(true) })
   return resp.data
 }
