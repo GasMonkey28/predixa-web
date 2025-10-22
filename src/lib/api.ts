@@ -22,7 +22,7 @@ export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
     return normalizeBars(resp.data)
   } catch (error) {
     console.error('S3 bars data not available, using mock data for weekly bars')
-    console.error('Error details:', error.message)
+    console.error('Error details:', error instanceof Error ? error.message : String(error))
     console.error('BUCKET:', BUCKET)
     console.error('TICKER:', TICKER)
     // Return mock data when S3 is not available

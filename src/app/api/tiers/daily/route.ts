@@ -80,7 +80,7 @@ export async function GET() {
       })
     } catch (s3Error) {
       console.error(`S3 data not available for ${today}, trying yesterday: ${yesterdayStr}`)
-      console.error('S3 Error details:', s3Error.message)
+      console.error('S3 Error details:', s3Error instanceof Error ? s3Error.message : String(s3Error))
       console.error('BUCKET:', BUCKET)
       
       // Try yesterday's data as fallback
@@ -123,7 +123,7 @@ export async function GET() {
         })
       } catch (yesterdayError) {
         console.error(`Yesterday's data also not available, using mock data`)
-        console.error('Yesterday Error details:', yesterdayError.message)
+        console.error('Yesterday Error details:', yesterdayError instanceof Error ? yesterdayError.message : String(yesterdayError))
         console.error('BUCKET:', BUCKET)
         
         // Fallback to mock data if both today and yesterday are not available
