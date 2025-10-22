@@ -17,6 +17,8 @@ export async function GET() {
     
     let url = `https://${BUCKET}.s3.amazonaws.com/summary_json/${today}.json`
     console.log(`Trying S3 URL: ${url}`)
+    console.log(`BUCKET: ${BUCKET}`)
+    console.log(`TODAY: ${today}`)
     
     try {
       let response
