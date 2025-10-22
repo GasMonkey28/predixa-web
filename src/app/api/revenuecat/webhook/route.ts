@@ -19,13 +19,15 @@ export async function POST(request: NextRequest) {
     //   return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     // }
 
-    const { event, app_user_id, product_id, period_type, purchased_at_ms } = body
+    const { event } = body
+    const { app_user_id, product_id, type, environment } = event
 
     // Map RevenueCat events to subscription status
     let subscriptionStatus = 'inactive'
-    switch (event.type) {
+    switch (type) {
       case 'INITIAL_PURCHASE':
       case 'RENEWAL':
+      case 'TEST': // Handle test events
         subscriptionStatus = 'active'
         break
       case 'CANCELLATION':
@@ -37,8 +39,25 @@ export async function POST(request: NextRequest) {
         break
     }
 
-    // Find Cognito user by app_user_id (you'll need to store this mapping)
-    // For now, we'll assume app_user_id is the Cognito username
+    console.log('RevenueCat webhook received:', {
+      eventType: type,
+      app_user_id,
+      product_id,
+      environment,
+      subscriptionStatus
+    })
+
+    // Handle test events differently
+    if (type === 'TEST') {
+      console.log('Test event received - webhook is working correctly')
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Test webhook received successfully',
+        eventType: 'TEST'
+      })
+    }
+
+    // For real events, try to find the Cognito user
     try {
       const getUserCommand = new AdminGetUserCommand({
         UserPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID!,
@@ -47,14 +66,9 @@ export async function POST(request: NextRequest) {
       
       const cognitoUser = await cognitoClient.send(getUserCommand)
       
-      // Store subscription status in Cognito user attributes
-      // You can add custom attributes for subscription status
-      console.log('RevenueCat webhook received:', {
-        event: event.type,
-        app_user_id,
-        product_id,
-        subscriptionStatus,
-        cognitoUser: cognitoUser.Username
+      console.log('Cognito user found:', {
+        username: cognitoUser.Username,
+        subscriptionStatus
       })
 
       // Here you would typically:
@@ -63,10 +77,23 @@ export async function POST(request: NextRequest) {
       // 3. Sync with Stripe if needed
       // 4. Send notifications to user
 
-      return NextResponse.json({ success: true })
-    } catch (error) {
-      console.error('Error processing RevenueCat webhook:', error)
-      return NextResponse.json({ error: 'Failed to process webhook' }, { status: 500 })
+      return NextResponse.json({ 
+        success: true,
+        message: 'Webhook processed successfully',
+        cognitoUser: cognitoUser.Username
+      })
+    } catch (cognitoError) {
+      // If user doesn't exist in Cognito, log it but don't fail
+      console.log('User not found in Cognito (this is normal for test events):', {
+        app_user_id,
+        error: cognitoError instanceof Error ? cognitoError.message : 'Unknown error'
+      })
+
+      return NextResponse.json({ 
+        success: true,
+        message: 'Webhook received but user not found in Cognito',
+        note: 'This is normal for test events or if user signed up via mobile only'
+      })
     }
   } catch (error: any) {
     console.error('Error processing RevenueCat webhook:', error)
