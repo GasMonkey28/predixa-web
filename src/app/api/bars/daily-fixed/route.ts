@@ -3,9 +3,10 @@ import axios from 'axios'
 
 export async function GET() {
   try {
-    const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET!
-    const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
-    const S3_TICKER = (process.env.NEXT_PUBLIC_TICKER || 'SPY').toLowerCase()
+  const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET!
+  const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
+  // CRITICAL FIX: Force lowercase ticker for S3 access - S3 is case sensitive
+  const S3_TICKER = 'spy'  // Hardcoded to ensure lowercase
     
     const url = `https://s3.amazonaws.com/${BUCKET}/bars/${S3_TICKER}/15min/latest.json`
     
