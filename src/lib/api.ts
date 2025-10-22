@@ -1,11 +1,19 @@
 import axios from 'axios'
 
+// FORCE COMPLETE REBUILD - MAJOR CHANGE TO BREAK CACHE
 const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET!
 const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
 
-// Force lowercase ticker for S3 access - S3 is case sensitive
-// CRITICAL: Always use lowercase for S3 access regardless of env var case
+// CRITICAL FIX: Force lowercase ticker for S3 access - S3 is case sensitive
+// This is the root cause of the 403 errors - S3 requires lowercase ticker
 const S3_TICKER = (process.env.NEXT_PUBLIC_TICKER || 'SPY').toLowerCase()
+
+console.log('API MODULE LOADED - FORCE REBUILD:', {
+  BUCKET,
+  TICKER,
+  S3_TICKER,
+  timestamp: new Date().toISOString()
+})
 
 export type Bar = { t: string; o: number; h: number; l: number; c: number; v?: number }
 export type BarsPayload = {
@@ -16,10 +24,19 @@ export type BarsPayload = {
 }
 
 export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
+  // FORCE COMPLETE REBUILD - MAJOR CHANGE TO BREAK DEPLOYMENT CACHE
   // Using s3.amazonaws.com format for public access - S3 is case sensitive
-  // Force clean build - timestamp: 2025-10-22
-  // CRITICAL FIX: Force lowercase ticker for S3 access
+  // CRITICAL FIX: Force lowercase ticker for S3 access - this fixes 403 errors
   const url = `https://s3.amazonaws.com/${BUCKET}/bars/${S3_TICKER}/15min/latest.json`
+  
+  console.log('FORCE REBUILD - fetchWeeklyBars called:', {
+    url,
+    BUCKET,
+    TICKER,
+    S3_TICKER,
+    force,
+    timestamp: new Date().toISOString()
+  })
   
   try {
     console.log('Environment check:', {
