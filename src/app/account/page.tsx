@@ -5,12 +5,14 @@ import { useStripeStore } from '@/lib/stripe-store'
 import { useEffect } from 'react'
 
 export default function AccountPage() {
-  const { user, signOut } = useAuthStore()
-  const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription } = useStripeStore()
+  const { user, signOut, isAuthenticated } = useAuthStore()
+  const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription, isLoading, error } = useStripeStore()
 
   useEffect(() => {
-    fetchSubscription()
-  }, [fetchSubscription])
+    if (isAuthenticated && user) {
+      fetchSubscription()
+    }
+  }, [fetchSubscription, isAuthenticated, user])
 
   const handleSubscribe = async (priceId: string) => {
     try {
@@ -54,7 +56,15 @@ export default function AccountPage() {
         <div className="bg-white rounded-lg border p-6">
           <h2 className="text-lg font-medium mb-4">Subscription</h2>
           
-          {subscription ? (
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              Error: {error}
+            </div>
+          )}
+          
+          {isLoading ? (
+            <div className="text-gray-600">Loading subscription...</div>
+          ) : subscription ? (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <div>
