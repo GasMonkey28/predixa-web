@@ -13,12 +13,13 @@ export default function DailyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>('line')
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     async function fetchData() {
       try {
         // Add cache busting parameter to force fresh data
-        const response = await fetch(`/api/bars/daily?t=${Date.now()}`)
+        const response = await fetch(`/api/bars/daily?t=${Date.now()}&r=${Math.random()}`)
         const result = await response.json()
         console.log('Fetched data:', result)
         console.log('Bars count:', result.bars?.length)
@@ -33,7 +34,7 @@ export default function DailyPage() {
       }
     }
     fetchData()
-  }, [])
+  }, [refreshKey])
 
   if (loading) {
     return (
@@ -76,12 +77,23 @@ export default function DailyPage() {
           <h1 className="text-3xl font-bold">Daily Analysis</h1>
           <p className="text-sm text-gray-600">SPY Daily OHLC Data</p>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold">
-            ${currentPrice.toFixed(2)}
-          </div>
-          <div className={`text-sm ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              setRefreshKey(prev => prev + 1)
+              setLoading(true)
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            🔄 Refresh Data
+          </button>
+          <div className="text-right">
+            <div className="text-2xl font-bold">
+              ${currentPrice.toFixed(2)}
+            </div>
+            <div className={`text-sm ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
+            </div>
           </div>
         </div>
       </div>
