@@ -6,7 +6,7 @@ const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
 
 // CRITICAL FIX: Force lowercase ticker for S3 access - S3 is case sensitive
 // This is the root cause of the 403 errors - S3 requires lowercase ticker
-const S3_TICKER = (process.env.NEXT_PUBLIC_TICKER || 'SPY').toLowerCase()
+const S3_TICKER = 'spy'  // Hardcoded to ensure lowercase
 
 console.log('API MODULE LOADED - FORCE REBUILD:', {
   BUCKET,
