@@ -44,11 +44,26 @@ export const useStripeStore = create<StripeState & StripeActions>((set, get) => 
         body: JSON.stringify({ priceId })
       })
       
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to create checkout session')
+      }
+      
       const { sessionId } = await response.json()
+      
+      if (!sessionId) {
+        throw new Error('No session ID returned from server')
+      }
+      
       const stripe = await stripePromise
       
       if (stripe) {
-        await stripe.redirectToCheckout({ sessionId })
+        const { error } = await stripe.redirectToCheckout({ sessionId })
+        if (error) {
+          throw new Error(error.message)
+        }
+      } else {
+        throw new Error('Stripe failed to load')
       }
     } catch (error: any) {
       set({ error: error.message || 'Failed to create checkout session', isLoading: false })
