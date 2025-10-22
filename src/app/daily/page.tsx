@@ -20,8 +20,13 @@ export default function DailyPage() {
         // Add cache busting parameter to force fresh data
         const response = await fetch(`/api/bars/daily?t=${Date.now()}`)
         const result = await response.json()
+        console.log('Fetched data:', result)
+        console.log('Bars count:', result.bars?.length)
+        console.log('First bar:', result.bars?.[0])
+        console.log('Last bar:', result.bars?.[result.bars?.length - 1])
         setData(result)
       } catch (err) {
+        console.error('Error fetching data:', err)
         setError('Failed to load data')
       } finally {
         setLoading(false)
