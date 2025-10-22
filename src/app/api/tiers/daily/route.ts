@@ -4,6 +4,15 @@ import axios from 'axios'
 const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET!
 const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
 
+// Clean up text fields to handle encoding issues
+const cleanText = (text: string) => {
+  if (!text) return text
+  return text
+    .replace(/[^\x20-\x7E]/g, '') // Remove non-ASCII characters
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim()
+}
+
 export async function GET() {
   try {
     // Get today's date in YYYY-MM-DD format (using local timezone)
@@ -42,15 +51,6 @@ export async function GET() {
       
       // Transform the data to match our expected format
       const s3Data = response.data
-      
-      // Clean up text fields to handle encoding issues
-      const cleanText = (text: string) => {
-        if (!text) return text
-        return text
-          .replace(/[^\x20-\x7E]/g, '') // Remove non-ASCII characters
-          .replace(/\s+/g, ' ') // Normalize whitespace
-          .trim()
-      }
       
       const transformedData = {
         date: today,

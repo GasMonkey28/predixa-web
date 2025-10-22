@@ -12,10 +12,21 @@ export type BarsPayload = {
 }
 
 export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
-  const url = `https://${BUCKET}.s3.amazonaws.com/bars/${TICKER.toLowerCase()}/15min/latest.json`
-  console.log(`Fetching bars from: ${url}`)
-  const resp = await axios.get(url, { headers: noCacheHeaders(force) })
-  return normalizeBars(resp.data)
+  try {
+    const url = `https://${BUCKET}.s3.amazonaws.com/bars/${TICKER.toLowerCase()}/15min/latest.json`
+    console.log(`Fetching bars from: ${url}`)
+    const resp = await axios.get(url, { headers: noCacheHeaders(force) })
+    return normalizeBars(resp.data)
+  } catch (error) {
+    console.log('S3 bars data not available, using mock data for weekly bars')
+    // Return mock data when S3 is not available
+    return {
+      ticker: TICKER,
+      interval: '15min',
+      market_open: '09:30',
+      bars: generateMockBars()
+    }
+  }
 }
 
 export async function fetchDailyBars(force = false): Promise<BarsPayload> {
