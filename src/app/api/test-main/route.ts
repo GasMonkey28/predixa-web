@@ -3,7 +3,7 @@ import axios from 'axios'
 
 const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET!
 const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
-const S3_TICKER = TICKER.toLowerCase()
+const S3_TICKER = (process.env.NEXT_PUBLIC_TICKER || 'SPY').toLowerCase()
 
 function normalizeBars(raw: any) {
   const bars = (raw.bars || []).filter((b: any) => b.o != null && b.h != null && b.l != null && b.c != null)
@@ -31,37 +31,36 @@ export async function GET() {
       }
     })
     
-    console.log('Main function - success:', {
-      status: response.status,
-      barsCount: response.data?.bars?.length,
-      firstBar: response.data?.bars?.[0],
-      lastBar: response.data?.bars?.[response.data?.bars?.length - 1]
-    })
-    
-    const normalizedData = normalizeBars(response.data)
-    console.log('Main function - normalized:', {
-      ticker: normalizedData.ticker,
-      barsCount: normalizedData.bars.length,
-      firstBar: normalizedData.bars[0],
-      lastBar: normalizedData.bars[normalizedData.bars.length - 1]
-    })
+    const rawData = response.data
+    const normalizedData = normalizeBars(rawData)
     
     return NextResponse.json({
-      success: true,
-      url,
-      data: {
+      status: 'success',
+      url: url,
+      rawData: {
+        symbol: rawData.symbol,
+        ticker: rawData.ticker,
+        interval: rawData.interval,
+        barsCount: rawData.bars?.length
+      },
+      normalizedData: {
         ticker: normalizedData.ticker,
-        barsCount: normalizedData.bars.length,
         interval: normalizedData.interval,
-        firstBar: normalizedData.bars[0],
-        lastBar: normalizedData.bars[normalizedData.bars.length - 1]
+        barsCount: normalizedData.bars?.length,
+        firstBar: normalizedData.bars?.[0],
+        lastBar: normalizedData.bars?.[normalizedData.bars?.length - 1]
       }
     })
-  } catch (error) {
-    console.error('Main function - error:', error)
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : String(error)
-    }, { status: 500 })
+  } catch (error: any) {
+    console.error('Error in test-main:', error)
+    return NextResponse.json(
+      {
+        status: 'error',
+        message: error.message,
+        responseStatus: error.response?.status,
+        responseData: error.response?.data,
+      },
+      { status: 500 }
+    )
   }
 }
