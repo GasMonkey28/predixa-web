@@ -24,7 +24,7 @@ export async function GET() {
     yesterday.setDate(yesterday.getDate() - 1)
     const yesterdayStr = yesterday.toLocaleDateString('en-CA')
     
-    let url = `https://${BUCKET}.s3.amazonaws.com/summary_json/${today}.json`
+    let url = `https://s3.amazonaws.com/${BUCKET}/summary_json/${today}.json`
     console.log(`Trying S3 URL: ${url}`)
     console.log(`BUCKET: ${BUCKET}`)
     console.log(`TODAY: ${today}`)

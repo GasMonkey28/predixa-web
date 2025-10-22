@@ -12,7 +12,7 @@ export type BarsPayload = {
 }
 
 export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
-  const url = `https://${BUCKET}.s3.amazonaws.com/bars/${TICKER.toLowerCase()}/15min/latest.json`
+  const url = `https://s3.amazonaws.com/${BUCKET}/bars/${TICKER.toLowerCase()}/15min/latest.json`
   
   try {
     console.log('Environment check:', {
@@ -67,7 +67,7 @@ export async function fetchDailyBars(force = false): Promise<BarsPayload> {
 }
 
 export async function fetchFuture(dateISO: string): Promise<any> {
-  const url = `https://${BUCKET}.s3.amazonaws.com/charts/${dateISO}/${TICKER}.json`
+  const url = `https://s3.amazonaws.com/${BUCKET}/charts/${dateISO}/${TICKER}.json`
   const resp = await axios.get(url, { headers: noCacheHeaders(true) })
   return resp.data
 }
