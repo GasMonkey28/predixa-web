@@ -27,7 +27,15 @@ export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
       firstBar: resp.data.bars?.[0],
       lastBar: resp.data.bars?.[resp.data.bars?.length - 1]
     })
-    return normalizeBars(resp.data)
+    
+    const normalizedData = normalizeBars(resp.data)
+    console.log('Normalized data:', {
+      ticker: normalizedData.ticker,
+      barsCount: normalizedData.bars.length,
+      lastPrice: normalizedData.bars[normalizedData.bars.length - 1]?.c
+    })
+    
+    return normalizedData
   } catch (error) {
     console.error('S3 bars data not available, using mock data for weekly bars')
     console.error('Error details:', error instanceof Error ? error.message : String(error))
