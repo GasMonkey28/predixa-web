@@ -6,13 +6,16 @@ import { useEffect } from 'react'
 
 export default function AccountPage() {
   const { user, signOut, isAuthenticated } = useAuthStore()
-  const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription, isLoading, error } = useStripeStore()
+  const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription, isLoading, error, clearError } = useStripeStore()
 
   useEffect(() => {
     if (isAuthenticated && user) {
       fetchSubscription()
+    } else {
+      // Clear any existing errors when not authenticated
+      clearError()
     }
-  }, [fetchSubscription, isAuthenticated, user])
+  }, [fetchSubscription, isAuthenticated, user, clearError])
 
   const handleSubscribe = async (priceId: string) => {
     try {
@@ -57,8 +60,14 @@ export default function AccountPage() {
           <h2 className="text-lg font-medium mb-4">Subscription</h2>
           
           {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-              Error: {error}
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded flex justify-between items-center">
+              <span>Error: {error}</span>
+              <button 
+                onClick={clearError}
+                className="text-red-600 hover:text-red-800 underline text-sm"
+              >
+                Dismiss
+              </button>
             </div>
           )}
           
