@@ -12,6 +12,7 @@ export type BarsPayload = {
 }
 
 export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
+  // Using s3.amazonaws.com format for public access
   const url = `https://s3.amazonaws.com/${BUCKET}/bars/${TICKER.toLowerCase()}/15min/latest.json`
   
   try {
