@@ -28,8 +28,7 @@ export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
     console.log(`TICKER: ${TICKER}`)
     const resp = await axios.get(url, { 
       headers: {
-        ...noCacheHeaders(force),
-        'Origin': 'https://www.predixaweb.com'
+        ...noCacheHeaders(force)
       }
     })
     console.log('Successfully fetched real data from S3 - PRODUCTION FIX')
