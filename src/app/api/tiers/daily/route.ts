@@ -10,15 +10,33 @@ export async function GET() {
     const today = new Date().toLocaleDateString('en-CA') // Returns YYYY-MM-DD format
     
     // Try to fetch from S3 bucket with today's date
-    const url = `https://${BUCKET}.s3.amazonaws.com/summary_json/${today}.json`
+    // Also try yesterday's date as fallback
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toLocaleDateString('en-CA')
+    
+    let url = `https://${BUCKET}.s3.amazonaws.com/summary_json/${today}.json`
+    console.log(`Trying S3 URL: ${url}`)
     
     try {
-      const response = await axios.get(url, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      })
+      let response
+      try {
+        response = await axios.get(url, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        })
+      } catch (todayError) {
+        console.log(`Today's data not available, trying yesterday: ${yesterdayStr}`)
+        url = `https://${BUCKET}.s3.amazonaws.com/summary_json/${yesterdayStr}.json`
+        response = await axios.get(url, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        })
+      }
       
       // Transform the data to match our expected format
       const s3Data = response.data
