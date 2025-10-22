@@ -64,7 +64,7 @@ export default function AccountPage() {
           
           {isLoading ? (
             <div className="text-gray-600">Loading subscription...</div>
-          ) : subscription ? (
+          ) : subscription && subscription.plan ? (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <div>

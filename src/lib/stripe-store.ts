@@ -76,6 +76,17 @@ export const useStripeStore = create<StripeState & StripeActions>((set, get) => 
     set({ isLoading: true, error: null })
     try {
       const response = await fetch('/api/stripe/subscription')
+      
+      if (response.status === 401) {
+        // User not authenticated, this is normal
+        set({ subscription: null, isLoading: false, error: null })
+        return
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const subscription = await response.json()
       set({ subscription, isLoading: false })
     } catch (error: any) {
