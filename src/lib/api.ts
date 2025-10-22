@@ -18,7 +18,7 @@ export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
     console.log(`BUCKET: ${BUCKET}`)
     console.log(`TICKER: ${TICKER}`)
     const resp = await axios.get(url, { headers: noCacheHeaders(force) })
-    console.log('Successfully fetched real data from S3')
+    console.log('Successfully fetched real data from S3 - PRODUCTION FIX')
     console.log('Raw S3 data structure:', {
       symbol: resp.data.symbol,
       ticker: resp.data.ticker,
