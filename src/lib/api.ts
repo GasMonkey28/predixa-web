@@ -17,6 +17,7 @@ export type BarsPayload = {
 export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
   // Using s3.amazonaws.com format for public access - S3 is case sensitive
   // Force clean build - timestamp: 2025-10-22
+  // CRITICAL FIX: Force lowercase ticker for S3 access
   const url = `https://s3.amazonaws.com/${BUCKET}/bars/${S3_TICKER}/15min/latest.json`
   
   try {
@@ -33,6 +34,7 @@ export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
     console.log(`TICKER: ${TICKER}`)
     console.log(`S3_TICKER: ${S3_TICKER}`)
     console.log('FORCE CLEAN BUILD - Using s3.amazonaws.com format with lowercase ticker')
+    console.log('CRITICAL FIX: URL should use spy (lowercase), not SPY (uppercase)')
     const resp = await axios.get(url, { 
       headers: {
         ...noCacheHeaders(force)
