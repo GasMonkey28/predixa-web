@@ -13,11 +13,24 @@ export type BarsPayload = {
 
 export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
   try {
+    console.log('Environment check:', {
+      NODE_ENV: process.env.NODE_ENV,
+      NEXT_PUBLIC_S3_BUCKET: process.env.NEXT_PUBLIC_S3_BUCKET,
+      NEXT_PUBLIC_TICKER: process.env.NEXT_PUBLIC_TICKER,
+      BUCKET: BUCKET,
+      TICKER: TICKER
+    })
+    
     const url = `https://${BUCKET}.s3.amazonaws.com/bars/${TICKER.toLowerCase()}/15min/latest.json`
     console.log(`Fetching bars from: ${url}`)
     console.log(`BUCKET: ${BUCKET}`)
     console.log(`TICKER: ${TICKER}`)
-    const resp = await axios.get(url, { headers: noCacheHeaders(force) })
+    const resp = await axios.get(url, { 
+      headers: {
+        ...noCacheHeaders(force),
+        'Origin': 'https://www.predixaweb.com'
+      }
+    })
     console.log('Successfully fetched real data from S3 - PRODUCTION FIX')
     console.log('Raw S3 data structure:', {
       symbol: resp.data.symbol,
@@ -39,8 +52,11 @@ export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
   } catch (error) {
     console.error('S3 bars data not available, using mock data for weekly bars')
     console.error('Error details:', error instanceof Error ? error.message : String(error))
+    console.error('Error status:', error instanceof Error && 'status' in error ? error.status : 'unknown')
+    console.error('Error response:', error instanceof Error && 'response' in error ? error.response : 'unknown')
     console.error('BUCKET:', BUCKET)
     console.error('TICKER:', TICKER)
+    console.error('URL that failed:', url)
     // Return mock data when S3 is not available
     return {
       ticker: TICKER,
