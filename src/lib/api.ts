@@ -19,6 +19,14 @@ export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
     console.log(`TICKER: ${TICKER}`)
     const resp = await axios.get(url, { headers: noCacheHeaders(force) })
     console.log('Successfully fetched real data from S3')
+    console.log('Raw S3 data structure:', {
+      symbol: resp.data.symbol,
+      ticker: resp.data.ticker,
+      interval: resp.data.interval,
+      barsCount: resp.data.bars?.length,
+      firstBar: resp.data.bars?.[0],
+      lastBar: resp.data.bars?.[resp.data.bars?.length - 1]
+    })
     return normalizeBars(resp.data)
   } catch (error) {
     console.error('S3 bars data not available, using mock data for weekly bars')
@@ -54,7 +62,7 @@ export async function fetchEconomicCalendar(): Promise<any> {
 function normalizeBars(raw: any): BarsPayload {
   const bars = (raw.bars || []).filter((b: any) => b.o != null && b.h != null && b.l != null && b.c != null)
   return {
-    ticker: raw.ticker || TICKER,
+    ticker: raw.ticker || raw.symbol || TICKER,
     interval: raw.interval || '15min',
     market_open: raw.market_open,
     bars: bars.map((b: any) => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v })),
