@@ -4,7 +4,8 @@ const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET!
 const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
 
 // Force lowercase ticker for S3 access - S3 is case sensitive
-const S3_TICKER = TICKER.toLowerCase()
+// CRITICAL: Always use lowercase for S3 access regardless of env var case
+const S3_TICKER = (process.env.NEXT_PUBLIC_TICKER || 'SPY').toLowerCase()
 
 export type Bar = { t: string; o: number; h: number; l: number; c: number; v?: number }
 export type BarsPayload = {
@@ -26,7 +27,8 @@ export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
       NEXT_PUBLIC_S3_BUCKET: process.env.NEXT_PUBLIC_S3_BUCKET,
       NEXT_PUBLIC_TICKER: process.env.NEXT_PUBLIC_TICKER,
       BUCKET: BUCKET,
-      TICKER: TICKER
+      TICKER: TICKER,
+      S3_TICKER: S3_TICKER
     })
     
     console.log(`Fetching bars from: ${url}`)
