@@ -99,7 +99,7 @@ export default function AccountPage() {
                   <h3 className="font-medium">Monthly Pro</h3>
                   <p className="text-2xl font-bold">$19.99<span className="text-sm font-normal">/month</span></p>
                   <button
-                    onClick={() => handleSubscribe('price_monthly_pro')}
+                    onClick={() => handleSubscribe('price_1SLR4cCqoRregBRsF7uBCniS')}
                     className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
                     Subscribe
@@ -110,7 +110,7 @@ export default function AccountPage() {
                   <p className="text-2xl font-bold">$179.99<span className="text-sm font-normal">/year</span></p>
                   <p className="text-sm text-green-600">Save $60/year</p>
                   <button
-                    onClick={() => handleSubscribe('price_yearly_pro')}
+                    onClick={() => handleSubscribe('price_1SLR4cCqoRregBRsibd2Jz0B')}
                     className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
                     Subscribe
