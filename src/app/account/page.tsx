@@ -9,13 +9,9 @@ export default function AccountPage() {
   const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription, isLoading, error, clearError } = useStripeStore()
 
   useEffect(() => {
-    if (isAuthenticated && user) {
-      fetchSubscription()
-    } else {
-      // Clear any existing errors when not authenticated
-      clearError()
-    }
-  }, [fetchSubscription, isAuthenticated, user, clearError])
+    // For testing, always try to fetch subscription regardless of auth status
+    fetchSubscription()
+  }, [fetchSubscription])
 
   const handleSubscribe = async (priceId: string) => {
     try {
