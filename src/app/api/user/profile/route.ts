@@ -2,9 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 
+// Create DynamoDB client with credentials
+// For local dev: uses AWS CLI credentials
+// For production: uses IAM role (Lambda/Vercel)
 const client = new DynamoDBClient({
   region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1',
+  credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+    ? {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      }
+    : undefined, // Will use default credential provider chain
 })
+
 const docClient = DynamoDBDocumentClient.from(client)
 const TABLE_NAME = 'UserProfiles'
 
@@ -12,7 +22,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { userId, email, givenName, familyName } = body
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'userId required' }, { status: 400 })
+    }
+    
     const now = new Date().toISOString()
+    
+    console.log('API: Updating profile for userId:', userId)
     
     // Check if profile exists
     const existing = await docClient.send(
@@ -24,6 +41,7 @@ export async function POST(request: NextRequest) {
     
     if (!existing.Item) {
       // Create new profile
+      console.log('API: Creating new profile')
       await docClient.send(
         new PutCommand({
           TableName: TABLE_NAME,
@@ -40,6 +58,7 @@ export async function POST(request: NextRequest) {
       )
     } else {
       // Update existing profile
+      console.log('API: Updating existing profile')
       await docClient.send(
         new UpdateCommand({
           TableName: TABLE_NAME,
@@ -55,10 +74,17 @@ export async function POST(request: NextRequest) {
       )
     }
     
+    console.log('API: Profile updated successfully')
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('Error updating profile:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error details:', {
+      name: error?.name,
+      message: error?.message,
+      code: error?.code,
+      region: process.env.NEXT_PUBLIC_AWS_REGION,
+    })
+    return NextResponse.json({ error: error.message || 'Failed to update profile' }, { status: 500 })
   }
 }
 

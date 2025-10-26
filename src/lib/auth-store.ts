@@ -147,10 +147,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           })
           
           if (!response.ok) {
-            throw new Error('Failed to update profile via API')
+            const errorData = await response.json().catch(() => ({}))
+            console.error('API error response:', errorData)
+            throw new Error(errorData.error || 'Failed to update profile via API')
           }
           
-          console.log('Profile updated via API route')
+          const result = await response.json()
+          console.log('Profile updated via API route:', result)
         } else {
           throw error
         }
