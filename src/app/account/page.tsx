@@ -2,9 +2,11 @@
 
 import { useAuthStore } from '@/lib/auth-store'
 import { useStripeStore } from '@/lib/stripe-store'
+import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
 export default function AccountPage() {
+  const router = useRouter()
   const { user, signOut, isAuthenticated } = useAuthStore()
   const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription, isLoading, error, clearError } = useStripeStore()
 
@@ -34,7 +36,15 @@ export default function AccountPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Account</h1>
         <button
-          onClick={() => signOut()}
+          onClick={async () => {
+            try {
+              await signOut()
+              // Redirect to home page after sign out
+              router.push('/')
+            } catch (error) {
+              console.error('Sign out failed:', error)
+            }
+          }}
           className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
         >
           Sign Out
