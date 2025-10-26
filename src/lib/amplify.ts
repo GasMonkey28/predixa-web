@@ -14,13 +14,15 @@ const amplifyConfig = {
             process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
             'http://localhost:3000',
             'http://localhost:3001',
-            'https://www.predixaweb.com'
+            'https://www.predixaweb.com',
+            'https://predixa-web.vercel.app'
           ],
           redirectSignOut: [
             process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
             'http://localhost:3000',
             'http://localhost:3001',
-            'https://www.predixaweb.com'
+            'https://www.predixaweb.com',
+            'https://predixa-web.vercel.app'
           ],
           responseType: 'code' as const
         },
