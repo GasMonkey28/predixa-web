@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
 
@@ -9,18 +9,29 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading } = useAuthStore()
+  const { isAuthenticated, isLoading, checkAuth } = useAuthStore()
   const router = useRouter()
+  const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    const verifyAuth = async () => {
+      // First check the current auth state
+      await checkAuth()
+      setIsChecking(false)
+    }
+    verifyAuth()
+  }, [checkAuth])
+
+  useEffect(() => {
+    // Once we've finished checking auth, redirect if not authenticated
+    if (!isChecking && !isLoading && !isAuthenticated) {
       // Redirect to home if not authenticated
       router.push('/')
     }
-  }, [isAuthenticated, isLoading, router])
+  }, [isChecking, isAuthenticated, isLoading, router])
 
-  // Show nothing while checking auth
-  if (isLoading) {
+  // Show loading while checking auth
+  if (isChecking || isLoading) {
     return (
       <div className="mx-auto max-w-7xl p-6">
         <div className="flex items-center justify-center h-64">
