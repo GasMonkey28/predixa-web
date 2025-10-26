@@ -11,21 +11,6 @@ export default function HomePage() {
   const [showLogin, setShowLogin] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
 
-  const handleForceSignOut = async () => {
-    try {
-      // Clear local storage
-      localStorage.clear()
-      // Clear session storage
-      sessionStorage.clear()
-      // Force reload to clear auth state
-      window.location.href = '/'
-    } catch (error) {
-      console.error('Error clearing session:', error)
-      // Force reload anyway
-      window.location.href = '/'
-    }
-  }
-
   if (!isAuthenticated) {
     return (
       <main className="mx-auto max-w-7xl p-6">
@@ -33,15 +18,6 @@ export default function HomePage() {
           <h1 className="text-4xl font-bold text-gray-900">Predixa Web</h1>
           <p className="mt-2 text-lg text-gray-600">
             Professional trading analytics and market insights
-          </p>
-          <p className="mt-2 text-sm text-red-600">
-            Having sign-in issues?{' '}
-            <button
-              onClick={handleForceSignOut}
-              className="underline hover:text-red-800"
-            >
-              Clear Session
-            </button>
           </p>
         </div>
 
