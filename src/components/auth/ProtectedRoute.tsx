@@ -15,16 +15,25 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   useEffect(() => {
     const verifyAuth = async () => {
-      // First check the current auth state
-      await checkAuth()
-      setIsChecking(false)
+      try {
+        console.log('ProtectedRoute: Checking auth...')
+        // First check the current auth state
+        await checkAuth()
+        console.log('ProtectedRoute: Auth check complete')
+      } catch (error) {
+        console.error('ProtectedRoute: Auth check failed:', error)
+      } finally {
+        setIsChecking(false)
+      }
     }
     verifyAuth()
   }, [checkAuth])
 
   useEffect(() => {
     // Once we've finished checking auth, redirect if not authenticated
+    console.log('ProtectedRoute state:', { isChecking, isLoading, isAuthenticated })
     if (!isChecking && !isLoading && !isAuthenticated) {
+      console.log('ProtectedRoute: Not authenticated, redirecting to home')
       // Redirect to home if not authenticated
       router.push('/')
     }

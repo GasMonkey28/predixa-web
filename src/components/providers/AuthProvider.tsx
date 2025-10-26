@@ -16,28 +16,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Handle OAuth callback
     const handleOAuthCallback = async () => {
       try {
+        console.log('AuthProvider: Handling OAuth callback...')
         const { tokens } = await fetchAuthSession()
+        console.log('AuthProvider: Tokens:', tokens ? 'Present' : 'Missing')
         if (tokens) {
           // User is authenticated via OAuth
+          console.log('AuthProvider: User authenticated, updating auth state...')
           await checkAuth()
-          // Small delay to ensure state is updated
+          console.log('AuthProvider: Auth state updated, redirecting to /daily')
+          // Delay to ensure state is updated before redirect
           setTimeout(() => {
+            console.log('AuthProvider: Cleaning URL and redirecting to /daily')
             // Clean up URL parameters
             window.history.replaceState({}, document.title, window.location.pathname)
             // Redirect to daily page after successful OAuth sign-in
             router.push('/daily')
-          }, 100)
+          }, 500)
         }
       } catch (error) {
-        console.error('OAuth callback error:', error)
+        console.error('AuthProvider: OAuth callback error:', error)
       }
     }
     
     // Check if we're in an OAuth callback
     const urlParams = new URLSearchParams(window.location.search)
     if (urlParams.has('code') || urlParams.has('state')) {
+      console.log('AuthProvider: OAuth callback detected, handling...')
       handleOAuthCallback()
     } else {
+      console.log('AuthProvider: No OAuth callback, checking normal auth...')
       checkAuth()
     }
   }, [checkAuth, router])

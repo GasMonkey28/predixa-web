@@ -109,10 +109,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   },
 
   checkAuth: async () => {
+    console.log('checkAuth: Starting auth check...')
     set({ isLoading: true })
     try {
       const user = await getCurrentUser()
+      console.log('checkAuth: User found:', user.userId)
       const attributes = await fetchUserAttributes()
+      console.log('checkAuth: Attributes fetched:', attributes.email)
       
       set({
         user: {
@@ -125,7 +128,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         isLoading: false,
         error: null
       })
+      console.log('checkAuth: Auth state updated successfully')
     } catch (error) {
+      console.error('checkAuth: Error checking auth:', error)
       set({ user: null, isAuthenticated: false, isLoading: false, error: null })
     }
   },
