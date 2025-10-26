@@ -4,8 +4,9 @@ import { useAuthStore } from '@/lib/auth-store'
 import { useStripeStore } from '@/lib/stripe-store'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
-export default function AccountPage() {
+function AccountPageContent() {
   const router = useRouter()
   const { user, signOut, isAuthenticated } = useAuthStore()
   const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription, isLoading, error, clearError } = useStripeStore()
@@ -135,3 +136,10 @@ export default function AccountPage() {
   )
 }
 
+export default function AccountPage() {
+  return (
+    <ProtectedRoute>
+      <AccountPageContent />
+    </ProtectedRoute>
+  )
+}

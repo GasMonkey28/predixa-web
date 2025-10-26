@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import BubblesChart from '@/components/options/BubblesChart'
 import DeltaBarsChart from '@/components/options/DeltaBarsChart'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 type ViewMode = 'bubbles' | 'deltaBars'
 
@@ -15,7 +16,7 @@ function nyTodayISO() {
   return `${y}-${m}-${d}`
 }
 
-export default function FuturePage() {
+function FuturePageContent() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -363,6 +364,10 @@ export default function FuturePage() {
   )
 }
 
-
-
-
+export default function FuturePage() {
+  return (
+    <ProtectedRoute>
+      <FuturePageContent />
+    </ProtectedRoute>
+  )
+}
