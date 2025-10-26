@@ -101,7 +101,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   signInWithApple: async () => {
     set({ isLoading: true, error: null })
     try {
-      await signInWithRedirect({ provider: 'SignInWithApple' })
+      await signInWithRedirect({ provider: 'Apple' })
     } catch (error: any) {
       set({ error: error.message || 'Apple sign in failed', isLoading: false })
       throw error
