@@ -71,6 +71,22 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-7xl p-6">
+      {/* Sign Out Button */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={async () => {
+            try {
+              await signOut()
+            } catch (error) {
+              console.error('Sign out failed:', error)
+            }
+          }}
+          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+        >
+          Sign Out
+        </button>
+      </div>
+
       {/* Hero Section */}
       <div className="text-center py-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
