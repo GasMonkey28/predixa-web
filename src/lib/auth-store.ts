@@ -201,6 +201,25 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         }
       }
       
+      // Try to fetch from DynamoDB for OAuth users or if name is missing
+      // This ensures we show the latest edited name
+      try {
+        const response = await fetch(`/api/user/profile?userId=${user.userId}`)
+        if (response.ok) {
+          const dbProfile = await response.json()
+          if (dbProfile && (dbProfile.givenName || dbProfile.familyName)) {
+            console.log('checkAuth: Found profile in DynamoDB:', dbProfile)
+            // Prioritize DynamoDB data (most recent)
+            if (dbProfile.givenName) givenName = dbProfile.givenName
+            if (dbProfile.familyName) familyName = dbProfile.familyName
+            console.log('checkAuth: Using DynamoDB profile data')
+          }
+        }
+      } catch (error) {
+        console.error('checkAuth: Error fetching from DynamoDB:', error)
+        // Continue with Cognito data
+      }
+      
       set({
         user: {
           userId: user.userId,
