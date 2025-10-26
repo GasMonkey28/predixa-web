@@ -1,19 +1,52 @@
 'use client'
 
+import { useState } from 'react'
 import { useAuthStore } from '@/lib/auth-store'
 import { useStripeStore } from '@/lib/stripe-store'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import { toast } from 'react-hot-toast'
 
 function AccountPageContent() {
   const router = useRouter()
-  const { user, signOut, isAuthenticated } = useAuthStore()
+  const { user, signOut, isAuthenticated, updateUserProfile, isLoading: isAuthLoading } = useAuthStore()
+  const [isEditing, setIsEditing] = useState(false)
+  const [givenName, setGivenName] = useState(user?.givenName || '')
+  const [familyName, setFamilyName] = useState(user?.familyName || '')
   const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription, isLoading, error, clearError } = useStripeStore()
 
   useEffect(() => {
     // For testing, always try to fetch subscription regardless of auth status
     fetchSubscription()
   }, [fetchSubscription])
+
+  useEffect(() => {
+    // Update local state when user changes
+    setGivenName(user?.givenName || '')
+    setFamilyName(user?.familyName || '')
+  }, [user])
+
+  const handleEdit = () => {
+    setIsEditing(true)
+  }
+
+  const handleCancel = () => {
+    setIsEditing(false)
+    setGivenName(user?.givenName || '')
+    setFamilyName(user?.familyName || '')
+  }
+
+  const handleSave = async () => {
+    try {
+      await updateUserProfile(givenName, familyName)
+      setIsEditing(false)
+      toast.success('Profile updated successfully!')
+    } catch (error: any) {
+      console.error('Error in handleSave:', error)
+      const errorMessage = error?.message || 'Failed to update profile'
+      toast.error(errorMessage)
+    }
+  }
 
   const handleSubscribe = async (priceId: string) => {
     try {
@@ -54,11 +87,63 @@ function AccountPageContent() {
       <div className="space-y-6">
         {/* User Info */}
         <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-lg font-medium mb-4">Profile</h2>
-          <div className="space-y-2">
-            <p><span className="font-medium">Name:</span> {user?.givenName} {user?.familyName}</p>
-            <p><span className="font-medium">Email:</span> {user?.email}</p>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-medium">Profile</h2>
+            {!isEditing && (
+              <button
+                onClick={handleEdit}
+                disabled={isAuthLoading}
+                className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
+              >
+                Edit
+              </button>
+            )}
           </div>
+          {isEditing ? (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                <input
+                  type="text"
+                  value={givenName}
+                  onChange={(e) => setGivenName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isAuthLoading}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                <input
+                  type="text"
+                  value={familyName}
+                  onChange={(e) => setFamilyName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isAuthLoading}
+                />
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={handleSave}
+                  disabled={isAuthLoading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isAuthLoading ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={isAuthLoading}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p><span className="font-medium">Name:</span> {user?.givenName} {user?.familyName}</p>
+              <p><span className="font-medium">Email:</span> {user?.email}</p>
+            </div>
+          )}
         </div>
 
         {/* Subscription */}

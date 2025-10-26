@@ -11,16 +11,12 @@ const amplifyConfig = {
           domain: process.env.NEXT_PUBLIC_COGNITO_DOMAIN!,
           scopes: ['email', 'openid', 'profile'],
           redirectSignIn: [
-            process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
             'http://localhost:3000',
-            'http://localhost:3001',
             'https://www.predixaweb.com',
             'https://predixa-web.vercel.app'
           ],
           redirectSignOut: [
-            process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
             'http://localhost:3000',
-            'http://localhost:3001',
             'https://www.predixaweb.com',
             'https://predixa-web.vercel.app'
           ],
@@ -29,7 +25,14 @@ const amplifyConfig = {
         username: true,
         email: true
       }
-    }
+    },
+    // Identity Pool for DynamoDB access (OAuth users)
+    ...(process.env.NEXT_PUBLIC_IDENTITY_POOL_ID && {
+      CognitoIdentity: {
+        PoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
+        Region: process.env.NEXT_PUBLIC_AWS_REGION,
+      },
+    }),
   }
 }
 

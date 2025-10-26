@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getCurrentUser, signIn, signUp, confirmSignUp, signOut, fetchUserAttributes, signInWithRedirect } from 'aws-amplify/auth'
+import { getCurrentUser, signIn, signUp, confirmSignUp, signOut, fetchUserAttributes, signInWithRedirect, updateUserAttributes, fetchAuthSession } from 'aws-amplify/auth'
 
 export interface User {
   userId: string
@@ -22,6 +22,7 @@ interface AuthActions {
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
+  updateUserProfile: (givenName: string, familyName: string) => Promise<void>
   checkAuth: () => Promise<void>
   clearError: () => void
 }
@@ -108,6 +109,67 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     }
   },
 
+  updateUserProfile: async (givenName: string, familyName: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      console.log('Updating user profile:', { givenName, familyName })
+      
+      try {
+        // Try to update Cognito attributes (works for email users)
+        await updateUserAttributes({
+          userAttributes: {
+            given_name: givenName || '',
+            family_name: familyName || ''
+          }
+        })
+        console.log('Profile updated in Cognito')
+      } catch (error: any) {
+        // If Cognito fails (OAuth users without write scope), use API route
+        if (error.message?.includes('required scopes') || error.code === 'NotAuthorizedException') {
+          console.log('OAuth user detected, using API route')
+          
+          const session = await fetchAuthSession()
+          const userId = (await getCurrentUser()).userId
+          
+          // Call server-side API route
+          const response = await fetch('/api/user/profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.tokens?.idToken?.toString() || ''}`,
+            },
+            body: JSON.stringify({
+              userId,
+              email: session.tokens?.idToken?.payload?.email || '',
+              givenName,
+              familyName,
+            }),
+          })
+          
+          if (!response.ok) {
+            throw new Error('Failed to update profile via API')
+          }
+          
+          console.log('Profile updated via API route')
+        } else {
+          throw error
+        }
+      }
+      
+      // Refresh user data
+      await get().checkAuth()
+      
+      set({ isLoading: false })
+    } catch (error: any) {
+      console.error('Error updating profile:', error)
+      console.error('Error code:', error?.code)
+      console.error('Error message:', error?.message)
+      const errorMessage = error?.message || error?.name || 'Failed to update profile'
+      set({ error: errorMessage, isLoading: false })
+      throw error
+    }
+  },
+
   checkAuth: async () => {
     console.log('checkAuth: Starting auth check...')
     set({ isLoading: true })
@@ -115,14 +177,33 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       const user = await getCurrentUser()
       console.log('checkAuth: User found:', user.userId)
       const attributes = await fetchUserAttributes()
-      console.log('checkAuth: Attributes fetched:', attributes.email)
+      console.log('checkAuth: All attributes fetched:', JSON.stringify(attributes, null, 2))
+      console.log('checkAuth: Email:', attributes.email)
+      console.log('checkAuth: Given name:', attributes.given_name)
+      console.log('checkAuth: Family name:', attributes.family_name)
+      console.log('checkAuth: Name:', attributes.name)
+      
+      // Handle Google/Apple sign-in where attributes might be in 'name' instead
+      let givenName = attributes.given_name
+      let familyName = attributes.family_name
+      
+      if (!givenName && !familyName && attributes.name) {
+        // Google/Apple sign-in - split the name
+        const nameParts = attributes.name.split(' ')
+        if (nameParts.length >= 2) {
+          givenName = nameParts[0]
+          familyName = nameParts.slice(1).join(' ')
+        } else {
+          givenName = attributes.name
+        }
+      }
       
       set({
         user: {
           userId: user.userId,
           email: attributes.email || '',
-          givenName: attributes.given_name,
-          familyName: attributes.family_name,
+          givenName: givenName,
+          familyName: familyName,
         },
         isAuthenticated: true,
         isLoading: false,
