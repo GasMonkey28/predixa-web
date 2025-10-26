@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getCurrentUser, signIn, signUp, confirmSignUp, signOut, fetchUserAttributes } from 'aws-amplify/auth'
+import { getCurrentUser, signIn, signUp, confirmSignUp, signOut, fetchUserAttributes, signInWithRedirect } from 'aws-amplify/auth'
 
 export interface User {
   userId: string
@@ -20,6 +20,8 @@ interface AuthActions {
   signUp: (email: string, password: string, givenName?: string, familyName?: string) => Promise<void>
   confirmSignUp: (email: string, code: string) => Promise<void>
   signOut: () => Promise<void>
+  signInWithGoogle: () => Promise<void>
+  signInWithApple: () => Promise<void>
   checkAuth: () => Promise<void>
   clearError: () => void
 }
@@ -82,6 +84,26 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       set({ user: null, isAuthenticated: false, isLoading: false })
     } catch (error: any) {
       set({ error: error.message || 'Sign out failed', isLoading: false })
+      throw error
+    }
+  },
+
+  signInWithGoogle: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      await signInWithRedirect({ provider: 'Google' })
+    } catch (error: any) {
+      set({ error: error.message || 'Google sign in failed', isLoading: false })
+      throw error
+    }
+  },
+
+  signInWithApple: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      await signInWithRedirect({ provider: 'SignInWithApple' })
+    } catch (error: any) {
+      set({ error: error.message || 'Apple sign in failed', isLoading: false })
       throw error
     }
   },
