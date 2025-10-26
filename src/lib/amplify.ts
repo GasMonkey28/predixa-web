@@ -22,7 +22,7 @@ const amplifyConfig = {
             'http://localhost:3001',
             'https://www.predixaweb.com'
           ],
-          responseType: 'code'
+          responseType: 'code' as const
         },
         username: true,
         email: true
