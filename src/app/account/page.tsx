@@ -4,7 +4,6 @@ import { useAuthStore } from '@/lib/auth-store'
 import { useStripeStore } from '@/lib/stripe-store'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 function AccountPageContent() {
   const router = useRouter()
@@ -137,9 +136,5 @@ function AccountPageContent() {
 }
 
 export default function AccountPage() {
-  return (
-    <ProtectedRoute>
-      <AccountPageContent />
-    </ProtectedRoute>
-  )
+  return <AccountPageContent />
 }
