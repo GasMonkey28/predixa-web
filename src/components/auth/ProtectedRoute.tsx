@@ -17,8 +17,16 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     const verifyAuth = async () => {
       try {
         console.log('ProtectedRoute: Checking auth...')
-        // First check the current auth state
-        await checkAuth()
+        
+        // Wait a bit for AuthProvider to configure Amplify
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Only check auth if we don't already have a user
+        const currentState = useAuthStore.getState()
+        if (!currentState.isAuthenticated && !currentState.user) {
+          await checkAuth()
+        }
+        
         console.log('ProtectedRoute: Auth check complete')
       } catch (error) {
         console.error('ProtectedRoute: Auth check failed:', error)

@@ -3,38 +3,50 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
-import { configureAmplify } from '@/lib/amplify'
 import { fetchAuthSession } from 'aws-amplify/auth'
+import { configureAmplify } from '@/lib/amplify'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const checkAuth = useAuthStore((state) => state.checkAuth)
 
   useEffect(() => {
+    // Configure Amplify on client side
+    console.log('AuthProvider: Configuring Amplify...')
     configureAmplify()
+    console.log('AuthProvider: Amplify configured')
     
     // Handle OAuth callback
     const handleOAuthCallback = async () => {
       try {
         console.log('AuthProvider: Handling OAuth callback...')
+        
+        // Wait a bit for Amplify to process the callback
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
         const { tokens } = await fetchAuthSession()
         console.log('AuthProvider: Tokens:', tokens ? 'Present' : 'Missing')
+        
         if (tokens) {
-          // User is authenticated via OAuth
           console.log('AuthProvider: User authenticated, updating auth state...')
           await checkAuth()
-          console.log('AuthProvider: Auth state updated, redirecting to /daily')
-          // Delay to ensure state is updated before redirect
+          console.log('AuthProvider: Auth state updated')
+          
+          // Clean up URL parameters
+          window.history.replaceState({}, document.title, '/')
+          
+          // Use router.push instead of window.location.href for better Next.js integration
           setTimeout(() => {
-            console.log('AuthProvider: Cleaning URL and redirecting to /daily')
-            // Clean up URL parameters
-            window.history.replaceState({}, document.title, window.location.pathname)
-            // Redirect to daily page after successful OAuth sign-in
+            console.log('AuthProvider: Redirecting to /daily')
             router.push('/daily')
-          }, 500)
+          }, 100)
+        } else {
+          console.log('AuthProvider: No tokens found, redirecting to home')
+          router.push('/')
         }
       } catch (error) {
         console.error('AuthProvider: OAuth callback error:', error)
+        router.push('/')
       }
     }
     
@@ -45,7 +57,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       handleOAuthCallback()
     } else {
       console.log('AuthProvider: No OAuth callback, checking normal auth...')
-      checkAuth()
+      // Only check auth if we're not in the middle of signing out
+      const currentState = useAuthStore.getState()
+      if (!currentState.isLoading || currentState.isAuthenticated) {
+        checkAuth()
+      }
     }
   }, [checkAuth, router])
 

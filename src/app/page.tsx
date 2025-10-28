@@ -7,9 +7,31 @@ import LoginForm from '@/components/auth/LoginForm'
 import SignupForm from '@/components/auth/SignupForm'
 
 export default function HomePage() {
-  const { isAuthenticated, user, signOut } = useAuthStore()
+  const { isAuthenticated, user, signOut, isLoading } = useAuthStore()
   const [showLogin, setShowLogin] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
+
+  // Reset forms when switching between them
+  const handleShowLogin = () => {
+    setShowSignup(false)
+    setShowLogin(true)
+  }
+
+  const handleShowSignup = () => {
+    setShowLogin(false)
+    setShowSignup(true)
+  }
+
+  // Show loading while checking authentication
+  if (isLoading) {
+    return (
+      <main className="mx-auto max-w-7xl p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+        </div>
+      </main>
+    )
+  }
 
   if (!isAuthenticated) {
     return (
@@ -28,7 +50,7 @@ export default function HomePage() {
               <p className="text-center mt-4">
                 Don&apos;t have an account?{' '}
                 <button
-                  onClick={() => setShowLogin(false)}
+                  onClick={handleShowSignup}
                   className="text-blue-600 hover:underline"
                 >
                   Sign up
@@ -41,7 +63,7 @@ export default function HomePage() {
               <p className="text-center mt-4">
                 Already have an account?{' '}
                 <button
-                  onClick={() => setShowSignup(false)}
+                  onClick={handleShowLogin}
                   className="text-blue-600 hover:underline"
                 >
                   Sign in
@@ -51,13 +73,13 @@ export default function HomePage() {
           ) : (
             <div className="space-y-4">
               <button
-                onClick={() => setShowLogin(true)}
+                onClick={handleShowLogin}
                 className="w-full py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
               >
                 Sign In
               </button>
               <button
-                onClick={() => setShowSignup(true)}
+                onClick={handleShowSignup}
                 className="w-full py-3 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
               >
                 Sign Up

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import CandlestickChart from '@/components/charts/CandlestickChart'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 type ChartType = 'line' | 'candlestick'
 
@@ -190,6 +191,10 @@ function WeeklyPageContent() {
 }
 
 export default function WeeklyPage() {
-  return <WeeklyPageContent />
+  return (
+    <ProtectedRoute>
+      <WeeklyPageContent />
+    </ProtectedRoute>
+  )
 }
 

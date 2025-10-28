@@ -6,6 +6,7 @@ import { useStripeStore } from '@/lib/stripe-store'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { toast } from 'react-hot-toast'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 function AccountPageContent() {
   const router = useRouter()
@@ -221,5 +222,9 @@ function AccountPageContent() {
 }
 
 export default function AccountPage() {
-  return <AccountPageContent />
+  return (
+    <ProtectedRoute>
+      <AccountPageContent />
+    </ProtectedRoute>
+  )
 }

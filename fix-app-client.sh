@@ -25,3 +25,4 @@ echo "App client updated with write permissions for given_name and family_name"
 
 
 
+

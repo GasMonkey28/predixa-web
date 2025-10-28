@@ -12,11 +12,13 @@ const amplifyConfig = {
           scopes: ['email', 'openid', 'profile'],
           redirectSignIn: [
             'http://localhost:3000',
+            'http://localhost:3001',
             'https://www.predixaweb.com',
             'https://predixa-web.vercel.app'
           ],
           redirectSignOut: [
             'http://localhost:3000',
+            'http://localhost:3001',
             'https://www.predixaweb.com',
             'https://predixa-web.vercel.app'
           ],

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import BubblesChart from '@/components/options/BubblesChart'
 import DeltaBarsChart from '@/components/options/DeltaBarsChart'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 type ViewMode = 'bubbles' | 'deltaBars'
 
@@ -364,5 +365,9 @@ function FuturePageContent() {
 }
 
 export default function FuturePage() {
-  return <FuturePageContent />
+  return (
+    <ProtectedRoute>
+      <FuturePageContent />
+    </ProtectedRoute>
+  )
 }

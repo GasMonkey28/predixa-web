@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import CandlestickChart from '@/components/charts/CandlestickChart'
 import DailyTiers from '@/components/trading/DailyTiers'
 import EconomicCalendar from '@/components/trading/EconomicCalendar'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 type ChartType = 'line' | 'candlestick'
 
@@ -215,6 +216,10 @@ function DailyPageContent() {
 }
 
 export default function DailyPage() {
-  return <DailyPageContent />
+  return (
+    <ProtectedRoute>
+      <DailyPageContent />
+    </ProtectedRoute>
+  )
 }
 

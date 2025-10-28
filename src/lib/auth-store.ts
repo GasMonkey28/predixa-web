@@ -38,9 +38,12 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   signIn: async (email: string, password: string) => {
     set({ isLoading: true, error: null })
     try {
+      console.log('Attempting email/password sign in for:', email)
       await signIn({ username: email, password })
+      console.log('Email/password sign in successful')
       await get().checkAuth()
     } catch (error: any) {
+      console.error('Email/password sign in error:', error)
       set({ error: error.message || 'Sign in failed', isLoading: false })
       throw error
     }
@@ -81,19 +84,27 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   signOut: async () => {
     set({ isLoading: true, error: null })
     try {
+      console.log('Signing out...')
       await signOut()
+      console.log('Sign out successful')
       set({ user: null, isAuthenticated: false, isLoading: false })
     } catch (error: any) {
-      set({ error: error.message || 'Sign out failed', isLoading: false })
-      throw error
+      console.error('Sign out error:', error)
+      // Even if signOut fails, clear the local state
+      set({ user: null, isAuthenticated: false, isLoading: false })
+      // Don't throw error for sign out - just log it
+      console.log('Sign out completed (with error)')
     }
   },
 
   signInWithGoogle: async () => {
     set({ isLoading: true, error: null })
     try {
+      console.log('Attempting Google sign in...')
       await signInWithRedirect({ provider: 'Google' })
+      console.log('Google sign in redirect initiated')
     } catch (error: any) {
+      console.error('Google sign in error:', error)
       set({ error: error.message || 'Google sign in failed', isLoading: false })
       throw error
     }
@@ -102,8 +113,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   signInWithApple: async () => {
     set({ isLoading: true, error: null })
     try {
+      console.log('Attempting Apple sign in...')
       await signInWithRedirect({ provider: 'Apple' })
+      console.log('Apple sign in redirect initiated')
     } catch (error: any) {
+      console.error('Apple sign in error:', error)
       set({ error: error.message || 'Apple sign in failed', isLoading: false })
       throw error
     }
@@ -177,28 +191,51 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     console.log('checkAuth: Starting auth check...')
     set({ isLoading: true })
     try {
+      // First check if we have a valid session
+      const session = await fetchAuthSession()
+      if (!session || !session.tokens || !session.tokens.idToken) {
+        console.log('checkAuth: No valid session found')
+        set({ user: null, isAuthenticated: false, isLoading: false, error: null })
+        return
+      }
+      
       const user = await getCurrentUser()
       console.log('checkAuth: User found:', user.userId)
-      const attributes = await fetchUserAttributes()
-      console.log('checkAuth: All attributes fetched:', JSON.stringify(attributes, null, 2))
-      console.log('checkAuth: Email:', attributes.email)
-      console.log('checkAuth: Given name:', attributes.given_name)
-      console.log('checkAuth: Family name:', attributes.family_name)
-      console.log('checkAuth: Name:', attributes.name)
       
-      // Handle Google/Apple sign-in where attributes might be in 'name' instead
-      let givenName = attributes.given_name
-      let familyName = attributes.family_name
+      // Extract email from token
+      const email = session.tokens?.idToken?.payload?.email as string || ''
+      console.log('checkAuth: Email from token:', email)
       
-      if (!givenName && !familyName && attributes.name) {
-        // Google/Apple sign-in - split the name
-        const nameParts = attributes.name.split(' ')
-        if (nameParts.length >= 2) {
-          givenName = nameParts[0]
-          familyName = nameParts.slice(1).join(' ')
-        } else {
-          givenName = attributes.name
+      let givenName = ''
+      let familyName = ''
+      
+      // Try to get user attributes (works for email users)
+      try {
+        const attributes = await fetchUserAttributes()
+        console.log('checkAuth: All attributes fetched:', JSON.stringify(attributes, null, 2))
+        console.log('checkAuth: Email:', attributes.email)
+        console.log('checkAuth: Given name:', attributes.given_name)
+        console.log('checkAuth: Family name:', attributes.family_name)
+        console.log('checkAuth: Name:', attributes.name)
+        
+        givenName = attributes.given_name || ''
+        familyName = attributes.family_name || ''
+        
+        // Handle Google/Apple sign-in where attributes might be in 'name' instead
+        if (!givenName && !familyName && attributes.name) {
+          // Google/Apple sign-in - split the name
+          const nameParts = attributes.name.split(' ')
+          if (nameParts.length >= 2) {
+            givenName = nameParts[0]
+            familyName = nameParts.slice(1).join(' ')
+          } else {
+            givenName = attributes.name
+          }
         }
+      } catch (attrError: any) {
+        console.log('checkAuth: Could not fetch user attributes (OAuth user):', attrError.message)
+        // This is expected for OAuth users without proper scopes
+        // We'll get the name from DynamoDB or use defaults
       }
       
       // Try to fetch from DynamoDB for OAuth users or if name is missing
@@ -217,13 +254,19 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         }
       } catch (error) {
         console.error('checkAuth: Error fetching from DynamoDB:', error)
-        // Continue with Cognito data
+        // Continue with defaults
+      }
+      
+      // If we still don't have names, use email as fallback
+      if (!givenName && !familyName) {
+        givenName = email.split('@')[0] || 'User'
+        console.log('checkAuth: Using email as fallback name')
       }
       
       set({
         user: {
           userId: user.userId,
-          email: attributes.email || '',
+          email: email,
           givenName: givenName,
           familyName: familyName,
         },
@@ -240,6 +283,3 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }))
-
-
-
