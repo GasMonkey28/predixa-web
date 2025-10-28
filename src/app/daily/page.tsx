@@ -57,7 +57,7 @@ function DailyPageContent() {
 
   const rows = data.bars?.slice(-50) || []
   const chartData = rows.map((bar: any) => ({
-    time: new Date(bar.t).toLocaleTimeString(),
+    time: new Date(bar.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     open: bar.o,
     high: bar.h,
     low: bar.l,
@@ -188,7 +188,7 @@ function DailyPageContent() {
               {rows.slice(-10).map((bar: any, index: number) => (
                 <tr key={index} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
-                    {new Date(bar.t).toLocaleTimeString()}
+                    {new Date(bar.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     ${bar.o.toFixed(2)}
