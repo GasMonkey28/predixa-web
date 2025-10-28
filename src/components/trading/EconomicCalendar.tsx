@@ -121,12 +121,12 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg border p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4"></div>
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-16 bg-gray-200 rounded"></div>
+              <div key={i} className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
             ))}
           </div>
         </div>
@@ -136,8 +136,8 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg border p-4">
-        <div className="text-center text-red-600">{error}</div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+        <div className="text-center text-red-600 dark:text-red-400">{error}</div>
       </div>
     )
   }
@@ -146,15 +146,15 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
     <div className="space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Economic Calendar</h2>
+        <h2 className="text-lg font-semibold dark:text-white">Economic Calendar</h2>
         
         {/* Impact Filter */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">Min Impact:</span>
+          <span className="text-sm text-gray-600 dark:text-gray-400">Min Impact:</span>
           <select
             value={selectedImpact}
             onChange={(e) => setSelectedImpact(Number(e.target.value))}
-            className="text-sm border rounded px-2 py-1"
+            className="text-sm border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1"
           >
             <option value={0}>All Events</option>
             <option value={1}>Low+ (1+)</option>
@@ -166,7 +166,7 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
 
       {/* Events List */}
       {filteredEvents.length === 0 ? (
-        <div className="text-center text-gray-500 py-8">
+        <div className="text-center text-gray-500 dark:text-gray-400 py-8">
           No events {selectedImpact > 0 ? `with impact ≥ ${selectedImpact}` : ''} today
         </div>
       ) : (
@@ -175,10 +175,10 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
             const comparison = getValueComparison(event.actual, event.forecast)
             
             return (
-              <div key={event.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div key={event.id} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                    <span className="text-sm font-mono text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
                       {event.time}
                     </span>
                     <div className="flex gap-1">
@@ -187,7 +187,7 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
                   </div>
                 </div>
 
-                <h3 className="text-sm font-medium text-gray-900 mb-3">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
                   {event.event}
                 </h3>
 
@@ -195,8 +195,8 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   {event.actual && (
                     <div>
-                      <span className="text-gray-600">Actual: </span>
-                      <span className={`font-mono ${comparison?.color || 'text-gray-900'}`}>
+                      <span className="text-gray-600 dark:text-gray-400">Actual: </span>
+                      <span className={`font-mono ${comparison?.color || 'text-gray-900 dark:text-gray-100'}`}>
                         {event.actual}
                       </span>
                       {comparison && (
@@ -209,8 +209,8 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
                   
                   {event.forecast && (
                     <div>
-                      <span className="text-gray-600">Forecast: </span>
-                      <span className="font-mono text-gray-900">
+                      <span className="text-gray-600 dark:text-gray-400">Forecast: </span>
+                      <span className="font-mono text-gray-900 dark:text-gray-100">
                         {event.forecast}
                       </span>
                     </div>
@@ -218,8 +218,8 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
                   
                   {event.previous && (
                     <div>
-                      <span className="text-gray-600">Previous: </span>
-                      <span className="font-mono text-gray-900">
+                      <span className="text-gray-600 dark:text-gray-400">Previous: </span>
+                      <span className="font-mono text-gray-900 dark:text-gray-100">
                         {event.previous}
                       </span>
                     </div>
@@ -232,14 +232,14 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
       )}
 
       {/* Warning Notice */}
-      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+      <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-orange-600">⚠️</span>
-          <h3 className="text-sm font-semibold text-orange-800">
+          <span className="text-orange-600 dark:text-orange-400">⚠️</span>
+          <h3 className="text-sm font-semibold text-orange-800 dark:text-orange-300">
             High-Impact Events Warning
           </h3>
         </div>
-        <p className="text-sm text-orange-700">
+        <p className="text-sm text-orange-700 dark:text-orange-400">
           High-impact events (3 dots) like FOMC meetings, CPI reports, and NFP can cause extreme volatility 
           that may override trading signals. Consider reducing position sizes around major announcements.
         </p>

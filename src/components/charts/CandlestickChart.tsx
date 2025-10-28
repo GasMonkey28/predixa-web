@@ -156,7 +156,8 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
           y1={y}
           x2={margin.left + width}
           y2={y}
-          stroke="#f0f0f0"
+          stroke="currentColor"
+          className="text-gray-200 dark:text-gray-700"
           strokeDasharray="3 3"
         />
       )
@@ -169,7 +170,8 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
           y={y + 4}
           textAnchor="end"
           fontSize="12"
-          fill="#666"
+          fill="currentColor"
+          className="text-gray-600 dark:text-gray-400"
         >
           {formatPrice(price)}
         </text>
@@ -198,7 +200,8 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
           y={margin.top + height + margin.bottom - 5}
           textAnchor="middle"
           fontSize="12"
-          fill="#666"
+          fill="currentColor"
+          className="text-gray-600 dark:text-gray-400"
         >
           {label}
         </text>
@@ -297,7 +300,8 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
           y1={chartDimensions.margin.top + chartDimensions.height}
           x2={chartDimensions.margin.left + chartDimensions.width}
           y2={chartDimensions.margin.top + chartDimensions.height}
-          stroke="#666"
+          stroke="currentColor"
+          className="text-gray-600 dark:text-gray-400"
           strokeWidth={1}
         />
         
@@ -310,7 +314,8 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
           y1={chartDimensions.margin.top}
           x2={chartDimensions.margin.left}
           y2={chartDimensions.margin.top + chartDimensions.height}
-          stroke="#666"
+          stroke="currentColor"
+          className="text-gray-600 dark:text-gray-400"
           strokeWidth={1}
         />
       </svg>

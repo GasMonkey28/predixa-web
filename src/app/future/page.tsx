@@ -140,12 +140,12 @@ function FuturePageContent() {
     <div className="mx-auto max-w-7xl p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Options Flow Analysis</h1>
-          <p className="text-sm text-gray-600">SPY Options Flow & Key Levels</p>
+          <h1 className="text-3xl font-bold dark:text-white">Options Flow Analysis</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400">SPY Options Flow & Key Levels</p>
         </div>
         <div className="text-right">
-          <div className="text-sm text-gray-600">Date: {nyTodayISO()}</div>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-gray-600 dark:text-gray-400">Date: {nyTodayISO()}</div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
             {bubbles.length} Bubbles, {deltaBars.length} Delta Bars
           </div>
         </div>
@@ -159,7 +159,7 @@ function FuturePageContent() {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               viewMode === 'bubbles'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
             }`}
           >
             Key Levels (Bubbles)
@@ -169,7 +169,7 @@ function FuturePageContent() {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               viewMode === 'deltaBars'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
             }`}
           >
             Flow Timeline (Delta Bars)
@@ -179,34 +179,34 @@ function FuturePageContent() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-lg border p-4">
-          <h3 className="text-sm font-medium text-gray-600">Total Bubbles</h3>
-          <p className="text-2xl font-bold text-blue-600">{mockBubbles.length}</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Bubbles</h3>
+          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{mockBubbles.length}</p>
         </div>
-        <div className="bg-white rounded-lg border p-4">
-          <h3 className="text-sm font-medium text-gray-600">Delta Bars</h3>
-          <p className="text-2xl font-bold text-green-600">{mockDeltaBars.length}</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Delta Bars</h3>
+          <p className="text-2xl font-bold text-green-600 dark:text-green-400">{mockDeltaBars.length}</p>
         </div>
-        <div className="bg-white rounded-lg border p-4">
-          <h3 className="text-sm font-medium text-gray-600">Price Candles</h3>
-          <p className="text-2xl font-bold text-purple-600">{priceCandles.length}</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Price Candles</h3>
+          <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{priceCandles.length}</p>
         </div>
-        <div className="bg-white rounded-lg border p-4">
-          <h3 className="text-sm font-medium text-gray-600">Total Money Flow</h3>
-          <p className="text-2xl font-bold text-orange-600">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Money Flow</h3>
+          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
             {formatMoney(bubbles.reduce((sum: number, b: any) => sum + Math.abs(b.money || 0), 0))}
           </p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="mb-6 bg-white rounded-lg border p-4">
-        <h2 className="text-lg font-medium mb-4">Filters & Controls</h2>
+      <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+        <h2 className="text-lg font-medium dark:text-white mb-4">Filters & Controls</h2>
         
         {viewMode === 'bubbles' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Space Metrics
               </label>
               <div className="space-y-2">
@@ -217,7 +217,7 @@ function FuturePageContent() {
                     onChange={(e) => setShowTotalDiff(e.target.checked)}
                     className="mr-2"
                   />
-                  <span className="text-sm">Total Diff</span>
+                  <span className="text-sm dark:text-gray-300">Total Diff</span>
                 </label>
                 <label className="flex items-center">
                   <input
@@ -226,7 +226,7 @@ function FuturePageContent() {
                     onChange={(e) => setShowAccumulated(e.target.checked)}
                     className="mr-2"
                   />
-                  <span className="text-sm">Accumulated</span>
+                  <span className="text-sm dark:text-gray-300">Accumulated</span>
                 </label>
                 <label className="flex items-center">
                   <input
@@ -235,13 +235,13 @@ function FuturePageContent() {
                     onChange={(e) => setShowMaxAbsDiff(e.target.checked)}
                     className="mr-2"
                   />
-                  <span className="text-sm">Max Abs Diff</span>
+                  <span className="text-sm dark:text-gray-300">Max Abs Diff</span>
                 </label>
               </div>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Min Total Diff (M)
               </label>
               <input
@@ -253,11 +253,11 @@ function FuturePageContent() {
                 onChange={(e) => setMinTotal(Number(e.target.value))}
                 className="w-full"
               />
-              <div className="text-sm text-gray-600">{minTotal}M</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">{minTotal}M</div>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Min Accumulated (M)
               </label>
               <input
@@ -269,14 +269,14 @@ function FuturePageContent() {
                 onChange={(e) => setMinAccum(Number(e.target.value))}
                 className="w-full"
               />
-              <div className="text-sm text-gray-600">{minAccum}M</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">{minAccum}M</div>
             </div>
           </div>
         )}
         
         {viewMode === 'deltaBars' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Time Windows
             </label>
             <div className="flex flex-wrap gap-2">
@@ -294,7 +294,7 @@ function FuturePageContent() {
                     }}
                     className="mr-1"
                   />
-                  <span className="text-sm">{window}</span>
+                  <span className="text-sm dark:text-gray-300">{window}</span>
                 </label>
               ))}
             </div>
@@ -303,8 +303,8 @@ function FuturePageContent() {
       </div>
 
       {/* Chart Display */}
-      <div className="mb-6 rounded-lg border p-4 bg-white">
-        <h2 className="text-lg font-medium mb-4">
+      <div className="mb-6 rounded-lg border dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
+        <h2 className="text-lg font-medium dark:text-white mb-4">
           {viewMode === 'bubbles' ? 'Key Levels (Bubbles Chart)' : 'Flow Timeline (Delta Bars)'}
         </h2>
         
@@ -328,14 +328,14 @@ function FuturePageContent() {
       </div>
 
       {/* Information Panel */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-blue-600">ℹ️</span>
-          <h3 className="text-sm font-semibold text-blue-800">
+          <span className="text-blue-600 dark:text-blue-400">ℹ️</span>
+          <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300">
             How to Use This Data
           </h3>
         </div>
-        <div className="text-sm text-blue-700 space-y-2">
+        <div className="text-sm text-blue-700 dark:text-blue-400 space-y-2">
           <p>
             <strong>Bubbles Chart:</strong> Shows concentrated options activity at specific price levels. 
             Larger bubbles indicate higher money flow. Use this to identify key support/resistance levels.
@@ -353,10 +353,10 @@ function FuturePageContent() {
 
       {/* Raw Data Debug (for development) */}
       <details className="mt-6">
-        <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800">
+        <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
           Debug: Raw Data Structure
         </summary>
-        <pre className="mt-2 overflow-auto rounded-lg border p-4 text-xs bg-gray-50">
+        <pre className="mt-2 overflow-auto rounded-lg border dark:border-gray-700 p-4 text-xs bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
         {JSON.stringify(Object.keys(data), null, 2)}
       </pre>
       </details>

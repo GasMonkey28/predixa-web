@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import { ClientLayout } from '@/components/layout/ClientLayout'
+import { ThemeProvider } from '@/components/providers/ThemeProvider'
 
 export const metadata: Metadata = {
   title: 'Predixa',
@@ -15,10 +16,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="bg-gray-50">
-        <ClientLayout>
-          {children}
-        </ClientLayout>
+      <body className="bg-gray-50 dark:bg-gray-900 transition-colors">
+        <ThemeProvider>
+          <ClientLayout>
+            {children}
+          </ClientLayout>
+        </ThemeProvider>
       </body>
     </html>
   )

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { DarkModeToggle } from '@/components/ui/DarkModeToggle'
 
 function AccountPageContent() {
   const router = useRouter()
@@ -68,33 +69,36 @@ function AccountPageContent() {
   return (
     <div className="mx-auto max-w-7xl p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold">Account</h1>
-        <button
-          onClick={async () => {
-            try {
-              await signOut()
-              // Redirect to home page after sign out
-              router.push('/')
-            } catch (error) {
-              console.error('Sign out failed:', error)
-            }
-          }}
-          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
-        >
-          Sign Out
-        </button>
+        <h1 className="text-2xl font-semibold dark:text-white">Account</h1>
+        <div className="flex items-center gap-4">
+          <DarkModeToggle />
+          <button
+            onClick={async () => {
+              try {
+                await signOut()
+                // Redirect to home page after sign out
+                router.push('/')
+              } catch (error) {
+                console.error('Sign out failed:', error)
+              }
+            }}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+          >
+            Sign Out
+          </button>
+        </div>
       </div>
 
       <div className="space-y-6">
         {/* User Info */}
-        <div className="bg-white rounded-lg border p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-medium">Profile</h2>
+            <h2 className="text-lg font-medium dark:text-white">Profile</h2>
             {!isEditing && (
               <button
                 onClick={handleEdit}
                 disabled={isAuthLoading}
-                className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50"
               >
                 Edit
               </button>
@@ -103,22 +107,22 @@ function AccountPageContent() {
           {isEditing ? (
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name</label>
                 <input
                   type="text"
                   value={givenName}
                   onChange={(e) => setGivenName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={isAuthLoading}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name</label>
                 <input
                   type="text"
                   value={familyName}
                   onChange={(e) => setFamilyName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={isAuthLoading}
                 />
               </div>
@@ -133,7 +137,7 @@ function AccountPageContent() {
                 <button
                   onClick={handleCancel}
                   disabled={isAuthLoading}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 disabled:opacity-50"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -141,15 +145,15 @@ function AccountPageContent() {
             </div>
           ) : (
             <div className="space-y-2">
-              <p><span className="font-medium">Name:</span> {user?.givenName} {user?.familyName}</p>
-              <p><span className="font-medium">Email:</span> {user?.email}</p>
+              <p className="dark:text-gray-300"><span className="font-medium dark:text-white">Name:</span> {user?.givenName} {user?.familyName}</p>
+              <p className="dark:text-gray-300"><span className="font-medium dark:text-white">Email:</span> {user?.email}</p>
             </div>
           )}
         </div>
 
         {/* Subscription */}
-        <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-lg font-medium mb-4">Subscription</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6">
+          <h2 className="text-lg font-medium dark:text-white mb-4">Subscription</h2>
           
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded flex justify-between items-center">
@@ -164,13 +168,13 @@ function AccountPageContent() {
           )}
           
           {isLoading ? (
-            <div className="text-gray-600">Loading subscription...</div>
+            <div className="text-gray-600 dark:text-gray-400">Loading subscription...</div>
           ) : subscription && subscription.plan ? (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="font-medium">{subscription.plan.name}</p>
-                  <p className="text-sm text-gray-600">
+                  <p className="font-medium dark:text-white">{subscription.plan.name}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                     ${subscription.plan.amount / 100}/{subscription.plan.interval}
                   </p>
                 </div>
@@ -189,11 +193,11 @@ function AccountPageContent() {
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-gray-600">No active subscription</p>
+              <p className="text-gray-600 dark:text-gray-400">No active subscription</p>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-medium">Monthly Pro</h3>
-                  <p className="text-2xl font-bold">$19.99<span className="text-sm font-normal">/month</span></p>
+                <div className="border dark:border-gray-700 rounded-lg p-4">
+                  <h3 className="font-medium dark:text-white">Monthly Pro</h3>
+                  <p className="text-2xl font-bold dark:text-white">$19.99<span className="text-sm font-normal">/month</span></p>
                   <button
                     onClick={() => handleSubscribe('price_1SLR4cCqoRregBRsF7uBCniS')}
                     className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -201,10 +205,10 @@ function AccountPageContent() {
                     Subscribe
                   </button>
                 </div>
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-medium">Yearly Pro</h3>
-                  <p className="text-2xl font-bold">$179.99<span className="text-sm font-normal">/year</span></p>
-                  <p className="text-sm text-green-600">Save $60/year</p>
+                <div className="border dark:border-gray-700 rounded-lg p-4">
+                  <h3 className="font-medium dark:text-white">Yearly Pro</h3>
+                  <p className="text-2xl font-bold dark:text-white">$179.99<span className="text-sm font-normal">/year</span></p>
+                  <p className="text-sm text-green-600 dark:text-green-400">Save $60/year</p>
                   <button
                     onClick={() => handleSubscribe('price_1SLR4cCqoRregBRsibd2Jz0B')}
                     className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"

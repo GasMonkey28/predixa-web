@@ -75,8 +75,8 @@ function DailyPageContent() {
     <div className="mx-auto max-w-7xl p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Daily Analysis</h1>
-          <p className="text-sm text-gray-600">SPY Daily OHLC Data</p>
+          <h1 className="text-3xl font-bold dark:text-white">Daily Analysis</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400">SPY Daily OHLC Data</p>
         </div>
         <div className="flex items-center gap-4">
           <button
@@ -89,10 +89,10 @@ function DailyPageContent() {
             🔄 Refresh Data
           </button>
           <div className="text-right">
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold dark:text-white">
               ${currentPrice.toFixed(2)}
             </div>
-            <div className={`text-sm ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className={`text-sm ${priceChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
               {priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
             </div>
           </div>
@@ -107,7 +107,7 @@ function DailyPageContent() {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               chartType === 'line'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
             }`}
           >
             Line Chart
@@ -117,7 +117,7 @@ function DailyPageContent() {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               chartType === 'candlestick'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
             }`}
           >
             Candlestick
@@ -126,8 +126,8 @@ function DailyPageContent() {
       </div>
 
       {/* Price Chart */}
-      <div className="mb-6 rounded-lg border p-4 bg-white">
-        <h2 className="text-lg font-medium mb-4">Intraday Price Chart</h2>
+      <div className="mb-6 rounded-lg border dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
+        <h2 className="text-lg font-medium dark:text-white mb-4">Intraday Price Chart</h2>
         {chartType === 'candlestick' ? (
           <CandlestickChart data={chartData} height={400} />
         ) : (
@@ -166,43 +166,43 @@ function DailyPageContent() {
       </div>
 
       {/* Data Table */}
-      <div className="rounded-lg border p-4 bg-white">
+      <div className="rounded-lg border dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
         <div className="mb-4">
-          <h2 className="text-lg font-medium">Recent Data Points</h2>
-          <p className="text-sm text-gray-600">Last {Math.min(10, rows.length)} data points</p>
+          <h2 className="text-lg font-medium dark:text-white">Recent Data Points</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Last {Math.min(10, rows.length)} data points</p>
         </div>
         
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Open</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">High</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Low</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Close</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Volume</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Time</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Open</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">High</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Low</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Close</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Volume</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {rows.slice(-10).map((bar: any, index: number) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-gray-100">
                     {new Date(bar.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     ${bar.o.toFixed(2)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 dark:text-green-400 font-medium">
                     ${bar.h.toFixed(2)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-medium">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 dark:text-red-400 font-medium">
                     ${bar.l.toFixed(2)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100">
                     ${bar.c.toFixed(2)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {bar.v ? bar.v.toLocaleString() : 'N/A'}
                   </td>
                 </tr>
