@@ -77,9 +77,7 @@ export default function Navigation() {
 
           {/* User Menu */}
           <div className="flex items-center">
-            <div className="text-sm text-gray-500">
-              Trading Analytics
-            </div>
+            {/* Reserved for future user menu items */}
           </div>
         </div>
       </div>
