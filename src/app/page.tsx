@@ -11,14 +11,6 @@ export default function HomePage() {
   const { isAuthenticated, user, signOut, isLoading } = useAuthStore()
   const [showLogin, setShowLogin] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
-  const router = useRouter()
-
-  // Redirect to daily page immediately when authenticated
-  useEffect(() => {
-    if (isAuthenticated && !isLoading) {
-      router.push('/daily')
-    }
-  }, [isAuthenticated, isLoading, router])
 
   // Reset forms when switching between them
   const handleShowLogin = () => {
