@@ -93,8 +93,8 @@ export default function SignupForm() {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center">Sign Up</h2>
+    <div className="max-w-md mx-auto mt-8 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md">
+      <h2 className="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-white">Sign Up</h2>
       
       {/* Social Sign In Buttons */}
       <div className="space-y-3 mb-6">
@@ -102,7 +102,7 @@ export default function SignupForm() {
           type="button"
           onClick={handleGoogleSignIn}
           disabled={isLoading}
-          className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -117,7 +117,7 @@ export default function SignupForm() {
           type="button"
           onClick={handleAppleSignIn}
           disabled={isLoading}
-          className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-black text-sm font-medium text-white hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
+          className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-black text-sm font-medium text-white hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="white">
             <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zm-3.03-16.84c.27-.32.48-.72.62-1.16 0-.01 0-.01 0 0-.56.04-1.22.42-1.61.9-.35.35-.65.9-.57 1.43.04.01.08.01.11.01.57-.02 1.15-.23 1.52-.58.34-.32.58-.82.52-1.3-.01 0-.01 0-.01.01v-.01.01c0-.01 0-.01.01-.01l.01-.01c0 .01 0 .01-.01.01.01-.01.01-.01.01-.01-.01.01-.01.01-.01.01.01-.01.01-.01.01-.01-.01.01-.01.01-.01.01.01 0 .01-.01.01-.01 0 0 0 .01-.01 0-.01 0-.01-.01-.01-.01 0 0-.01 0-.01.01.01 0 .01-.01.01-.01 0 0 0 .01 0 .01.01 0 .01 0 .01-.01-.01.01-.01.01-.01.01.02.02.01 0 .01-.01z"/>

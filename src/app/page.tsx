@@ -44,8 +44,8 @@ export default function HomePage() {
               className="h-16 w-16 rounded-2xl"
             />
           </div>
-          <h1 className="text-4xl font-bold text-gray-900">Predixa</h1>
-          <p className="mt-2 text-lg text-gray-600">
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Predixa</h1>
+          <p className="mt-2 text-lg text-gray-600 dark:text-gray-300">
             Professional trading analytics and market insights
           </p>
         </div>
@@ -54,11 +54,11 @@ export default function HomePage() {
           {showLogin ? (
             <div>
               <LoginForm />
-              <p className="text-center mt-4">
+              <p className="text-center mt-4 text-gray-600 dark:text-gray-300">
                 Don&apos;t have an account?{' '}
                 <button
                   onClick={handleShowSignup}
-                  className="text-blue-600 hover:underline"
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   Sign up
                 </button>
@@ -67,11 +67,11 @@ export default function HomePage() {
           ) : showSignup ? (
             <div>
               <SignupForm />
-              <p className="text-center mt-4">
+              <p className="text-center mt-4 text-gray-600 dark:text-gray-300">
                 Already have an account?{' '}
                 <button
                   onClick={handleShowLogin}
-                  className="text-blue-600 hover:underline"
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   Sign in
                 </button>
