@@ -37,7 +37,14 @@ export default function HomePage() {
     return (
       <main className="mx-auto max-w-7xl p-6">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900">Predixa Web</h1>
+          <div className="flex justify-center mb-4">
+            <img 
+              src="/logo.jpg" 
+              alt="Predixa Logo" 
+              className="h-16 w-16 rounded-2xl"
+            />
+          </div>
+          <h1 className="text-4xl font-bold text-gray-900">Predixa</h1>
           <p className="mt-2 text-lg text-gray-600">
             Professional trading analytics and market insights
           </p>

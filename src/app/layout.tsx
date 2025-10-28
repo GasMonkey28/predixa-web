@@ -3,8 +3,13 @@ import type { Metadata } from 'next'
 import { ClientLayout } from '@/components/layout/ClientLayout'
 
 export const metadata: Metadata = {
-  title: 'Predixa Web',
+  title: 'Predixa',
   description: 'Professional Trading Analytics Platform',
+  icons: {
+    icon: '/logo.jpg',
+    shortcut: '/logo.jpg',
+    apple: '/logo.jpg',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
