@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'motion/react'
+import { motion, AnimatePresence } from 'motion/react'
+import { TrendingUp, TrendingDown, Zap, Sparkles, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react'
 
 interface DailyTierData {
   date: string
@@ -35,52 +36,57 @@ const tierStrengths: Record<string, number> = {
   "D": 0
 }
 
-// Tier configuration matching AttractiveRecommendationCard style
+// Tier configuration with enhanced visuals
 const tierConfig = {
   S: { 
     label: 'S-Tier', 
     description: 'Exceptional Signal',
-    bg: 'from-purple-600 to-pink-600', 
+    bg: 'from-purple-600 via-pink-600 to-purple-600', 
     glow: 'bg-purple-500', 
     text: 'text-purple-300', 
-    border: 'border-purple-500',
-    strength: 5
+    border: 'border-purple-500/50',
+    strength: 5,
+    pulseColor: 'purple'
   },
   A: { 
     label: 'A-Tier', 
     description: 'Strong Signal',
-    bg: 'from-blue-600 to-cyan-600', 
+    bg: 'from-blue-600 via-cyan-600 to-blue-600', 
     glow: 'bg-cyan-500', 
     text: 'text-cyan-300', 
-    border: 'border-cyan-500',
-    strength: 4
+    border: 'border-cyan-500/50',
+    strength: 4,
+    pulseColor: 'cyan'
   },
   B: { 
     label: 'B-Tier', 
     description: 'Moderate Signal',
-    bg: 'from-emerald-600 to-green-600', 
+    bg: 'from-emerald-600 via-green-600 to-emerald-600', 
     glow: 'bg-emerald-500', 
     text: 'text-emerald-300', 
-    border: 'border-emerald-500',
-    strength: 3
+    border: 'border-emerald-500/50',
+    strength: 3,
+    pulseColor: 'emerald'
   },
   C: { 
     label: 'C-Tier', 
     description: 'Weak Signal',
-    bg: 'from-amber-600 to-orange-600', 
+    bg: 'from-amber-600 via-orange-600 to-amber-600', 
     glow: 'bg-amber-500', 
     text: 'text-amber-300', 
-    border: 'border-amber-500',
-    strength: 2
+    border: 'border-amber-500/50',
+    strength: 2,
+    pulseColor: 'amber'
   },
   D: { 
     label: 'D-Tier', 
     description: 'Very Weak Signal',
-    bg: 'from-gray-600 to-gray-700', 
+    bg: 'from-gray-600 via-gray-700 to-gray-600', 
     glow: 'bg-gray-500', 
     text: 'text-gray-400', 
-    border: 'border-gray-500',
-    strength: 1
+    border: 'border-gray-500/50',
+    strength: 1,
+    pulseColor: 'gray'
   },
 };
 
@@ -164,148 +170,532 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
 
   const longConfig = getTierConfig(tiersData.long_tier)
   const shortConfig = getTierConfig(tiersData.short_tier)
+  
+  // Determine which signal is stronger for visual emphasis
+  const longStrength = longConfig.strength
+  const shortStrength = shortConfig.strength
+  const dominantSignal = longStrength > shortStrength ? 'LONG' : 'SHORT'
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold text-white">Daily Signal</h2>
-        <span className="text-sm text-gray-400">{tiersData.date}</span>
-      </div>
+    <div className="space-y-6">
+      {/* Eye-catching Header with Quick Insight */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between mb-6"
+      >
+        <div className="flex items-center gap-3">
+          <motion.div
+            animate={{ rotate: [0, 10, -10, 0] }}
+            transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+            className="relative"
+          >
+            <Sparkles className="w-6 h-6 text-yellow-400" />
+            <motion.div
+              className="absolute inset-0 bg-yellow-400 rounded-full blur-lg opacity-50"
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            />
+          </motion.div>
+          <div>
+            <h2 className="text-2xl font-bold text-white">Trading Signals</h2>
+            <p className="text-xs text-gray-400">Real-time market intelligence</p>
+          </div>
+        </div>
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="relative group"
+        >
+          <div className="px-4 py-2 rounded-xl bg-zinc-800/80 border border-zinc-700">
+            <div className="text-xs text-gray-400 mb-1">Updated</div>
+            <div className="text-sm text-white font-semibold">{tiersData.date}</div>
+          </div>
+          <div className="absolute top-full right-0 mt-2 w-64 p-4 rounded-lg bg-zinc-900 border border-zinc-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all shadow-xl z-50">
+            <div className="mb-2 text-white font-semibold">Signal Strength Guide:</div>
+            <ul className="space-y-1 text-zinc-400 text-sm">
+              <li className="text-purple-400">• S-Tier: Exceptional (90%+)</li>
+              <li className="text-cyan-400">• A-Tier: Strong (75-89%)</li>
+              <li className="text-emerald-400">• B-Tier: Moderate (60-74%)</li>
+              <li className="text-amber-400">• C-Tier: Weak (45-59%)</li>
+              <li className="text-gray-400">• D-Tier: Very Weak (below 45%)</li>
+            </ul>
+          </div>
+        </motion.div>
+      </motion.div>
 
-      {/* Tier Cards with Strength Bars */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Dominant Signal Banner */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={dominantSignal}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0 }}
+          className={`relative overflow-hidden rounded-2xl p-6 mb-6 ${
+            dominantSignal === 'LONG' 
+              ? 'bg-gradient-to-r from-emerald-900/40 via-green-900/30 to-emerald-900/40 border-2 border-emerald-500/30' 
+              : 'bg-gradient-to-r from-red-900/40 via-rose-900/30 to-red-900/40 border-2 border-red-500/30'
+          }`}
+        >
+          <motion.div
+            className={`absolute inset-0 ${
+              dominantSignal === 'LONG' ? 'bg-emerald-500' : 'bg-red-500'
+            } opacity-10 blur-3xl`}
+            animate={{
+              scale: [1, 1.1, 1],
+              opacity: [0.1, 0.15, 0.1]
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          />
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <motion.div
+                animate={{ rotate: [0, 360] }}
+                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              >
+                {dominantSignal === 'LONG' ? (
+                  <ArrowUpRight className="w-8 h-8 text-green-400" />
+                ) : (
+                  <ArrowDownRight className="w-8 h-8 text-rose-400" />
+                )}
+              </motion.div>
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Dominant Signal</div>
+                <div className={`text-2xl font-bold ${dominantSignal === 'LONG' ? 'text-green-400' : 'text-rose-400'}`}>
+                  {dominantSignal} {dominantSignal === 'LONG' ? 'TREND' : 'TREND'}
+                </div>
+                <div className="text-sm text-gray-300">
+                  {dominantSignal === 'LONG' 
+                    ? `Long signal is ${(longStrength / shortStrength * 100).toFixed(0)}% stronger`
+                    : `Short signal is ${(shortStrength / longStrength * 100).toFixed(0)}% stronger`}
+                </div>
+              </div>
+            </div>
+            <motion.div
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className={`px-6 py-3 rounded-xl bg-gradient-to-r ${
+                dominantSignal === 'LONG' ? longConfig.bg : shortConfig.bg
+              } shadow-2xl`}
+            >
+              <div className="text-white text-2xl font-bold">
+                {dominantSignal === 'LONG' ? tiersData.long_tier : tiersData.short_tier}
+              </div>
+            </motion.div>
+      </div>
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Tier Cards with Enhanced Visuals */}
+      <div className="grid grid-cols-2 gap-6">
         {/* Long Tier */}
         <motion.div
-          whileHover={{ scale: 1.02, rotate: -1 }}
-          className="relative overflow-hidden rounded-xl bg-gradient-to-br from-green-950 to-green-900 border border-green-700/40 p-4"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.1 }}
+          whileHover={{ scale: 1.02, y: -4 }}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-950/80 to-zinc-900/90 border-2 border-emerald-500/30 p-6"
         >
-          <div className="absolute inset-0 bg-green-600 opacity-5 blur-2xl"></div>
+          {/* Animated background glow */}
+          <motion.div
+            className="absolute inset-0 bg-emerald-500 opacity-30 blur-3xl"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.4, 0.3]
+            }}
+            transition={{
+              duration: 4,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          />
+          
+          {/* Subtle moving gradient overlay */}
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent"
+            animate={{
+              x: ['-100%', '200%']
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              repeatDelay: 2,
+              ease: "linear"
+            }}
+          />
+
           <div className="relative z-10">
-            {/* Header with Tier Badge */}
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-sm font-semibold text-white">Long</span>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <motion.div
+                  animate={{ rotate: [0, -10, 10, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 2 }}
+                >
+                  <TrendingUp className="w-6 h-6 text-green-400" />
+                </motion.div>
+                <div>
+                  <span className="text-lg font-bold text-white block">LONG</span>
+                  <span className="text-xs text-green-300">Buy Signal</span>
+                </div>
+              </div>
+              
+              {/* Large Tier Badge */}
               <motion.div
-                whileHover={{ scale: 1.05, rotate: 2 }}
-                className={`relative px-4 py-2 rounded-xl bg-gradient-to-r ${longConfig.bg} shadow-lg`}
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                className={`relative px-6 py-4 rounded-2xl bg-gradient-to-r ${longConfig.bg} shadow-2xl`}
               >
-                <div className={`absolute inset-0 ${longConfig.glow} opacity-50 blur-xl`} />
-                <span className="relative z-10 text-white text-sm font-bold">{tiersData.long_tier}</span>
+                <motion.div
+                  className={`absolute inset-0 ${longConfig.glow} opacity-60 blur-2xl`}
+                  animate={{
+                    scale: [1, 1.2, 1],
+                    opacity: [0.6, 0.8, 0.6]
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                />
+                <span className="relative z-10 text-white text-3xl font-black tracking-wider">
+                  {tiersData.long_tier}
+                </span>
               </motion.div>
             </div>
             
-            {/* Strength Bar with Label */}
-            <div>
-              <div className="text-sm text-white mb-2">Signal Strength</div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`${longConfig.text} text-sm font-semibold`}>{longConfig.label}</span>
-                <div className="flex gap-1 flex-1">
+            {/* Animated Strength Indicator */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 relative group">
+                  <span className="text-sm font-semibold text-white">Signal Strength</span>
+                  <div className="p-1 rounded-lg bg-zinc-800/50 border border-zinc-700 cursor-help relative z-10">
+                    <AlertCircle className="w-3.5 h-3.5 text-zinc-400" />
+                    <div className="absolute left-full top-0 ml-2 w-56 p-3 rounded-lg bg-zinc-900 border border-zinc-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all shadow-xl z-[100] pointer-events-none">
+                      <div className="mb-2 text-white font-semibold text-sm">Signal Strength:</div>
+                      <ul className="space-y-1 text-zinc-400 text-xs">
+                        <li className="text-purple-400">• S-Tier: Exceptional</li>
+                        <li className="text-cyan-400">• A-Tier: Strong</li>
+                        <li className="text-emerald-400">• B-Tier: Moderate</li>
+                        <li className="text-amber-400">• C-Tier: Weak</li>
+                        <li className="text-gray-400">• D-Tier: Very Weak</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                <span className={`${longConfig.text} text-sm font-bold`}>
+                  {longConfig.strength}/5
+                </span>
+              </div>
+              
+              {/* Enhanced Strength Bars */}
+              <div className="flex items-center gap-2">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <motion.div
                       key={i}
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ delay: i * 0.1 }}
-                      className={`w-2 h-6 rounded-full ${
+                    initial={{ scale: 0, height: 0 }}
+                    animate={{ scale: 1, height: 'auto' }}
+                    transition={{ 
+                      delay: i * 0.15,
+                      type: "spring",
+                      stiffness: 200
+                    }}
+                    className="flex-1 relative"
+                  >
+                    <motion.div
+                      className={`h-12 rounded-lg ${
                         i < longConfig.strength 
-                          ? 'bg-white shadow-lg shadow-white/50' 
-                          : 'bg-green-800/40'
+                          ? `bg-gradient-to-t from-emerald-500 to-green-500 shadow-lg shadow-emerald-500/70` 
+                          : 'bg-emerald-900/30'
                       }`}
+                      animate={i < longConfig.strength ? {
+                        boxShadow: [
+                          '0 0 15px rgba(16, 185, 129, 0.6)',
+                          '0 0 30px rgba(16, 185, 129, 1)',
+                          '0 0 15px rgba(16, 185, 129, 0.6)'
+                        ]
+                      } : {}}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        delay: i * 0.2
+                      }}
                     />
+                    {/* Pulse effect on active bars */}
+                    {i < longConfig.strength && (
+                      <motion.div
+                        className="absolute inset-0 bg-green-400 rounded-lg"
+                        animate={{
+                          opacity: [0, 0.9, 0],
+                          scale: [1, 1.1, 1]
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          delay: i * 0.3
+                        }}
+                      />
+                    )}
+                  </motion.div>
                   ))}
                 </div>
+              
+              <div className={`${longConfig.text} text-xs mt-2 font-medium`}>
+                {longConfig.description}
               </div>
-              <div className={`${longConfig.text} text-xs mt-1`}>{longConfig.description}</div>
             </div>
           </div>
         </motion.div>
 
         {/* Short Tier */}
         <motion.div
-          whileHover={{ scale: 1.02, rotate: 1 }}
-          className="relative overflow-hidden rounded-xl bg-gradient-to-br from-red-950 to-red-900 border border-red-700/40 p-4"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+          whileHover={{ scale: 1.02, y: -4 }}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-950/80 to-zinc-900/90 border-2 border-red-500/30 p-6"
         >
-          <div className="absolute inset-0 bg-red-600 opacity-5 blur-2xl"></div>
+          {/* Animated background glow */}
+          <motion.div
+            className="absolute inset-0 bg-red-500 opacity-30 blur-3xl"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.4, 0.3]
+            }}
+            transition={{
+              duration: 4,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          />
+          
+          {/* Subtle moving gradient overlay */}
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-red-500/10 to-transparent"
+            animate={{
+              x: ['-100%', '200%']
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              repeatDelay: 2,
+              ease: "linear"
+            }}
+          />
+
           <div className="relative z-10">
-            {/* Header with Tier Badge */}
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-sm font-semibold text-white">Short</span>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <motion.div
+                  animate={{ rotate: [0, 10, -10, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 2 }}
+                >
+                  <TrendingDown className="w-6 h-6 text-rose-400" />
+                </motion.div>
+                <div>
+                  <span className="text-lg font-bold text-white block">SHORT</span>
+                  <span className="text-xs text-rose-300">Sell Signal</span>
+                </div>
+              </div>
+              
+              {/* Large Tier Badge */}
               <motion.div
-                whileHover={{ scale: 1.05, rotate: -2 }}
-                className={`relative px-4 py-2 rounded-xl bg-gradient-to-r ${shortConfig.bg} shadow-lg`}
+                whileHover={{ scale: 1.1, rotate: -5 }}
+                className={`relative px-6 py-4 rounded-2xl bg-gradient-to-r ${shortConfig.bg} shadow-2xl`}
               >
-                <div className={`absolute inset-0 ${shortConfig.glow} opacity-50 blur-xl`} />
-                <span className="relative z-10 text-white text-sm font-bold">{tiersData.short_tier}</span>
+                <motion.div
+                  className={`absolute inset-0 ${shortConfig.glow} opacity-60 blur-2xl`}
+                  animate={{
+                    scale: [1, 1.2, 1],
+                    opacity: [0.6, 0.8, 0.6]
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                />
+                <span className="relative z-10 text-white text-3xl font-black tracking-wider">
+                  {tiersData.short_tier}
+                </span>
               </motion.div>
             </div>
             
-            {/* Strength Bar with Label */}
-            <div>
-              <div className="text-sm text-white mb-2">Signal Strength</div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`${shortConfig.text} text-sm font-semibold`}>{shortConfig.label}</span>
-                <div className="flex gap-1 flex-1">
+            {/* Animated Strength Indicator */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 relative group">
+                  <span className="text-sm font-semibold text-white">Signal Strength</span>
+                  <div className="p-1 rounded-lg bg-zinc-800/50 border border-zinc-700 cursor-help relative z-10">
+                    <AlertCircle className="w-3.5 h-3.5 text-zinc-400" />
+                    <div className="absolute left-full top-0 ml-2 w-56 p-3 rounded-lg bg-zinc-900 border border-zinc-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all shadow-xl z-[100] pointer-events-none">
+                      <div className="mb-2 text-white font-semibold text-sm">Signal Strength:</div>
+                      <ul className="space-y-1 text-zinc-400 text-xs">
+                        <li className="text-purple-400">• S-Tier: Exceptional</li>
+                        <li className="text-cyan-400">• A-Tier: Strong</li>
+                        <li className="text-emerald-400">• B-Tier: Moderate</li>
+                        <li className="text-amber-400">• C-Tier: Weak</li>
+                        <li className="text-gray-400">• D-Tier: Very Weak</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                <span className={`${shortConfig.text} text-sm font-bold`}>
+                  {shortConfig.strength}/5
+                </span>
+              </div>
+              
+              {/* Enhanced Strength Bars */}
+              <div className="flex items-center gap-2">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <motion.div
                       key={i}
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ delay: i * 0.1 }}
-                      className={`w-2 h-6 rounded-full ${
+                    initial={{ scale: 0, height: 0 }}
+                    animate={{ scale: 1, height: 'auto' }}
+                    transition={{ 
+                      delay: i * 0.15,
+                      type: "spring",
+                      stiffness: 200
+                    }}
+                    className="flex-1 relative"
+                  >
+                    <motion.div
+                      className={`h-12 rounded-lg ${
                         i < shortConfig.strength 
-                          ? 'bg-white shadow-lg shadow-white/50' 
-                          : 'bg-red-800/40'
+                          ? `bg-gradient-to-t from-red-500 to-rose-500 shadow-lg shadow-red-500/70` 
+                          : 'bg-red-900/30'
                       }`}
+                      animate={i < shortConfig.strength ? {
+                        boxShadow: [
+                          '0 0 15px rgba(239, 68, 68, 0.6)',
+                          '0 0 30px rgba(239, 68, 68, 1)',
+                          '0 0 15px rgba(239, 68, 68, 0.6)'
+                        ]
+                      } : {}}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        delay: i * 0.2
+                      }}
                     />
+                    {/* Pulse effect on active bars */}
+                    {i < shortConfig.strength && (
+                      <motion.div
+                        className="absolute inset-0 bg-rose-400 rounded-lg"
+                        animate={{
+                          opacity: [0, 0.9, 0],
+                          scale: [1, 1.1, 1]
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          delay: i * 0.3
+                        }}
+                      />
+                    )}
+                  </motion.div>
                   ))}
                 </div>
+              
+              <div className={`${shortConfig.text} text-xs mt-2 font-medium`}>
+                {shortConfig.description}
               </div>
-              <div className={`${shortConfig.text} text-xs mt-1`}>{shortConfig.description}</div>
             </div>
           </div>
         </motion.div>
       </div>
 
-      {/* Summary */}
-      {tiersData.summary && (
-        <div className="bg-blue-900/20 rounded-lg p-4 border border-blue-500/30">
-          <h3 className="text-sm font-semibold text-blue-300 mb-2">Summary</h3>
-          <p className="text-sm text-blue-200">{tiersData.summary}</p>
-        </div>
-      )}
-
-      {/* Suggestions */}
-      {tiersData.suggestions && tiersData.suggestions.length > 0 && (
-        <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-          <h3 className="text-sm font-semibold text-gray-200 mb-2">Suggestions</h3>
-          <ul className="space-y-1">
-            {tiersData.suggestions.map((suggestion, index) => (
-              <li key={index} className="text-sm text-gray-300 flex items-start">
-                <span className="text-gray-500 mr-2">•</span>
-                {suggestion}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Risk & Confidence */}
+      {/* Risk & Confidence Metrics */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-yellow-900/20 rounded-lg p-3 border border-yellow-500/30">
-          <div className="text-xs font-semibold text-yellow-300">Confidence</div>
-          <div className="text-sm text-yellow-200">{tiersData.confidence}</div>
-        </div>
-        <div className="bg-orange-900/20 rounded-lg p-3 border border-orange-500/30">
-          <div className="text-xs font-semibold text-orange-300">Risk Level</div>
-          <div className="text-sm text-orange-200">{tiersData.risk}</div>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          whileHover={{ scale: 1.05 }}
+          className="relative overflow-hidden rounded-xl bg-gradient-to-br from-yellow-900/30 to-orange-900/20 border border-yellow-500/30 p-4"
+        >
+          <div className="absolute inset-0 bg-yellow-500 opacity-5 blur-2xl" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-yellow-400 mb-2">
+              <AlertCircle className="w-5 h-5" />
+              <span className="text-xs font-semibold">Risk Level</span>
+            </div>
+            <div className="text-yellow-200 font-bold">{tiersData.risk}</div>
+          </div>
+        </motion.div>
+        
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          whileHover={{ scale: 1.05, rotate: 2 }}
+          className="relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 shadow-lg p-4"
+        >
+          <div className="absolute inset-0 bg-cyan-500 opacity-50 blur-xl" />
+          <div className="relative z-10">
+            <div className="text-white/80 mb-1 text-sm">Confidence</div>
+            <div className="text-white text-xl font-bold">{tiersData.confidence}</div>
+          </div>
+        </motion.div>
       </div>
 
-      {/* Disclaimer */}
-      {tiersData.disclaimer && (
-        <div className="bg-gray-800/30 rounded-lg p-3 border border-gray-700">
-          <p className="text-xs text-gray-400 italic">{tiersData.disclaimer}</p>
+      {/* Quick Insights Section */}
+      {(tiersData.summary || tiersData.suggestions?.length > 0) && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-950/60 via-indigo-950/40 to-purple-950/60 border-2 border-blue-700/30 p-6"
+        >
+          <motion.div
+            className="absolute inset-0 bg-blue-600 opacity-5 blur-3xl"
+            animate={{
+              scale: [1, 1.1, 1],
+              opacity: [0.05, 0.1, 0.05]
+            }}
+            transition={{
+              duration: 5,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          />
+          
+          <div className="relative z-10">
+            {tiersData.summary && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="w-5 h-5 text-yellow-400" />
+                  <h3 className="text-lg font-semibold text-white">Quick Insight</h3>
+                </div>
+                <p className="text-sm text-blue-200 leading-relaxed">{tiersData.summary}</p>
+              </div>
+            )}
+
+            {tiersData.suggestions && tiersData.suggestions.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-300 mb-3">Key Recommendations</h3>
+                <div className="space-y-2">
+                  {tiersData.suggestions.slice(0, 3).map((suggestion, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.5 + index * 0.1 }}
+                      className="flex items-start gap-3 p-3 rounded-lg bg-blue-900/20 border border-blue-700/20"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-blue-100 flex-1">{suggestion}</span>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
         </div>
+        </motion.div>
       )}
     </div>
   )

@@ -3,12 +3,10 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
 import AttractivePriceCard from '@/components/trading/AttractivePriceCard'
-import AttractiveRecommendationCard from '@/components/trading/AttractiveRecommendationCard'
 import AttractiveChartSection from '@/components/trading/AttractiveChartSection'
 import DailyTiers from '@/components/trading/DailyTiers'
 import EconomicCalendar from '@/components/trading/EconomicCalendar'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import { generateRecommendation } from '@/lib/technical-indicators'
 
 type ChartType = 'line' | 'candlestick'
 
@@ -135,9 +133,6 @@ function DailyPageContent() {
   const priceChange = currentPrice - previousClose
   const priceChangePercent = previousClose ? (priceChange / previousClose) * 100 : 0
 
-  // Generate recommendation based on current data
-  const recommendation = generateRecommendation(rows)
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
       {/* Animated Background */}
@@ -166,9 +161,8 @@ function DailyPageContent() {
         >
           {/* Left Column - Stacked */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Legacy Trading Signals - Top Left */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">Trading Signals</h3>
+            {/* Trading Signals - Top Left */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 border-2 border-zinc-800/50 p-6 backdrop-blur-sm">
               <DailyTiers ticker="SPY" />
             </div>
 
@@ -208,16 +202,6 @@ function DailyPageContent() {
               <EconomicCalendar minImpact={2} />
             </div>
           </div>
-        </motion.div>
-
-        {/* Today's Recommendation - Bottom */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-          className="mb-8"
-        >
-          <AttractiveRecommendationCard recommendation={recommendation} />
         </motion.div>
       </div>
     </div>
