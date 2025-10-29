@@ -347,15 +347,6 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-lg font-semibold dark:text-white">Economic Calendar</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            {new Date().toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            })}
-          </p>
           {lastUpdated && (
             <p className="text-xs text-gray-500 dark:text-gray-500">
               Last updated: {lastUpdated.toLocaleTimeString()}
@@ -364,18 +355,9 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
         </div>
         
         <div className="flex items-center gap-3">
-          {/* Refresh Button */}
-          <button
-            onClick={refreshEvents}
-            disabled={loading}
-            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? '🔄' : '🔄'} Refresh
-          </button>
-          
           {/* Impact Filter */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Min Impact:</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">Impact:</span>
             <select
               value={selectedImpact}
               onChange={(e) => setSelectedImpact(Number(e.target.value))}

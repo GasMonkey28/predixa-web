@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { motion } from 'motion/react'
 
 interface DailyTierData {
   date: string
@@ -19,6 +20,69 @@ interface DailyTierData {
 interface DailyTiersProps {
   ticker?: string
 }
+
+// Tier strength mapping based on handler.py
+const tierStrengths: Record<string, number> = {
+  "SSS": 9,
+  "SS": 8,
+  "S": 7,
+  "A+": 6,
+  "A": 5,
+  "B+": 4,
+  "B": 3,
+  "C+": 2,
+  "C": 1,
+  "D": 0
+}
+
+// Tier configuration matching AttractiveRecommendationCard style
+const tierConfig = {
+  S: { 
+    label: 'S-Tier', 
+    description: 'Exceptional Signal',
+    bg: 'from-purple-600 to-pink-600', 
+    glow: 'bg-purple-500', 
+    text: 'text-purple-300', 
+    border: 'border-purple-500',
+    strength: 5
+  },
+  A: { 
+    label: 'A-Tier', 
+    description: 'Strong Signal',
+    bg: 'from-blue-600 to-cyan-600', 
+    glow: 'bg-cyan-500', 
+    text: 'text-cyan-300', 
+    border: 'border-cyan-500',
+    strength: 4
+  },
+  B: { 
+    label: 'B-Tier', 
+    description: 'Moderate Signal',
+    bg: 'from-emerald-600 to-green-600', 
+    glow: 'bg-emerald-500', 
+    text: 'text-emerald-300', 
+    border: 'border-emerald-500',
+    strength: 3
+  },
+  C: { 
+    label: 'C-Tier', 
+    description: 'Weak Signal',
+    bg: 'from-amber-600 to-orange-600', 
+    glow: 'bg-amber-500', 
+    text: 'text-amber-300', 
+    border: 'border-amber-500',
+    strength: 2
+  },
+  D: { 
+    label: 'D-Tier', 
+    description: 'Very Weak Signal',
+    bg: 'from-gray-600 to-gray-700', 
+    glow: 'bg-gray-500', 
+    text: 'text-gray-400', 
+    border: 'border-gray-500',
+    strength: 1
+  },
+};
 
 export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
   const [tiersData, setTiersData] = useState<DailyTierData | null>(null)
@@ -50,13 +114,11 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-        <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-4"></div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
-            <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          </div>
+      <div className="animate-pulse">
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-4"></div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
         </div>
       </div>
     )
@@ -64,93 +126,162 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
 
   if (error || !tiersData) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-        <div className="text-center text-red-600 dark:text-red-400">{error || 'No tier data available'}</div>
-      </div>
+      <div className="text-center text-red-600 dark:text-red-400">{error || 'No tier data available'}</div>
     )
   }
 
-  const getTierColor = (tier: string) => {
-    switch (tier.charAt(0)) {
-      case 'S': return 'text-purple-600 bg-purple-100'
-      case 'A': return tier.includes('+') ? 'text-blue-600 bg-blue-100' : 'text-blue-500 bg-blue-50'
-      case 'B': return tier.includes('+') ? 'text-green-600 bg-green-100' : 'text-green-500 bg-green-50'
-      case 'C': return tier.includes('+') ? 'text-yellow-600 bg-yellow-100' : 'text-yellow-500 bg-yellow-50'
-      case 'D': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 bg-gray-100'
+  // Get tier configuration
+  const getTierConfig = (tier: string) => {
+    // Manual bar mapping based on user requirement
+    let displayStrength = 1; // Default to 1 bar
+    
+    if (tier.includes('SSS') || tier.includes('SS') || tier === 'S') {
+      displayStrength = 5; // S, SS, SSS = 5 bars
+    } else if (tier === 'A+' || tier === 'A') {
+      displayStrength = 4; // A+, A = 4 bars
+    } else if (tier === 'B+' || tier === 'B') {
+      displayStrength = 3; // B+, B = 3 bars
+    } else if (tier === 'C+' || tier === 'C') {
+      displayStrength = 2; // C+, C = 2 bars
+    } else if (tier === 'D') {
+      displayStrength = 1; // D = 1 bar
     }
+    
+    // Get base tier for color/styling
+    const baseTier = tier.charAt(0)
+    
+    // Handle special cases like S+, A+, B+, C+, SS, SSS
+    if (tier.includes('SSS') || tier.includes('SS')) {
+      return { ...tierConfig.S, strength: displayStrength, label: tier }
+    }
+    if (tier.includes('+')) {
+      const base = tierConfig[baseTier as keyof typeof tierConfig]
+      return { ...base, strength: displayStrength, label: tier }
+    }
+    
+    return { ...(tierConfig[baseTier as keyof typeof tierConfig] || tierConfig.C), strength: displayStrength }
   }
 
-  const getTierDescription = (tier: string) => {
-    switch (tier.charAt(0)) {
-      case 'S': return 'Elite'
-      case 'A': return tier.includes('+') ? 'Excellent' : 'Very Good'
-      case 'B': return tier.includes('+') ? 'Good' : 'Above Average'
-      case 'C': return tier.includes('+') ? 'Average' : 'Below Average'
-      case 'D': return 'Weak'
-      default: return 'Unknown'
-    }
-  }
+  const longConfig = getTierConfig(tiersData.long_tier)
+  const shortConfig = getTierConfig(tiersData.short_tier)
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold dark:text-white">Daily Signal</h2>
-        <span className="text-sm text-gray-600 dark:text-gray-400">{tiersData.date}</span>
+        <h2 className="text-lg font-semibold text-white">Daily Signal</h2>
+        <span className="text-sm text-gray-400">{tiersData.date}</span>
       </div>
 
-      {/* Tier Cards */}
+      {/* Tier Cards with Strength Bars */}
       <div className="grid grid-cols-2 gap-4">
         {/* Long Tier */}
-        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-green-800 dark:text-green-300">Long</span>
-            <div className={`px-2 py-1 rounded text-xs font-bold ${getTierColor(tiersData.long_tier)}`}>
-              {tiersData.long_tier}
+        <motion.div
+          whileHover={{ scale: 1.02, rotate: -1 }}
+          className="relative overflow-hidden rounded-xl bg-gradient-to-br from-green-950 to-green-900 border border-green-700/40 p-4"
+        >
+          <div className="absolute inset-0 bg-green-600 opacity-5 blur-2xl"></div>
+          <div className="relative z-10">
+            {/* Header with Tier Badge */}
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-sm font-semibold text-white">Long</span>
+              <motion.div
+                whileHover={{ scale: 1.05, rotate: 2 }}
+                className={`relative px-4 py-2 rounded-xl bg-gradient-to-r ${longConfig.bg} shadow-lg`}
+              >
+                <div className={`absolute inset-0 ${longConfig.glow} opacity-50 blur-xl`} />
+                <span className="relative z-10 text-white text-sm font-bold">{tiersData.long_tier}</span>
+              </motion.div>
+            </div>
+            
+            {/* Strength Bar with Label */}
+            <div>
+              <div className="text-sm text-white mb-2">Signal Strength</div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`${longConfig.text} text-sm font-semibold`}>{longConfig.label}</span>
+                <div className="flex gap-1 flex-1">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: i * 0.1 }}
+                      className={`w-2 h-6 rounded-full ${
+                        i < longConfig.strength 
+                          ? 'bg-white shadow-lg shadow-white/50' 
+                          : 'bg-green-800/40'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className={`${longConfig.text} text-xs mt-1`}>{longConfig.description}</div>
             </div>
           </div>
-          <div className="text-xs text-green-600 dark:text-green-400">
-            {getTierDescription(tiersData.long_tier)}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Score: {tiersData.long_score.toFixed(1)}
-          </div>
-        </div>
+        </motion.div>
 
         {/* Short Tier */}
-        <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-800">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-red-800 dark:text-red-300">Short</span>
-            <div className={`px-2 py-1 rounded text-xs font-bold ${getTierColor(tiersData.short_tier)}`}>
-              {tiersData.short_tier}
+        <motion.div
+          whileHover={{ scale: 1.02, rotate: 1 }}
+          className="relative overflow-hidden rounded-xl bg-gradient-to-br from-red-950 to-red-900 border border-red-700/40 p-4"
+        >
+          <div className="absolute inset-0 bg-red-600 opacity-5 blur-2xl"></div>
+          <div className="relative z-10">
+            {/* Header with Tier Badge */}
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-sm font-semibold text-white">Short</span>
+              <motion.div
+                whileHover={{ scale: 1.05, rotate: -2 }}
+                className={`relative px-4 py-2 rounded-xl bg-gradient-to-r ${shortConfig.bg} shadow-lg`}
+              >
+                <div className={`absolute inset-0 ${shortConfig.glow} opacity-50 blur-xl`} />
+                <span className="relative z-10 text-white text-sm font-bold">{tiersData.short_tier}</span>
+              </motion.div>
+            </div>
+            
+            {/* Strength Bar with Label */}
+            <div>
+              <div className="text-sm text-white mb-2">Signal Strength</div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`${shortConfig.text} text-sm font-semibold`}>{shortConfig.label}</span>
+                <div className="flex gap-1 flex-1">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: i * 0.1 }}
+                      className={`w-2 h-6 rounded-full ${
+                        i < shortConfig.strength 
+                          ? 'bg-white shadow-lg shadow-white/50' 
+                          : 'bg-red-800/40'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className={`${shortConfig.text} text-xs mt-1`}>{shortConfig.description}</div>
             </div>
           </div>
-          <div className="text-xs text-red-600 dark:text-red-400">
-            {getTierDescription(tiersData.short_tier)}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Score: {tiersData.short_score.toFixed(1)}
-          </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Summary */}
       {tiersData.summary && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-          <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-2">Summary</h3>
-          <p className="text-sm text-blue-700 dark:text-blue-400">{tiersData.summary}</p>
+        <div className="bg-blue-900/20 rounded-lg p-4 border border-blue-500/30">
+          <h3 className="text-sm font-semibold text-blue-300 mb-2">Summary</h3>
+          <p className="text-sm text-blue-200">{tiersData.summary}</p>
         </div>
       )}
 
       {/* Suggestions */}
       {tiersData.suggestions && tiersData.suggestions.length > 0 && (
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Suggestions</h3>
+        <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-200 mb-2">Suggestions</h3>
           <ul className="space-y-1">
             {tiersData.suggestions.map((suggestion, index) => (
-              <li key={index} className="text-sm text-gray-700 dark:text-gray-300 flex items-start">
-                <span className="text-gray-400 dark:text-gray-500 mr-2">•</span>
+              <li key={index} className="text-sm text-gray-300 flex items-start">
+                <span className="text-gray-500 mr-2">•</span>
                 {suggestion}
               </li>
             ))}
@@ -160,20 +291,20 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
 
       {/* Risk & Confidence */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 border border-yellow-200 dark:border-yellow-800">
-          <div className="text-xs font-semibold text-yellow-800 dark:text-yellow-300">Confidence</div>
-          <div className="text-sm text-yellow-700 dark:text-yellow-400">{tiersData.confidence}</div>
+        <div className="bg-yellow-900/20 rounded-lg p-3 border border-yellow-500/30">
+          <div className="text-xs font-semibold text-yellow-300">Confidence</div>
+          <div className="text-sm text-yellow-200">{tiersData.confidence}</div>
         </div>
-        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3 border border-orange-200 dark:border-orange-800">
-          <div className="text-xs font-semibold text-orange-800 dark:text-orange-300">Risk Level</div>
-          <div className="text-sm text-orange-700 dark:text-orange-400">{tiersData.risk}</div>
+        <div className="bg-orange-900/20 rounded-lg p-3 border border-orange-500/30">
+          <div className="text-xs font-semibold text-orange-300">Risk Level</div>
+          <div className="text-sm text-orange-200">{tiersData.risk}</div>
         </div>
       </div>
 
       {/* Disclaimer */}
       {tiersData.disclaimer && (
-        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-300 dark:border-gray-700">
-          <p className="text-xs text-gray-600 dark:text-gray-400 italic">{tiersData.disclaimer}</p>
+        <div className="bg-gray-800/30 rounded-lg p-3 border border-gray-700">
+          <p className="text-xs text-gray-400 italic">{tiersData.disclaimer}</p>
         </div>
       )}
     </div>

@@ -157,66 +157,67 @@ function DailyPageContent() {
           <p className="text-gray-300 text-lg">Professional trading insights powered by real-time data</p>
         </motion.div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Price Card */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-          >
-            <AttractivePriceCard
-              price={currentPrice}
-              change={priceChange}
-              changePercent={priceChangePercent}
-              onRefresh={() => {
-                setRefreshKey(prev => prev + 1)
-                setLoading(true)
-              }}
-            />
-          </motion.div>
+        {/* Main Layout: Left Column (Trading Signals + Chart) and Right Column (Economic Calendar) */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"
+        >
+          {/* Left Column - Stacked */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Legacy Trading Signals - Top Left */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6">
+              <h3 className="text-xl font-semibold text-white mb-4">Trading Signals</h3>
+              <DailyTiers ticker="SPY" />
+            </div>
 
-          {/* Recommendation Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="lg:col-span-2"
-          >
-            <AttractiveRecommendationCard recommendation={recommendation} />
-          </motion.div>
-        </div>
+            {/* Intraday Price Chart - Bottom Left */}
+            <div>
+              <AttractiveChartSection
+                data={chartData}
+                chartType={chartType}
+                onChartTypeChange={setChartType}
+              />
+            </div>
+          </div>
 
-        {/* Chart Section */}
+          {/* Right Column - SPY Daily OHLC + Economic Calendar */}
+          <div className="lg:col-span-1 space-y-4">
+            {/* SPY Daily OHLC - Top Right */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="w-full"
+            >
+              <AttractivePriceCard
+                price={currentPrice}
+                change={priceChange}
+                changePercent={priceChangePercent}
+                onRefresh={() => {
+                  setRefreshKey(prev => prev + 1)
+                  setLoading(true)
+                }}
+              />
+            </motion.div>
+
+            {/* Economic Calendar - Bottom Right */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6 h-full">
+              <h3 className="text-xl font-semibold text-white mb-4">Economic Calendar</h3>
+              <EconomicCalendar minImpact={2} />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Today's Recommendation - Bottom */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
           className="mb-8"
         >
-          <AttractiveChartSection
-            data={chartData}
-            chartType={chartType}
-            onChartTypeChange={setChartType}
-          />
-        </motion.div>
-
-
-        {/* Legacy Trading Signals Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-        >
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6">
-            <h3 className="text-xl font-semibold text-white mb-4">Legacy Trading Signals</h3>
-            <DailyTiers ticker="SPY" />
-          </div>
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6">
-            <h3 className="text-xl font-semibold text-white mb-4">Legacy Economic Calendar</h3>
-            <EconomicCalendar minImpact={2} />
-          </div>
+          <AttractiveRecommendationCard recommendation={recommendation} />
         </motion.div>
       </div>
     </div>
