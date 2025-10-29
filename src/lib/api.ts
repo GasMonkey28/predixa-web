@@ -101,13 +101,13 @@ export async function fetchFuture(dateISO: string): Promise<any> {
 }
 
 export async function fetchEconomicCalendar(): Promise<any> {
-  const url = 'https://economic-calendar-python-production.up.railway.app/calendar'
+  const url = '/api/economic-calendar'
   console.log('Economic Calendar API - attempting to fetch from:', url)
   
   try {
     const resp = await axios.get(url, { 
       headers: noCacheHeaders(true),
-      timeout: 10000 // 10 second timeout
+      timeout: 15000 // 15 second timeout for our API route
     })
     console.log('Economic Calendar API - response status:', resp.status)
     console.log('Economic Calendar API - response data:', resp.data)

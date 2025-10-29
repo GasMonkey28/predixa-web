@@ -27,9 +27,9 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
   useEffect(() => {
     async function fetchEvents() {
       try {
-        console.log('Fetching real economic calendar data...')
+        console.log('Fetching economic calendar data from API...')
         const data = await fetchEconomicCalendar()
-        console.log('Raw economic calendar data:', data)
+        console.log('Economic calendar data received:', data)
         
         // Handle different possible API response structures
         let eventsArray = []
@@ -45,15 +45,40 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
         }
         
         // Transform the API data to match our interface
-        const transformedEvents: EconomicEvent[] = eventsArray.map((event: any, index: number) => ({
-          id: event.id || event.event_id || `event-${index}`,
-          time: event.time || event.datetime || event.release_time || 'TBD',
-          event: event.event || event.title || event.name || event.description || 'Unknown Event',
-          impact: event.impact === 'high' ? 3 : event.impact === 'medium' ? 2 : event.impact === 'low' ? 1 : 2,
-          actual: event.actual || event.actual_value,
-          forecast: event.forecast || event.forecast_value,
-          previous: event.previous || event.previous_value
-        }))
+        const transformedEvents: EconomicEvent[] = eventsArray.map((event: any, index: number) => {
+          console.log(`Event ${index}:`, {
+            originalImpact: event.impact,
+            eventTitle: event.event || event.title || event.name || event.description
+          })
+          
+          // More intelligent impact mapping
+          let impact = 2 // Default to medium
+          if (event.impact === 'high' || event.impact === 3) {
+            impact = 3
+          } else if (event.impact === 'medium' || event.impact === 2) {
+            impact = 2
+          } else if (event.impact === 'low' || event.impact === 1) {
+            impact = 1
+          } else {
+            // For unknown impact, try to infer from event name
+            const eventName = (event.event || event.title || event.name || '').toLowerCase()
+            if (eventName.includes('fed') || eventName.includes('fomc') || eventName.includes('rate') || eventName.includes('cpi') || eventName.includes('gdp')) {
+              impact = 3 // High impact for major economic indicators
+            } else if (eventName.includes('mortgage') || eventName.includes('inventory') || eventName.includes('sales')) {
+              impact = 1 // Low impact for secondary indicators
+            }
+          }
+          
+          return {
+            id: event.id || event.event_id || `event-${index}`,
+            time: event.time || event.datetime || event.release_time || 'TBD',
+            event: event.event || event.title || event.name || event.description || 'Unknown Event',
+            impact: impact,
+            actual: event.actual || event.actual_value,
+            forecast: event.forecast || event.forecast_value,
+            previous: event.previous || event.previous_value
+          }
+        })
         
         console.log('Transformed events:', transformedEvents)
         
@@ -72,10 +97,8 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
         // Fallback to mock data if API fails
         console.log('Using fallback mock data')
         const today = new Date()
-        const isWeekend = today.getDay() === 0 || today.getDay() === 6
         const isAfterHours = today.getHours() > 16
         
-        // Generate realistic mock events based on current time
         const mockEvents: EconomicEvent[] = [
           {
             id: '1',
@@ -135,6 +158,22 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
             impact: 3,
             forecast: '5.25%',
             previous: '5.25%'
+          },
+          {
+            id: '8',
+            time: '09:00',
+            event: 'MBA Mortgage Applications',
+            impact: 1,
+            forecast: '2.1%',
+            previous: '1.8%'
+          },
+          {
+            id: '9',
+            time: '11:00',
+            event: 'Wholesale Inventories',
+            impact: 1,
+            forecast: '0.2%',
+            previous: '0.1%'
           }
         ]
         setEvents(mockEvents)
@@ -168,15 +207,35 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
         throw new Error('Invalid API response structure')
       }
       
-      const transformedEvents: EconomicEvent[] = eventsArray.map((event: any, index: number) => ({
-        id: event.id || event.event_id || `event-${index}`,
-        time: event.time || event.datetime || event.release_time || 'TBD',
-        event: event.event || event.title || event.name || event.description || 'Unknown Event',
-        impact: event.impact === 'high' ? 3 : event.impact === 'medium' ? 2 : event.impact === 'low' ? 1 : 2,
-        actual: event.actual || event.actual_value,
-        forecast: event.forecast || event.forecast_value,
-        previous: event.previous || event.previous_value
-      }))
+      const transformedEvents: EconomicEvent[] = eventsArray.map((event: any, index: number) => {
+        // More intelligent impact mapping
+        let impact = 2 // Default to medium
+        if (event.impact === 'high' || event.impact === 3) {
+          impact = 3
+        } else if (event.impact === 'medium' || event.impact === 2) {
+          impact = 2
+        } else if (event.impact === 'low' || event.impact === 1) {
+          impact = 1
+        } else {
+          // For unknown impact, try to infer from event name
+          const eventName = (event.event || event.title || event.name || '').toLowerCase()
+          if (eventName.includes('fed') || eventName.includes('fomc') || eventName.includes('rate') || eventName.includes('cpi') || eventName.includes('gdp')) {
+            impact = 3 // High impact for major economic indicators
+          } else if (eventName.includes('mortgage') || eventName.includes('inventory') || eventName.includes('sales')) {
+            impact = 1 // Low impact for secondary indicators
+          }
+        }
+        
+        return {
+          id: event.id || event.event_id || `event-${index}`,
+          time: event.time || event.datetime || event.release_time || 'TBD',
+          event: event.event || event.title || event.name || event.description || 'Unknown Event',
+          impact: impact,
+          actual: event.actual || event.actual_value,
+          forecast: event.forecast || event.forecast_value,
+          previous: event.previous || event.previous_value
+        }
+      })
       
       if (transformedEvents.length === 0) {
         console.warn('No events found in API response')
@@ -276,7 +335,7 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
             {loading ? 'Retrying...' : 'Retry'}
           </button>
           <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-            API temporarily unavailable - showing sample data below
+            Showing sample data below
           </div>
         </div>
       </div>
