@@ -89,15 +89,28 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
     }
   }
 
+  const getImpactBgColor = (impact: number) => {
+    switch (impact) {
+      case 3: return 'bg-red-500'
+      case 2: return 'bg-yellow-500'
+      case 1: return 'bg-green-500'
+      default: return 'bg-gray-400'
+    }
+  }
+
   const getImpactDots = (impact: number) => {
-    return Array.from({ length: 3 }, (_, i) => (
-      <div
-        key={i}
-        className={`w-2 h-2 rounded-full ${
-          i < impact ? getImpactColor(impact).replace('text-', 'bg-') : 'bg-gray-300'
-        }`}
-      />
-    ))
+    return (
+      <div className="flex gap-1">
+        {Array.from({ length: 3 }, (_, i) => (
+          <div
+            key={i}
+            className={`w-3 h-3 rounded-full ${
+              i < impact ? getImpactBgColor(impact) : 'bg-gray-300 dark:bg-gray-600'
+            }`}
+          />
+        ))}
+      </div>
+    )
   }
 
   const getValueComparison = (actual?: string, forecast?: string) => {
@@ -181,9 +194,7 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
                     <span className="text-sm font-mono text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
                       {event.time}
                     </span>
-                    <div className="flex gap-1">
-                      {getImpactDots(event.impact)}
-                    </div>
+                    {getImpactDots(event.impact)}
                   </div>
                 </div>
 
