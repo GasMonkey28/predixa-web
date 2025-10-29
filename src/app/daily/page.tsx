@@ -209,11 +209,11 @@ function DailyPageContent() {
           transition={{ duration: 0.6, delay: 0.4 }}
           className="grid grid-cols-1 lg:grid-cols-2 gap-6"
         >
-          <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-6">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6">
             <h3 className="text-xl font-semibold text-white mb-4">Legacy Trading Signals</h3>
             <DailyTiers ticker="SPY" />
           </div>
-          <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-6">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6">
             <h3 className="text-xl font-semibold text-white mb-4">Legacy Economic Calendar</h3>
             <EconomicCalendar minImpact={2} />
           </div>
