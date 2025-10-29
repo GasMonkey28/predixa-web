@@ -29,34 +29,60 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
       try {
         console.log('Fetching real economic calendar data...')
         const data = await fetchEconomicCalendar()
-        console.log('Economic calendar data:', data)
+        console.log('Raw economic calendar data:', data)
+        
+        // Handle different possible API response structures
+        let eventsArray = []
+        if (Array.isArray(data)) {
+          eventsArray = data
+        } else if (data.events && Array.isArray(data.events)) {
+          eventsArray = data.events
+        } else if (data.data && Array.isArray(data.data)) {
+          eventsArray = data.data
+        } else {
+          console.warn('Unexpected API response structure:', data)
+          throw new Error('Invalid API response structure')
+        }
         
         // Transform the API data to match our interface
-        const transformedEvents: EconomicEvent[] = data.events?.map((event: any, index: number) => ({
-          id: event.id || `event-${index}`,
-          time: event.time || event.datetime || 'TBD',
-          event: event.event || event.title || event.name || 'Unknown Event',
-          impact: event.impact === 'high' ? 3 : event.impact === 'medium' ? 2 : 1,
-          actual: event.actual,
-          forecast: event.forecast,
-          previous: event.previous
-        })) || []
+        const transformedEvents: EconomicEvent[] = eventsArray.map((event: any, index: number) => ({
+          id: event.id || event.event_id || `event-${index}`,
+          time: event.time || event.datetime || event.release_time || 'TBD',
+          event: event.event || event.title || event.name || event.description || 'Unknown Event',
+          impact: event.impact === 'high' ? 3 : event.impact === 'medium' ? 2 : event.impact === 'low' ? 1 : 2,
+          actual: event.actual || event.actual_value,
+          forecast: event.forecast || event.forecast_value,
+          previous: event.previous || event.previous_value
+        }))
         
         console.log('Transformed events:', transformedEvents)
+        
+        if (transformedEvents.length === 0) {
+          console.warn('No events found in API response')
+          throw new Error('No events found')
+        }
+        
         setEvents(transformedEvents)
         setLastUpdated(new Date())
+        setError(null) // Clear any previous errors
       } catch (err) {
         console.error('Failed to fetch economic calendar:', err)
-        setError('Failed to load economic calendar')
+        setError(`Failed to load economic calendar: ${err instanceof Error ? err.message : 'Unknown error'}`)
         
         // Fallback to mock data if API fails
+        console.log('Using fallback mock data')
+        const today = new Date()
+        const isWeekend = today.getDay() === 0 || today.getDay() === 6
+        const isAfterHours = today.getHours() > 16
+        
+        // Generate realistic mock events based on current time
         const mockEvents: EconomicEvent[] = [
           {
             id: '1',
             time: '08:30',
             event: 'Consumer Price Index (CPI)',
             impact: 3,
-            actual: '3.2%',
+            actual: isAfterHours ? '3.2%' : undefined,
             forecast: '3.1%',
             previous: '3.0%'
           },
@@ -65,6 +91,7 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
             time: '10:00',
             event: 'Consumer Sentiment Index',
             impact: 2,
+            actual: isAfterHours ? '68.5' : undefined,
             forecast: '68.5',
             previous: '67.2'
           },
@@ -73,13 +100,14 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
             time: '14:00',
             event: 'Federal Reserve Chair Speech',
             impact: 3,
-            actual: 'Dovish tone'
+            actual: isAfterHours ? 'Dovish tone' : undefined
           },
           {
             id: '4',
             time: '16:00',
             event: 'Industrial Production',
             impact: 2,
+            actual: isAfterHours ? '0.3%' : undefined,
             forecast: '0.3%',
             previous: '0.1%'
           },
@@ -88,11 +116,29 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
             time: '08:30',
             event: 'Retail Sales',
             impact: 2,
+            actual: isAfterHours ? '0.5%' : undefined,
             forecast: '0.5%',
             previous: '0.3%'
+          },
+          {
+            id: '6',
+            time: '10:30',
+            event: 'Crude Oil Inventories',
+            impact: 2,
+            forecast: '-2.1M',
+            previous: '-1.8M'
+          },
+          {
+            id: '7',
+            time: '12:00',
+            event: 'Fed Funds Rate Decision',
+            impact: 3,
+            forecast: '5.25%',
+            previous: '5.25%'
           }
         ]
         setEvents(mockEvents)
+        setLastUpdated(new Date())
       } finally {
         setLoading(false)
       }
@@ -109,21 +155,39 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
       const data = await fetchEconomicCalendar()
       console.log('Refreshed economic calendar data:', data)
       
-      const transformedEvents: EconomicEvent[] = data.events?.map((event: any, index: number) => ({
-        id: event.id || `event-${index}`,
-        time: event.time || event.datetime || 'TBD',
-        event: event.event || event.title || event.name || 'Unknown Event',
-        impact: event.impact === 'high' ? 3 : event.impact === 'medium' ? 2 : 1,
-        actual: event.actual,
-        forecast: event.forecast,
-        previous: event.previous
-      })) || []
+      // Handle different possible API response structures
+      let eventsArray = []
+      if (Array.isArray(data)) {
+        eventsArray = data
+      } else if (data.events && Array.isArray(data.events)) {
+        eventsArray = data.events
+      } else if (data.data && Array.isArray(data.data)) {
+        eventsArray = data.data
+      } else {
+        console.warn('Unexpected API response structure:', data)
+        throw new Error('Invalid API response structure')
+      }
+      
+      const transformedEvents: EconomicEvent[] = eventsArray.map((event: any, index: number) => ({
+        id: event.id || event.event_id || `event-${index}`,
+        time: event.time || event.datetime || event.release_time || 'TBD',
+        event: event.event || event.title || event.name || event.description || 'Unknown Event',
+        impact: event.impact === 'high' ? 3 : event.impact === 'medium' ? 2 : event.impact === 'low' ? 1 : 2,
+        actual: event.actual || event.actual_value,
+        forecast: event.forecast || event.forecast_value,
+        previous: event.previous || event.previous_value
+      }))
+      
+      if (transformedEvents.length === 0) {
+        console.warn('No events found in API response')
+        throw new Error('No events found')
+      }
       
       setEvents(transformedEvents)
       setLastUpdated(new Date())
     } catch (err) {
       console.error('Failed to refresh economic calendar:', err)
-      setError('Failed to refresh economic calendar')
+      setError(`Failed to refresh economic calendar: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setLoading(false)
     }
@@ -199,7 +263,22 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
   if (error) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-        <div className="text-center text-red-600 dark:text-red-400">{error}</div>
+        <div className="text-center">
+          <div className="text-red-600 dark:text-red-400 mb-4">
+            <div className="text-lg font-semibold mb-2">⚠️ Economic Calendar Error</div>
+            <div className="text-sm">{error}</div>
+          </div>
+          <button
+            onClick={refreshEvents}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? 'Retrying...' : 'Retry'}
+          </button>
+          <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+            API temporarily unavailable - showing sample data below
+          </div>
+        </div>
       </div>
     )
   }

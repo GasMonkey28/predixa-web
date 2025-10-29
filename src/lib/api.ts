@@ -102,8 +102,26 @@ export async function fetchFuture(dateISO: string): Promise<any> {
 
 export async function fetchEconomicCalendar(): Promise<any> {
   const url = 'https://economic-calendar-python-production.up.railway.app/calendar'
-  const resp = await axios.get(url, { headers: noCacheHeaders(true) })
-  return resp.data
+  console.log('Economic Calendar API - attempting to fetch from:', url)
+  
+  try {
+    const resp = await axios.get(url, { 
+      headers: noCacheHeaders(true),
+      timeout: 10000 // 10 second timeout
+    })
+    console.log('Economic Calendar API - response status:', resp.status)
+    console.log('Economic Calendar API - response data:', resp.data)
+    return resp.data
+  } catch (error: any) {
+    console.error('Economic Calendar API - error details:', {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    })
+    throw error
+  }
 }
 
 function normalizeBars(raw: any): BarsPayload {
