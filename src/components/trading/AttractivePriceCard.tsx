@@ -8,7 +8,7 @@ interface AttractivePriceCardProps {
   onRefresh?: () => void;
 }
 
-export function AttractivePriceCard({ price, change, changePercent, onRefresh }: AttractivePriceCardProps) {
+function AttractivePriceCard({ price, change, changePercent, onRefresh }: AttractivePriceCardProps) {
   const isPositive = change >= 0;
 
   return (
@@ -53,4 +53,6 @@ export function AttractivePriceCard({ price, change, changePercent, onRefresh }:
     </motion.div>
   );
 }
+
+export default AttractivePriceCard;
 

@@ -2,13 +2,15 @@ import { motion } from 'motion/react';
 import { TrendingUp, TrendingDown, Zap, Shield, AlertTriangle, Info } from 'lucide-react';
 
 interface AttractiveRecommendationCardProps {
-  action: 'BUY' | 'SELL' | 'HOLD';
-  tier: 'S' | 'A' | 'B' | 'C' | 'D';
-  score: number;
-  confidence: string;
-  riskLevel: string;
-  reasoning: string;
-  keyPoints: string[];
+  recommendation: {
+    action: 'BUY' | 'SELL' | 'HOLD';
+    tier: 'S' | 'A' | 'B' | 'C' | 'D';
+    score: number;
+    confidence: number;
+    riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+    reasoning: string;
+    keyPoints: string[];
+  };
 }
 
 const tierConfig = {
@@ -59,15 +61,8 @@ const tierConfig = {
   },
 };
 
-export function AttractiveRecommendationCard({ 
-  action, 
-  tier, 
-  score, 
-  confidence, 
-  riskLevel, 
-  reasoning,
-  keyPoints 
-}: AttractiveRecommendationCardProps) {
+function AttractiveRecommendationCard({ recommendation }: AttractiveRecommendationCardProps) {
+  const { action, tier, score, confidence, riskLevel, reasoning, keyPoints } = recommendation;
   const tierData = tierConfig[tier];
   const isBuy = action === 'BUY';
   const isHold = action === 'HOLD';
@@ -222,4 +217,6 @@ export function AttractiveRecommendationCard({
     </motion.div>
   );
 }
+
+export default AttractiveRecommendationCard;
 

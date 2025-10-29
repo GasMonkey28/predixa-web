@@ -11,11 +11,11 @@ interface EconomicEvent {
 }
 
 interface AttractiveEconomicCalendarProps {
-  events: EconomicEvent[];
-  date: string;
+  events?: EconomicEvent[];
+  date?: string;
 }
 
-export function AttractiveEconomicCalendar({ events, date }: AttractiveEconomicCalendarProps) {
+function AttractiveEconomicCalendar({ events = [], date = new Date().toISOString().split('T')[0] }: AttractiveEconomicCalendarProps) {
   const getImpactColor = (impact: string) => {
     switch (impact) {
       case 'high':
@@ -28,6 +28,34 @@ export function AttractiveEconomicCalendar({ events, date }: AttractiveEconomicC
         return 'bg-zinc-500/20 border-zinc-500/50 text-zinc-400';
     }
   };
+
+  // Sample events if none provided
+  const sampleEvents: EconomicEvent[] = events.length > 0 ? events : [
+    {
+      time: '09:30',
+      currency: 'USD',
+      event: 'Non-Farm Payrolls',
+      forecast: '200K',
+      previous: '195K',
+      impact: 'high'
+    },
+    {
+      time: '10:00',
+      currency: 'USD', 
+      event: 'ISM Manufacturing PMI',
+      forecast: '52.5',
+      previous: '51.8',
+      impact: 'medium'
+    },
+    {
+      time: '14:00',
+      currency: 'USD',
+      event: 'Fed Interest Rate Decision',
+      forecast: '5.25%',
+      previous: '5.25%',
+      impact: 'high'
+    }
+  ];
 
   return (
     <motion.div
@@ -47,7 +75,7 @@ export function AttractiveEconomicCalendar({ events, date }: AttractiveEconomicC
 
         {/* Events List */}
         <div className="space-y-3">
-          {events.map((event, idx) => (
+          {sampleEvents.map((event, idx) => (
             <motion.div
               key={idx}
               initial={{ opacity: 0, y: 10 }}
@@ -101,4 +129,6 @@ export function AttractiveEconomicCalendar({ events, date }: AttractiveEconomicC
     </motion.div>
   );
 }
+
+export default AttractiveEconomicCalendar;
 

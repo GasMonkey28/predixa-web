@@ -4,11 +4,13 @@ import { motion } from 'motion/react';
 import { Activity } from 'lucide-react';
 
 interface AttractiveChartSectionProps {
-  data: Array<{ time: string; price: number }>;
+  data: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
+  chartType: 'line' | 'candlestick';
+  onChartTypeChange: (type: 'line' | 'candlestick') => void;
 }
 
-export function AttractiveChartSection({ data }: AttractiveChartSectionProps) {
-  const [chartType, setChartType] = useState<'line' | 'area'>('area');
+function AttractiveChartSection({ data, chartType, onChartTypeChange }: AttractiveChartSectionProps) {
+  const [displayType, setDisplayType] = useState<'line' | 'area'>('area');
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -88,7 +90,7 @@ export function AttractiveChartSection({ data }: AttractiveChartSectionProps) {
                 <Tooltip content={<CustomTooltip />} />
                 <Line 
                   type="monotone" 
-                  dataKey="price" 
+                  dataKey="close" 
                   stroke="url(#lineGradient)"
                   strokeWidth={2}
                   dot={false}
@@ -117,7 +119,7 @@ export function AttractiveChartSection({ data }: AttractiveChartSectionProps) {
                 <Tooltip content={<CustomTooltip />} />
                 <Area 
                   type="monotone" 
-                  dataKey="price" 
+                  dataKey="close" 
                   stroke="#06b6d4"
                   strokeWidth={2}
                   fillOpacity={1}
@@ -132,4 +134,6 @@ export function AttractiveChartSection({ data }: AttractiveChartSectionProps) {
     </motion.div>
   );
 }
+
+export default AttractiveChartSection;
 

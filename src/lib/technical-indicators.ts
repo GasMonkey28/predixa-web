@@ -211,3 +211,95 @@ export function generateSignals(bars: Bar[]): TechnicalIndicator[] {
   
   return signals
 }
+
+// Generate trading recommendation based on technical analysis
+export function generateRecommendation(bars: Bar[]) {
+  if (!bars || bars.length < 20) {
+    return {
+      action: 'HOLD' as const,
+      tier: 'C' as const,
+      score: 5.0,
+      confidence: 5.0,
+      riskLevel: 'MEDIUM' as const,
+      reasoning: 'Insufficient data for analysis',
+      keyPoints: ['Waiting for more data points']
+    }
+  }
+
+  const signals = generateSignals(bars)
+  const currentPrice = bars[bars.length - 1].c
+  const previousPrice = bars[bars.length - 2]?.c || currentPrice
+  const priceChange = currentPrice - previousPrice
+  const priceChangePercent = previousPrice ? (priceChange / previousPrice) * 100 : 0
+
+  // Count bullish and bearish signals
+  let bullishSignals = 0
+  let bearishSignals = 0
+  let totalSignals = signals.length
+
+  signals.forEach(signal => {
+    if (signal.signal === 'bullish') bullishSignals++
+    else if (signal.signal === 'bearish') bearishSignals++
+  })
+
+  // Calculate score based on signals and price momentum
+  let score = 5.0 // Base score
+  score += (bullishSignals - bearishSignals) * 0.5
+  score += Math.min(Math.max(priceChangePercent * 10, -2), 2) // Price momentum factor
+
+  // Determine action
+  let action: 'BUY' | 'SELL' | 'HOLD' = 'HOLD'
+  if (score >= 7) action = 'BUY'
+  else if (score <= 3) action = 'SELL'
+
+  // Determine tier
+  let tier: 'S' | 'A' | 'B' | 'C' | 'D' = 'C'
+  if (score >= 8) tier = 'S'
+  else if (score >= 6.5) tier = 'A'
+  else if (score >= 4.5) tier = 'B'
+  else if (score >= 2.5) tier = 'C'
+  else tier = 'D'
+
+  // Calculate confidence
+  const confidence = Math.min(Math.max(score + (totalSignals * 0.2), 1), 10)
+
+  // Determine risk level
+  let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'MEDIUM'
+  if (Math.abs(priceChangePercent) > 2) riskLevel = 'HIGH'
+  else if (Math.abs(priceChangePercent) < 0.5) riskLevel = 'LOW'
+
+  // Generate reasoning
+  const reasoning = `Based on ${totalSignals} technical indicators: ${bullishSignals} bullish, ${bearishSignals} bearish signals. Price momentum: ${priceChangePercent >= 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%`
+
+  // Generate key points
+  const keyPoints: string[] = []
+  if (bullishSignals > bearishSignals) {
+    keyPoints.push('Technical indicators favor bullish sentiment')
+  } else if (bearishSignals > bullishSignals) {
+    keyPoints.push('Technical indicators suggest bearish pressure')
+  }
+  
+  if (Math.abs(priceChangePercent) > 1) {
+    keyPoints.push(`Strong price movement: ${priceChangePercent >= 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%`)
+  }
+  
+  if (signals.some(s => s.name === 'RSI (14)' && s.value < 30)) {
+    keyPoints.push('RSI indicates oversold conditions')
+  } else if (signals.some(s => s.name === 'RSI (14)' && s.value > 70)) {
+    keyPoints.push('RSI indicates overbought conditions')
+  }
+
+  if (keyPoints.length === 0) {
+    keyPoints.push('Mixed signals from technical analysis')
+  }
+
+  return {
+    action,
+    tier,
+    score: Math.round(score * 10) / 10,
+    confidence: Math.round(confidence * 10) / 10,
+    riskLevel,
+    reasoning,
+    keyPoints
+  }
+}
