@@ -29,33 +29,7 @@ function AttractiveEconomicCalendar({ events = [], date = new Date().toISOString
     }
   };
 
-  // Sample events if none provided
-  const sampleEvents: EconomicEvent[] = events.length > 0 ? events : [
-    {
-      time: '09:30',
-      currency: 'USD',
-      event: 'Non-Farm Payrolls',
-      forecast: '200K',
-      previous: '195K',
-      impact: 'high'
-    },
-    {
-      time: '10:00',
-      currency: 'USD', 
-      event: 'ISM Manufacturing PMI',
-      forecast: '52.5',
-      previous: '51.8',
-      impact: 'medium'
-    },
-    {
-      time: '14:00',
-      currency: 'USD',
-      event: 'Fed Interest Rate Decision',
-      forecast: '5.25%',
-      previous: '5.25%',
-      impact: 'high'
-    }
-  ];
+  const sampleEvents: EconomicEvent[] = events;
 
   return (
     <motion.div
@@ -75,7 +49,8 @@ function AttractiveEconomicCalendar({ events = [], date = new Date().toISOString
 
         {/* Events List */}
         <div className="space-y-3">
-          {sampleEvents.map((event, idx) => (
+          {sampleEvents.length > 0 ? (
+            sampleEvents.map((event, idx) => (
             <motion.div
               key={idx}
               initial={{ opacity: 0, y: 10 }}
@@ -123,7 +98,13 @@ function AttractiveEconomicCalendar({ events = [], date = new Date().toISOString
                 </div>
               )}
             </motion.div>
-          ))}
+          ))
+          ) : (
+            <div className="text-center py-8 text-zinc-500">
+              <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>No economic events scheduled for this date</p>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
