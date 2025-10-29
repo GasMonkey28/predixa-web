@@ -7,14 +7,14 @@ import { useAuthStore } from '@/lib/auth-store'
 
 const navigationItems = [
   {
-    name: 'Weekly',
-    href: '/weekly',
-    icon: '📊'
-  },
-  {
     name: 'Daily',
     href: '/daily',
     icon: '📈'
+  },
+  {
+    name: 'Weekly',
+    href: '/weekly',
+    icon: '📊'
   },
   {
     name: 'Future',
