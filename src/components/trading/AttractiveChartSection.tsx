@@ -7,9 +7,11 @@ interface AttractiveChartSectionProps {
   data: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
   chartType: 'line' | 'candlestick';
   onChartTypeChange: (type: 'line' | 'candlestick') => void;
+  title?: string;
+  height?: number;
 }
 
-function AttractiveChartSection({ data, chartType, onChartTypeChange }: AttractiveChartSectionProps) {
+function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'Price Chart', height = 320 }: AttractiveChartSectionProps) {
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -35,7 +37,7 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange }: Attracti
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-cyan-400" />
-            <h3 className="text-zinc-200">Intraday Price Chart</h3>
+            <h3 className="text-zinc-200">{title}</h3>
           </div>
           
           <div className="flex gap-2">
@@ -63,7 +65,7 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange }: Attracti
         </div>
 
         {/* Chart */}
-        <div className="h-80">
+        <div style={{ height: `${height}px` }}>
           {chartType === 'line' ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data}>
@@ -104,7 +106,7 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange }: Attracti
             low: d.low,
             close: d.close,
             volume: d.volume
-          }))} height={320} />
+          }))} height={height} />
           )}
         </div>
       </div>

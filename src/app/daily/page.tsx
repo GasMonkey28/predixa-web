@@ -166,12 +166,13 @@ function DailyPageContent() {
               <DailyTiers ticker="SPY" />
             </div>
 
-            {/* Intraday Price Chart - Bottom Left */}
+            {/* Price Chart - Bottom Left */}
             <div>
               <AttractiveChartSection
                 data={chartData}
                 chartType={chartType}
                 onChartTypeChange={setChartType}
+                title="Price Chart"
               />
             </div>
           </div>

@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import CandlestickChart from '@/components/charts/CandlestickChart'
+import { motion } from 'motion/react'
+import AttractiveChartSection from '@/components/trading/AttractiveChartSection'
+import AttractivePriceCard from '@/components/trading/AttractivePriceCard'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 type ChartType = 'line' | 'candlestick'
@@ -12,21 +13,28 @@ function WeeklyPageContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>('line')
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetch('/api/bars/weekly')
+        // Add cache busting parameter to force fresh data
+        const response = await fetch(`/api/bars/weekly?t=${Date.now()}&r=${Math.random()}`)
         const result = await response.json()
+        console.log('Fetched weekly data:', result)
+        console.log('Bars count:', result.bars?.length)
+        console.log('First bar:', result.bars?.[0])
+        console.log('Last bar:', result.bars?.[result.bars?.length - 1])
         setData(result)
       } catch (err) {
+        console.error('Error fetching data:', err)
         setError('Failed to load data')
       } finally {
         setLoading(false)
       }
     }
     fetchData()
-  }, [])
+  }, [refreshKey])
 
   if (loading) {
     return (
@@ -46,7 +54,8 @@ function WeeklyPageContent() {
     )
   }
 
-  const rows = data.bars?.slice(-50) || []
+  // Display ALL bars from the JSON file (removed .slice(-50) limit)
+  const rows = data.bars || []
   const chartData = rows.map((bar: any) => ({
     time: new Date(bar.t).toLocaleDateString(),
     open: bar.o,
@@ -63,89 +72,70 @@ function WeeklyPageContent() {
   const priceChangePercent = previousPrice ? (priceChange / previousPrice) * 100 : 0
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold dark:text-white">Weekly Analysis</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">SPY Weekly OHLC Data & Trading Signals</p>
-        </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold dark:text-white">
-            ${currentPrice.toFixed(2)}
-          </div>
-          <div className={`text-sm ${priceChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-            {priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
+      {/* Animated Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 animate-pulse"></div>
+      
+      <div className="relative mx-auto max-w-7xl p-6">
+        {/* Header Section */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-8"
+        >
+          <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Weekly Market Analysis
+          </h1>
+          <p className="text-gray-300 text-lg">SPY Weekly OHLC Data & Trading Signals</p>
+        </motion.div>
 
-      {/* Chart Type Selector */}
-      <div className="mb-4">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setChartType('line')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              chartType === 'line'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
-          >
-            Line Chart
-          </button>
-          <button
-            onClick={() => setChartType('candlestick')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              chartType === 'candlestick'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
-          >
-            Candlestick
-          </button>
-        </div>
-      </div>
+        {/* Price Card - Top Right (matching daily page position) */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6"
+        >
+          {/* Empty left space (2 cols) */}
+          <div className="lg:col-span-2"></div>
 
-      {/* Price Chart */}
-      <div className="mb-6 rounded-lg border dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
-        <h2 className="text-lg font-medium dark:text-white mb-4">Price Chart</h2>
-        {chartType === 'candlestick' ? (
-          <CandlestickChart data={chartData} height={400} />
-        ) : (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-gray-200 dark:text-gray-700" />
-              <XAxis 
-                dataKey="time" 
-                tick={{ fontSize: 12 }}
-                interval="preserveStartEnd"
-                stroke="currentColor"
-                className="text-gray-600 dark:text-gray-400"
-              />
-              <YAxis 
-                domain={['dataMin - 5', 'dataMax + 5']}
-                tick={{ fontSize: 12 }}
-                stroke="currentColor"
-                className="text-gray-600 dark:text-gray-400"
-              />
-              <Tooltip 
-                formatter={(value, name) => [`$${Number(value).toFixed(2)}`, name]}
-                labelStyle={{ color: '#374151' }}
-                contentStyle={{ 
-                  backgroundColor: 'var(--tw-bg-opacity, 1)', 
-                  border: '1px solid var(--tw-border-opacity, 1)',
-                  borderRadius: '0.5rem'
+          {/* Right Column - SPY Weekly OHLC */}
+          <div className="lg:col-span-1">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="w-full"
+            >
+              <AttractivePriceCard
+                price={currentPrice}
+                change={priceChange}
+                changePercent={priceChangePercent}
+                onRefresh={() => {
+                  setRefreshKey(prev => prev + 1)
+                  setLoading(true)
                 }}
               />
-              <Line 
-                type="monotone" 
-                dataKey="close" 
-                stroke="#2563eb" 
-                strokeWidth={2}
-                dot={{ fill: '#2563eb', strokeWidth: 2, r: 4 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+            </motion.div>
+          </div>
+        </motion.div>
+
+        {/* Weekly Price Chart - Full Width Below for More Room */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="w-full mb-8"
+        >
+          <AttractiveChartSection
+            data={chartData}
+            chartType={chartType}
+            onChartTypeChange={setChartType}
+            title="Price Chart"
+            height={544}
+          />
+        </motion.div>
       </div>
     </div>
   )
@@ -158,4 +148,3 @@ export default function WeeklyPage() {
     </ProtectedRoute>
   )
 }
-
