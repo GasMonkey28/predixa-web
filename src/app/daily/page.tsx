@@ -105,7 +105,6 @@ function DailyPageContent() {
             transition={{ duration: 0.6, delay: 0.1 }}
           >
             <AttractivePriceCard
-              symbol="SPY"
               price={currentPrice}
               change={priceChange}
               changePercent={priceChangePercent}
