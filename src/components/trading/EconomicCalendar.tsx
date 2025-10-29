@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { fetchEconomicCalendar } from '@/lib/api'
 
 interface EconomicEvent {
   id: string
@@ -21,11 +22,34 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedImpact, setSelectedImpact] = useState(minImpact)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   useEffect(() => {
     async function fetchEvents() {
       try {
-        // Mock data based on your Swift implementation
+        console.log('Fetching real economic calendar data...')
+        const data = await fetchEconomicCalendar()
+        console.log('Economic calendar data:', data)
+        
+        // Transform the API data to match our interface
+        const transformedEvents: EconomicEvent[] = data.events?.map((event: any, index: number) => ({
+          id: event.id || `event-${index}`,
+          time: event.time || event.datetime || 'TBD',
+          event: event.event || event.title || event.name || 'Unknown Event',
+          impact: event.impact === 'high' ? 3 : event.impact === 'medium' ? 2 : 1,
+          actual: event.actual,
+          forecast: event.forecast,
+          previous: event.previous
+        })) || []
+        
+        console.log('Transformed events:', transformedEvents)
+        setEvents(transformedEvents)
+        setLastUpdated(new Date())
+      } catch (err) {
+        console.error('Failed to fetch economic calendar:', err)
+        setError('Failed to load economic calendar')
+        
+        // Fallback to mock data if API fails
         const mockEvents: EconomicEvent[] = [
           {
             id: '1',
@@ -68,10 +92,7 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
             previous: '0.3%'
           }
         ]
-        
         setEvents(mockEvents)
-      } catch (err) {
-        setError('Failed to load economic calendar')
       } finally {
         setLoading(false)
       }
@@ -79,6 +100,34 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
 
     fetchEvents()
   }, [])
+
+  const refreshEvents = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      console.log('Refreshing economic calendar data...')
+      const data = await fetchEconomicCalendar()
+      console.log('Refreshed economic calendar data:', data)
+      
+      const transformedEvents: EconomicEvent[] = data.events?.map((event: any, index: number) => ({
+        id: event.id || `event-${index}`,
+        time: event.time || event.datetime || 'TBD',
+        event: event.event || event.title || event.name || 'Unknown Event',
+        impact: event.impact === 'high' ? 3 : event.impact === 'medium' ? 2 : 1,
+        actual: event.actual,
+        forecast: event.forecast,
+        previous: event.previous
+      })) || []
+      
+      setEvents(transformedEvents)
+      setLastUpdated(new Date())
+    } catch (err) {
+      console.error('Failed to refresh economic calendar:', err)
+      setError('Failed to refresh economic calendar')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getImpactColor = (impact: number) => {
     switch (impact) {
@@ -159,21 +208,47 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
     <div className="space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold dark:text-white">Economic Calendar</h2>
+        <div>
+          <h2 className="text-lg font-semibold dark:text-white">Economic Calendar</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            {new Date().toLocaleDateString('en-US', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })}
+          </p>
+          {lastUpdated && (
+            <p className="text-xs text-gray-500 dark:text-gray-500">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </p>
+          )}
+        </div>
         
-        {/* Impact Filter */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Min Impact:</span>
-          <select
-            value={selectedImpact}
-            onChange={(e) => setSelectedImpact(Number(e.target.value))}
-            className="text-sm border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1"
+        <div className="flex items-center gap-3">
+          {/* Refresh Button */}
+          <button
+            onClick={refreshEvents}
+            disabled={loading}
+            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <option value={0}>All Events</option>
-            <option value={1}>Low+ (1+)</option>
-            <option value={2}>Medium+ (2+)</option>
-            <option value={3}>High (3)</option>
-          </select>
+            {loading ? '🔄' : '🔄'} Refresh
+          </button>
+          
+          {/* Impact Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600 dark:text-gray-400">Min Impact:</span>
+            <select
+              value={selectedImpact}
+              onChange={(e) => setSelectedImpact(Number(e.target.value))}
+              className="text-sm border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1"
+            >
+              <option value={0}>All Events</option>
+              <option value={1}>Low+ (1+)</option>
+              <option value={2}>Medium+ (2+)</option>
+              <option value={3}>High (3)</option>
+            </select>
+          </div>
         </div>
       </div>
 
