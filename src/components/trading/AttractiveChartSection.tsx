@@ -10,8 +10,6 @@ interface AttractiveChartSectionProps {
 }
 
 function AttractiveChartSection({ data, chartType, onChartTypeChange }: AttractiveChartSectionProps) {
-医科大学
-
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
