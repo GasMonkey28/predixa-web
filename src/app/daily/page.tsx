@@ -1,11 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import CandlestickChart from '@/components/charts/CandlestickChart'
+import { motion } from 'motion/react'
+import AttractivePriceCard from '@/components/trading/AttractivePriceCard'
+import AttractiveRecommendationCard from '@/components/trading/AttractiveRecommendationCard'
+import AttractiveChartSection from '@/components/trading/AttractiveChartSection'
+import AttractiveEconomicCalendar from '@/components/trading/AttractiveEconomicCalendar'
 import DailyTiers from '@/components/trading/DailyTiers'
 import EconomicCalendar from '@/components/trading/EconomicCalendar'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { generateRecommendation } from '@/lib/technical-indicators'
 
 type ChartType = 'line' | 'candlestick'
 
@@ -71,98 +75,99 @@ function DailyPageContent() {
   const priceChange = currentPrice - previousPrice
   const priceChangePercent = previousPrice ? (priceChange / previousPrice) * 100 : 0
 
+  // Generate recommendation based on current data
+  const recommendation = generateRecommendation(rows)
+
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold dark:text-white">Daily Analysis</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">SPY Daily OHLC Data</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => {
-              setRefreshKey(prev => prev + 1)
-              setLoading(true)
-            }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
+      {/* Animated Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 animate-pulse"></div>
+      
+      <div className="relative mx-auto max-w-7xl p-6">
+        {/* Header Section */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-8"
+        >
+          <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Daily Market Analysis
+          </h1>
+          <p className="text-gray-300 text-lg">Professional trading insights powered by real-time data</p>
+        </motion.div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Price Card */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
           >
-            🔄 Refresh Data
-          </button>
-          <div className="text-right">
-            <div className="text-2xl font-bold dark:text-white">
-              ${currentPrice.toFixed(2)}
-            </div>
-            <div className={`text-sm ${priceChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
-            </div>
+            <AttractivePriceCard
+              symbol="SPY"
+              price={currentPrice}
+              change={priceChange}
+              changePercent={priceChangePercent}
+              onRefresh={() => {
+                setRefreshKey(prev => prev + 1)
+                setLoading(true)
+              }}
+            />
+          </motion.div>
+
+          {/* Recommendation Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="lg:col-span-2"
+          >
+            <AttractiveRecommendationCard recommendation={recommendation} />
+          </motion.div>
+        </div>
+
+        {/* Chart Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="mb-8"
+        >
+          <AttractiveChartSection
+            data={chartData}
+            chartType={chartType}
+            onChartTypeChange={setChartType}
+          />
+        </motion.div>
+
+        {/* Economic Calendar */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="mb-8"
+        >
+          <AttractiveEconomicCalendar />
+        </motion.div>
+
+        {/* Legacy Trading Signals Grid */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.5 }}
+          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+        >
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Legacy Trading Signals</h3>
+            <DailyTiers ticker="SPY" />
           </div>
-        </div>
-      </div>
-
-      {/* Chart Type Selector */}
-      <div className="mb-4">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setChartType('line')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              chartType === 'line'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
-          >
-            Line Chart
-          </button>
-          <button
-            onClick={() => setChartType('candlestick')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              chartType === 'candlestick'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
-          >
-            Candlestick
-          </button>
-        </div>
-      </div>
-
-      {/* Price Chart */}
-      <div className="mb-6 rounded-lg border dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
-        <h2 className="text-lg font-medium dark:text-white mb-4">Intraday Price Chart</h2>
-        {chartType === 'candlestick' ? (
-          <CandlestickChart data={chartData} height={400} />
-        ) : (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="time" 
-                tick={{ fontSize: 12 }}
-                interval="preserveStartEnd"
-              />
-              <YAxis 
-                domain={['dataMin - 2', 'dataMax + 2']}
-                tick={{ fontSize: 12 }}
-              />
-              <Tooltip 
-                formatter={(value, name) => [`$${Number(value).toFixed(2)}`, name]}
-                labelStyle={{ color: '#374151' }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="close" 
-                stroke="#2563eb" 
-                strokeWidth={2}
-                dot={{ fill: '#2563eb', strokeWidth: 2, r: 3 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* Trading Signals Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <DailyTiers ticker="SPY" />
-        <EconomicCalendar minImpact={2} />
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Legacy Economic Calendar</h3>
+            <EconomicCalendar minImpact={2} />
+          </div>
+        </motion.div>
       </div>
     </div>
   )
