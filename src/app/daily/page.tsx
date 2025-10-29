@@ -5,7 +5,6 @@ import { motion } from 'motion/react'
 import AttractivePriceCard from '@/components/trading/AttractivePriceCard'
 import AttractiveRecommendationCard from '@/components/trading/AttractiveRecommendationCard'
 import AttractiveChartSection from '@/components/trading/AttractiveChartSection'
-import AttractiveEconomicCalendar from '@/components/trading/AttractiveEconomicCalendar'
 import DailyTiers from '@/components/trading/DailyTiers'
 import EconomicCalendar from '@/components/trading/EconomicCalendar'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
@@ -142,21 +141,12 @@ function DailyPageContent() {
           />
         </motion.div>
 
-        {/* Economic Calendar */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="mb-8"
-        >
-          <AttractiveEconomicCalendar />
-        </motion.div>
 
         {/* Legacy Trading Signals Grid */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.5 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
           className="grid grid-cols-1 lg:grid-cols-2 gap-6"
         >
           <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-6">
