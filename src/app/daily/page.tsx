@@ -147,9 +147,9 @@ function DailyPageContent() {
           className="text-center mb-8"
         >
           <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-            Daily Market Analysis
+            AI-Powered Market Forecast
           </h1>
-          <p className="text-gray-300 text-lg">Professional trading insights powered by real-time data</p>
+          <p className="text-gray-300 text-lg">Machine learning predictions calculated at market open • Your competitive edge awaits</p>
         </motion.div>
 
         {/* Main Layout: Left Column (Trading Signals + Chart) and Right Column (Economic Calendar) */}

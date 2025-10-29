@@ -199,7 +199,7 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
           </motion.div>
           <div>
             <h2 className="text-2xl font-bold text-white">Trading Signals</h2>
-            <p className="text-xs text-gray-400">Real-time market intelligence</p>
+            <p className="text-xs text-gray-400">ML predictions at market open • Where opportunity meets intelligence</p>
           </div>
         </div>
         <motion.div
