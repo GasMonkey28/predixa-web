@@ -226,7 +226,7 @@ function FuturePageContent() {
       {/* Chart Display */}
       <div className="mb-6 rounded-lg border dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
         <h2 className="text-lg font-medium dark:text-white mb-4">
-          {viewMode === 'bubbles' ? 'Key Levels (Bubbles Chart)' : 'Flow Timeline (Delta Bars)'}
+          {viewMode === 'bubbles' ? 'Key Levels' : 'Flow Timeline'}
         </h2>
         
         {viewMode === 'bubbles' ? (
