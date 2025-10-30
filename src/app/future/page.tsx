@@ -139,7 +139,11 @@ function FuturePageContent() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
+      {/* Animated Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 animate-pulse"></div>
+      
+      <div className="relative mx-auto max-w-7xl p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold dark:text-white">Options Flow Analysis</h1>
@@ -147,14 +151,11 @@ function FuturePageContent() {
         </div>
         <div className="text-right">
           <div className="text-sm text-gray-600 dark:text-gray-400">Date: {nyTodayISO()}</div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            {bubbles.length} Bubbles, {deltaBars.length} Delta Bars
-          </div>
         </div>
       </div>
 
-      {/* View Mode Selector */}
-      <div className="mb-6">
+      {/* View Mode Selector & Filters */}
+      <div className="mb-6 flex flex-wrap items-center gap-4">
         <div className="flex gap-2">
           <button
             onClick={() => setViewMode('deltaBars')}
@@ -164,7 +165,7 @@ function FuturePageContent() {
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
             }`}
           >
-            Flow Timeline (Delta Bars)
+            Flow Timeline
           </button>
           <button
             onClick={() => setViewMode('bubbles')}
@@ -174,128 +175,49 @@ function FuturePageContent() {
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
             }`}
           >
-            Key Levels (Bubbles)
+            Key Levels
           </button>
         </div>
-      </div>
-
-
-      {/* Filters */}
-      <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-        <h2 className="text-lg font-medium dark:text-white mb-4">Filters & Controls</h2>
-        
-        {viewMode === 'bubbles' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Space Metrics
-              </label>
-              <div className="space-y-2">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={showTotalDiff}
-                    onChange={(e) => setShowTotalDiff(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm dark:text-gray-300">Total Diff</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={showAccumulated}
-                    onChange={(e) => setShowAccumulated(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm dark:text-gray-300">Accumulated</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={showMaxAbsDiff}
-                    onChange={(e) => setShowMaxAbsDiff(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm dark:text-gray-300">Max Abs Diff</span>
-                </label>
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Min Total Diff (M)
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="20"
-                step="0.5"
-                value={minTotal}
-                onChange={(e) => setMinTotal(Number(e.target.value))}
-                className="w-full"
-              />
-              <div className="text-sm text-gray-600 dark:text-gray-400">{minTotal}M</div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Min Accumulated (M)
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="3000"
-                step="50"
-                value={minAccum}
-                onChange={(e) => setMinAccum(Number(e.target.value))}
-                className="w-full"
-              />
-              <div className="text-sm text-gray-600 dark:text-gray-400">{minAccum}M</div>
-            </div>
-          </div>
-        )}
         
         {viewMode === 'deltaBars' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Timeline
-              </label>
-              <select
-                value={timelineFilter}
-                onChange={(e) => setTimelineFilter(e.target.value as TimelineFilter)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-              >
-                <option value="1M">1 Month</option>
-                <option value="3M">3 Months</option>
-                <option value="6M">6 Months</option>
-                <option value="1Y">1 Year</option>
-                <option value="Max">Max</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Time Windows
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {['1d', '3d', '5d', '10d', '20d'].map(window => (
-                  <label key={window} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedWindows.includes(window)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedWindows([...selectedWindows, window])
-                        } else {
-                          setSelectedWindows(selectedWindows.filter(w => w !== window))
-                        }
-                      }}
-                      className="mr-1"
-                    />
-                    <span className="text-sm dark:text-gray-300">{window}</span>
-                  </label>
-                ))}
-              </div>
+          <div className="ml-auto flex items-center gap-3">
+            <span className="text-sm text-gray-700 dark:text-gray-300">Timeline:</span>
+            <select
+              value={timelineFilter}
+              onChange={(e) => setTimelineFilter(e.target.value as TimelineFilter)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+            >
+              <option value="1M">1 Month</option>
+              <option value="3M">3 Months</option>
+              <option value="6M">6 Months</option>
+              <option value="1Y">1 Year</option>
+              <option value="Max">Max</option>
+            </select>
+            <span className="text-sm text-gray-700 dark:text-gray-300">Windows:</span>
+            <div className="flex gap-2">
+              {['1d','3d','5d','10d','20d'].map((w) => {
+                const active = selectedWindows.includes(w)
+                return (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => {
+                      if (active) {
+                        setSelectedWindows(selectedWindows.filter(x => x !== w))
+                      } else {
+                        setSelectedWindows([...selectedWindows, w])
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {w}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
@@ -351,15 +273,7 @@ function FuturePageContent() {
         </div>
       </div>
 
-      {/* Raw Data Debug (for development) */}
-      <details className="mt-6">
-        <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
-          Debug: Raw Data Structure
-        </summary>
-        <pre className="mt-2 overflow-auto rounded-lg border dark:border-gray-700 p-4 text-xs bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-        {JSON.stringify(Object.keys(data), null, 2)}
-      </pre>
-      </details>
+      </div>
     </div>
   )
 }

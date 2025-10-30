@@ -362,34 +362,6 @@ export default function DeltaBarsChart({ bars, selectedWindows, timelineFilter =
         </BarChart>
       </ResponsiveContainer>
 
-      {/* Selected Expiration Details */}
-      {selectedExpiration && (
-        <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
-          <h3 className="font-semibold mb-2 dark:text-white">{formatExpDateShort(selectedExpiration)}</h3>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-            {WINDOW_ORDER.filter(w => selectedWindows.includes(w)).map(window => {
-              const entry = chartData.find(d => d.expiration === selectedExpiration)
-              const value = entry?.[window] as number | undefined
-              if (value === undefined || Math.abs(value) < 0.01) return null
-              
-              const isPositive = value >= 0
-              const color = isPositive ? CALL_COLORS[window] : PUT_COLORS[window]
-              
-              return (
-                <div key={window} className="flex justify-between items-center">
-                  <span className="dark:text-gray-300">{window}:</span>
-                  <span 
-                    className="font-mono font-semibold"
-                    style={{ color }}
-                  >
-                    {formatMoney(Math.abs(value))}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
