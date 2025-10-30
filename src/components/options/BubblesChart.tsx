@@ -59,7 +59,7 @@ export default function BubblesChart({
   }
 
   // Filter bubbles based on metrics and thresholds
-  const filteredBubbles = bubbles.filter(bubble => {
+  const metricFiltered = bubbles.filter(bubble => {
     const moneyInMillions = Math.abs(bubble.money) / 10000
     
     switch (bubble.metric) {
@@ -73,6 +73,8 @@ export default function BubblesChart({
         return false
     }
   })
+
+  const filteredBubbles = metricFiltered
 
   // Transform data for scatter chart
   const chartData = filteredBubbles.map(bubble => ({
@@ -168,7 +170,12 @@ export default function BubblesChart({
                 const half = size / 1.2
                 return (
                   <g>
-                    <polygon points={`${cx},${cy - half} ${cx + half},${cy} ${cx},${cy + half} ${cx - half},${cy}`} fill={color} />
+                    <polygon 
+                      points={`${cx},${cy - half} ${cx + half},${cy} ${cx},${cy + half} ${cx - half},${cy}`} 
+                      fill="none" 
+                      stroke={color} 
+                      strokeWidth={2}
+                    />
                   </g>
                 )
               }
@@ -181,7 +188,7 @@ export default function BubblesChart({
                   </g>
                 )
               }
-              return <circle cx={cx} cy={cy} r={size / 2} fill={color} />
+              return <circle cx={cx} cy={cy} r={size / 2} fill="none" stroke={color} strokeWidth={2} />
             }}
           />
         </ScatterChart>

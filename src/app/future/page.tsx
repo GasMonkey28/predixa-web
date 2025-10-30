@@ -30,10 +30,16 @@ function FuturePageContent() {
   const [showTotalDiff, setShowTotalDiff] = useState(true)
   const [showAccumulated, setShowAccumulated] = useState(true)
   const [showMaxAbsDiff, setShowMaxAbsDiff] = useState(true)
+  const [selectedBubbleMetrics, setSelectedBubbleMetrics] = useState<Array<'total_diff_money' | 'accumulated_money' | 'max_abs_diff_money'>>([
+    'total_diff_money',
+    'accumulated_money',
+    'max_abs_diff_money'
+  ])
   
   // Delta bars filters
   const [selectedWindows, setSelectedWindows] = useState<string[]>(['1d', '5d', '20d'])
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('1M')
+  const [showBubbleFilters, setShowBubbleFilters] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
@@ -138,6 +144,28 @@ function FuturePageContent() {
     }
   }
 
+  const getMaxExpirationDate = (filter: TimelineFilter): Date | null => {
+    const now = new Date()
+    switch (filter) {
+      case '1M':
+        return new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
+      case '3M':
+        return new Date(now.getFullYear(), now.getMonth() + 3, now.getDate())
+      case '6M':
+        return new Date(now.getFullYear(), now.getMonth() + 6, now.getDate())
+      case '1Y':
+        return new Date(now.getFullYear() + 1, now.getMonth(), now.getDate())
+      case 'Max':
+        return null
+    }
+  }
+
+  const bubblesForTimeline = (() => {
+    const maxDate = getMaxExpirationDate(timelineFilter)
+    if (!maxDate) return mockBubbles
+    return mockBubbles.filter((b: any) => new Date(b.expiration) <= maxDate)
+  })()
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
       {/* Animated Background */}
@@ -221,6 +249,60 @@ function FuturePageContent() {
             </div>
           </div>
         )}
+
+        {viewMode === 'bubbles' && (
+          <div className="ml-auto flex items-center gap-3">
+            <span className="text-sm text-gray-700 dark:text-gray-300">Timeline:</span>
+            <select
+              value={timelineFilter}
+              onChange={(e) => setTimelineFilter(e.target.value as TimelineFilter)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+            >
+              <option value="1M">1 Month</option>
+              <option value="3M">3 Months</option>
+              <option value="6M">6 Months</option>
+              <option value="1Y">1 Year</option>
+              <option value="Max">Max</option>
+            </select>
+            <span className="text-sm text-gray-700 dark:text-gray-300">Metrics:</span>
+            <div className="flex gap-2">
+              {[
+                { key: 'total_diff_money', label: 'Total Diff' },
+                { key: 'accumulated_money', label: 'Accumulated' },
+                { key: 'max_abs_diff_money', label: 'Max Abs Diff' },
+              ].map((m: any) => {
+                const active = selectedBubbleMetrics.includes(m.key)
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => {
+                      if (active) {
+                        setSelectedBubbleMetrics(selectedBubbleMetrics.filter(x => x !== m.key))
+                      } else {
+                        setSelectedBubbleMetrics([...selectedBubbleMetrics, m.key])
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBubbleFilters(true)}
+              className="px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+            >
+              Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Chart Display */}
@@ -231,14 +313,14 @@ function FuturePageContent() {
         
         {viewMode === 'bubbles' ? (
           <BubblesChart
-            bubbles={mockBubbles}
+            bubbles={bubblesForTimeline}
             priceCandles={priceCandles}
             minTotal={minTotal}
             minMaxAbs={minMaxAbs}
             minAccum={minAccum}
-            showTotalDiff={showTotalDiff}
-            showAccumulated={showAccumulated}
-            showMaxAbsDiff={showMaxAbsDiff}
+            showTotalDiff={selectedBubbleMetrics.includes('total_diff_money')}
+            showAccumulated={selectedBubbleMetrics.includes('accumulated_money')}
+            showMaxAbsDiff={selectedBubbleMetrics.includes('max_abs_diff_money')}
           />
         ) : (
           <DeltaBarsChart
@@ -272,6 +354,82 @@ function FuturePageContent() {
           </p>
         </div>
       </div>
+
+      {/* Bubble Filters Bottom Sheet */}
+      {showBubbleFilters && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBubbleFilters(false)}></div>
+          <div className="relative w-full max-w-2xl rounded-t-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-6">
+            <div className="mx-auto mb-4 h-1 w-16 rounded bg-gray-300 dark:bg-gray-700"></div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Bubble Filters</h3>
+              <button
+                className="text-blue-600 hover:underline"
+                onClick={() => setShowBubbleFilters(false)}
+              >
+                Done
+              </button>
+            </div>
+            <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Minimum Thresholds</div>
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-800 dark:text-gray-200">Min Total Diff</span>
+                  <span className="text-gray-700 dark:text-gray-300">{formatMoney(minTotal * 10000)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={1}
+                  value={minTotal}
+                  onChange={(e) => setMinTotal(Number(e.target.value))}
+                  className="w-full accent-blue-600"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-800 dark:text-gray-200">Min Max Abs Diff</span>
+                  <span className="text-gray-700 dark:text-gray-300">{formatMoney(minMaxAbs * 10000)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={1}
+                  value={minMaxAbs}
+                  onChange={(e) => setMinMaxAbs(Number(e.target.value))}
+                  className="w-full accent-blue-600"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-800 dark:text-gray-200">Min Accumulated</span>
+                  <span className="text-gray-700 dark:text-gray-300">{formatMoney(minAccum * 10000)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={5000}
+                  step={10}
+                  value={minAccum}
+                  onChange={(e) => setMinAccum(Number(e.target.value))}
+                  className="w-full accent-blue-600"
+                />
+              </div>
+            </div>
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={() => { setMinTotal(5); setMinMaxAbs(5); setMinAccum(1200) }}
+                className="text-blue-600 hover:underline"
+              >
+                Reset to Defaults
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       </div>
     </div>
