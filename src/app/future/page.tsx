@@ -6,6 +6,7 @@ import DeltaBarsChart from '@/components/options/DeltaBarsChart'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 type ViewMode = 'bubbles' | 'deltaBars'
+type TimelineFilter = '1M' | '3M' | '6M' | '1Y' | 'Max'
 
 function nyTodayISO() {
   const now = new Date()
@@ -20,7 +21,7 @@ function FuturePageContent() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<ViewMode>('bubbles')
+  const [viewMode, setViewMode] = useState<ViewMode>('deltaBars')
   
   // Bubble filters
   const [minTotal, setMinTotal] = useState(5)
@@ -32,6 +33,7 @@ function FuturePageContent() {
   
   // Delta bars filters
   const [selectedWindows, setSelectedWindows] = useState<string[]>(['1d', '5d', '20d'])
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('1M')
 
   useEffect(() => {
     async function fetchData() {
@@ -155,16 +157,6 @@ function FuturePageContent() {
       <div className="mb-6">
         <div className="flex gap-2">
           <button
-            onClick={() => setViewMode('bubbles')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              viewMode === 'bubbles'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
-          >
-            Key Levels (Bubbles)
-          </button>
-          <button
             onClick={() => setViewMode('deltaBars')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               viewMode === 'deltaBars'
@@ -174,30 +166,19 @@ function FuturePageContent() {
           >
             Flow Timeline (Delta Bars)
           </button>
+          <button
+            onClick={() => setViewMode('bubbles')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              viewMode === 'bubbles'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+            }`}
+          >
+            Key Levels (Bubbles)
+          </button>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Bubbles</h3>
-          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{mockBubbles.length}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Delta Bars</h3>
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400">{mockDeltaBars.length}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Price Candles</h3>
-          <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{priceCandles.length}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Money Flow</h3>
-          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-            {formatMoney(bubbles.reduce((sum: number, b: any) => sum + Math.abs(b.money || 0), 0))}
-          </p>
-        </div>
-      </div>
 
       {/* Filters */}
       <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
@@ -275,28 +256,46 @@ function FuturePageContent() {
         )}
         
         {viewMode === 'deltaBars' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Time Windows
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {['1d', '3d', '5d', '10d', '20d'].map(window => (
-                <label key={window} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={selectedWindows.includes(window)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedWindows([...selectedWindows, window])
-                      } else {
-                        setSelectedWindows(selectedWindows.filter(w => w !== window))
-                      }
-                    }}
-                    className="mr-1"
-                  />
-                  <span className="text-sm dark:text-gray-300">{window}</span>
-                </label>
-              ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Timeline
+              </label>
+              <select
+                value={timelineFilter}
+                onChange={(e) => setTimelineFilter(e.target.value as TimelineFilter)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+              >
+                <option value="1M">1 Month</option>
+                <option value="3M">3 Months</option>
+                <option value="6M">6 Months</option>
+                <option value="1Y">1 Year</option>
+                <option value="Max">Max</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Time Windows
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {['1d', '3d', '5d', '10d', '20d'].map(window => (
+                  <label key={window} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedWindows.includes(window)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedWindows([...selectedWindows, window])
+                        } else {
+                          setSelectedWindows(selectedWindows.filter(w => w !== window))
+                        }
+                      }}
+                      className="mr-1"
+                    />
+                    <span className="text-sm dark:text-gray-300">{window}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -323,6 +322,7 @@ function FuturePageContent() {
           <DeltaBarsChart
             bars={mockDeltaBars}
             selectedWindows={selectedWindows}
+            timelineFilter={timelineFilter}
           />
         )}
       </div>

@@ -95,7 +95,10 @@ export async function fetchDailyBars(force = false): Promise<BarsPayload> {
 }
 
 export async function fetchFuture(dateISO: string): Promise<any> {
-  const url = `https://s3.amazonaws.com/${BUCKET}/charts/${dateISO}/${S3_TICKER}.json`
+  // Match iOS app: uses uppercase ticker (SPY.json), bucket.s3.amazonaws.com format
+  const ticker = TICKER.toUpperCase() // Match iOS: "SPY"
+  const url = `https://${BUCKET}.s3.amazonaws.com/charts/${dateISO}/${ticker}.json`
+  console.log('Fetching future data from S3:', url)
   const resp = await axios.get(url, { headers: noCacheHeaders(true) })
   return resp.data
 }
