@@ -174,7 +174,7 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
   // Determine which signal is stronger for visual emphasis
   const longStrength = longConfig.strength
   const shortStrength = shortConfig.strength
-  const dominantSignal = longStrength > shortStrength ? 'LONG' : 'SHORT'
+  const dominantSignal = longStrength === shortStrength ? 'NEUTRAL' : (longStrength > shortStrength ? 'LONG' : 'SHORT')
 
   return (
     <div className="space-y-6">
@@ -232,14 +232,16 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0 }}
           className={`relative overflow-hidden rounded-2xl p-6 mb-6 ${
-            dominantSignal === 'LONG' 
-              ? 'bg-gradient-to-r from-emerald-900/40 via-green-900/30 to-emerald-900/40 border-2 border-emerald-500/30' 
-              : 'bg-gradient-to-r from-red-900/40 via-rose-900/30 to-red-900/40 border-2 border-red-500/30'
+            dominantSignal === 'LONG'
+              ? 'bg-gradient-to-r from-emerald-900/40 via-green-900/30 to-emerald-900/40 border-2 border-emerald-500/30'
+              : dominantSignal === 'SHORT'
+                ? 'bg-gradient-to-r from-red-900/40 via-rose-900/30 to-red-900/40 border-2 border-red-500/30'
+                : 'bg-gradient-to-r from-zinc-900/40 via-gray-900/30 to-zinc-900/40 border-2 border-zinc-500/30'
           }`}
         >
           <motion.div
             className={`absolute inset-0 ${
-              dominantSignal === 'LONG' ? 'bg-emerald-500' : 'bg-red-500'
+              dominantSignal === 'LONG' ? 'bg-emerald-500' : dominantSignal === 'SHORT' ? 'bg-red-500' : 'bg-zinc-500'
             } opacity-10 blur-3xl`}
             animate={{
               scale: [1, 1.1, 1],
@@ -259,19 +261,23 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
               >
                 {dominantSignal === 'LONG' ? (
                   <ArrowUpRight className="w-8 h-8 text-green-400" />
-                ) : (
+                ) : dominantSignal === 'SHORT' ? (
                   <ArrowDownRight className="w-8 h-8 text-rose-400" />
+                ) : (
+                  <Info className="w-8 h-8 text-zinc-300" />
                 )}
               </motion.div>
               <div>
                 <div className="text-xs text-gray-400 mb-1">Dominant Signal</div>
-                <div className={`text-2xl font-bold ${dominantSignal === 'LONG' ? 'text-green-400' : 'text-rose-400'}`}>
-                  {dominantSignal} {dominantSignal === 'LONG' ? 'TREND' : 'TREND'}
+                <div className={`text-2xl font-bold ${dominantSignal === 'LONG' ? 'text-green-400' : dominantSignal === 'SHORT' ? 'text-rose-400' : 'text-zinc-300'}`}>
+                  {dominantSignal} TREND
                 </div>
                 <div className="text-sm text-gray-300">
-                  {dominantSignal === 'LONG' 
-                    ? `Long signal is ${(longStrength / shortStrength * 100).toFixed(0)}% stronger`
-                    : `Short signal is ${(shortStrength / longStrength * 100).toFixed(0)}% stronger`}
+                  {dominantSignal === 'NEUTRAL'
+                    ? 'Long and short signals are balanced'
+                    : dominantSignal === 'LONG'
+                      ? `Long signal is ${(longStrength / shortStrength * 100).toFixed(0)}% stronger`
+                      : `Short signal is ${(shortStrength / longStrength * 100).toFixed(0)}% stronger`}
                 </div>
               </div>
             </div>
@@ -279,11 +285,11 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
               animate={{ scale: [1, 1.1, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
               className={`px-6 py-3 rounded-xl bg-gradient-to-r ${
-                dominantSignal === 'LONG' ? longConfig.bg : shortConfig.bg
+                dominantSignal === 'LONG' ? longConfig.bg : dominantSignal === 'SHORT' ? shortConfig.bg : 'from-zinc-700 via-gray-700 to-zinc-700'
               } shadow-2xl`}
             >
               <div className="text-white text-2xl font-bold">
-                {dominantSignal === 'LONG' ? tiersData.long_tier : tiersData.short_tier}
+                {dominantSignal === 'NEUTRAL' ? `${tiersData.long_tier} / ${tiersData.short_tier}` : (dominantSignal === 'LONG' ? tiersData.long_tier : tiersData.short_tier)}
               </div>
             </motion.div>
       </div>
