@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import axios from 'axios'
 
+// Force dynamic rendering - prevents Next.js from caching this route
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET!
 const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
 
