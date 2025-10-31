@@ -272,7 +272,7 @@ function FuturePageContent() {
             />
           ) : (
             <div className="p-6 rounded-lg border dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 text-center">
-              <div className="text-gray-700 dark:text-gray-300 font-medium">Today's options data isn't available yet.</div>
+              <div className="text-gray-700 dark:text-gray-300 font-medium">Today&apos;s options data isn&apos;t available yet.</div>
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">We update after market open (ET). Please check back soon.</div>
             </div>
           )
@@ -285,7 +285,7 @@ function FuturePageContent() {
             />
           ) : (
             <div className="p-6 rounded-lg border dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 text-center">
-              <div className="text-gray-700 dark:text-gray-300 font-medium">Today's options data isn't available yet.</div>
+              <div className="text-gray-700 dark:text-gray-300 font-medium">Today&apos;s options data isn&apos;t available yet.</div>
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">We update after market open (ET). Please check back soon.</div>
             </div>
           )
