@@ -15,14 +15,17 @@ const cleanText = (text: string) => {
 
 export async function GET() {
   try {
-    // Get today's date in YYYY-MM-DD format (using local timezone)
-    const today = new Date().toLocaleDateString('en-CA') // Returns YYYY-MM-DD format
+    // Get today's date in YYYY-MM-DD format using ET timezone (market timezone)
+    // This ensures consistent date calculation regardless of server timezone
+    const etTimeZone = 'America/New_York'
+    const now = new Date()
+    const etDate = new Date(now.toLocaleString('en-US', { timeZone: etTimeZone }))
+    const today = etDate.toLocaleDateString('en-CA') // Returns YYYY-MM-DD format
     
-    // Try to fetch from S3 bucket with today's date
-    // Also try yesterday's date as fallback
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toLocaleDateString('en-CA')
+    // Calculate yesterday in ET timezone
+    const yesterdayEt = new Date(etDate)
+    yesterdayEt.setDate(yesterdayEt.getDate() - 1)
+    const yesterdayStr = yesterdayEt.toLocaleDateString('en-CA')
     
     let url = `https://s3.amazonaws.com/${BUCKET}/summary_json/${today}.json`
     console.log(`Trying S3 URL: ${url}`)
@@ -31,6 +34,7 @@ export async function GET() {
     
     try {
       let response
+      let actualDate = today
       try {
         response = await axios.get(url, {
           headers: {
@@ -38,22 +42,25 @@ export async function GET() {
             'Pragma': 'no-cache'
           }
         })
+        console.log(`Successfully fetched data for ${today}`)
       } catch (todayError) {
-        console.log(`Today's data not available, trying yesterday: ${yesterdayStr}`)
+        console.log(`Today's data not available (${today}), trying yesterday: ${yesterdayStr}`)
         url = `https://${BUCKET}.s3.amazonaws.com/summary_json/${yesterdayStr}.json`
+        actualDate = yesterdayStr
         response = await axios.get(url, {
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
           }
         })
+        console.log(`Successfully fetched data for ${yesterdayStr}`)
       }
       
       // Transform the data to match our expected format
       const s3Data = response.data
       
       const transformedData = {
-        date: today,
+        date: actualDate, // Use the actual date of the data fetched
         long_tier: s3Data.long_signal || s3Data.long_tier || s3Data.longTier || 'N/A',
         short_tier: s3Data.short_signal || s3Data.short_tier || s3Data.shortTier || 'N/A',
         long_score: s3Data.long_score || s3Data.longScore || 0,
