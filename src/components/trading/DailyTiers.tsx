@@ -455,9 +455,9 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
               </div>
             </div>
           </div>
-          {tiersData.prev_long_tier && tiersData.prev_long_tier !== 'N/A' && (
+          {tiersData.prev_date && (
             <div className="absolute bottom-3 right-3 z-20">
-              <span className="px-2.5 py-1 rounded-md text-xs bg-zinc-800/80 border border-zinc-700 text-zinc-200">Prev: {tiersData.prev_long_tier}</span>
+              <span className="px-2.5 py-1 rounded-md text-xs bg-zinc-800/80 border border-zinc-700 text-zinc-200">Prev: {tiersData.prev_long_tier || 'N/A'}</span>
             </div>
           )}
         </motion.div>
@@ -616,9 +616,9 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
               </div>
             </div>
           </div>
-          {tiersData.prev_short_tier && tiersData.prev_short_tier !== 'N/A' && (
+          {tiersData.prev_date && (
             <div className="absolute bottom-3 right-3 z-20">
-              <span className="px-2.5 py-1 rounded-md text-xs bg-zinc-800/80 border border-zinc-700 text-zinc-200">Prev: {tiersData.prev_short_tier}</span>
+              <span className="px-2.5 py-1 rounded-md text-xs bg-zinc-800/80 border border-zinc-700 text-zinc-200">Prev: {tiersData.prev_short_tier || 'N/A'}</span>
             </div>
           )}
         </motion.div>
