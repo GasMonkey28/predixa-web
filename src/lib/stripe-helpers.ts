@@ -40,8 +40,9 @@ async function getUserFromRequest(request: NextRequest): Promise<{ userId: strin
     
     // Pattern 3: Check all cookies for idToken
     if (!idToken) {
-      for (const [name, cookie] of cookies.getAll()) {
-        if (name.includes('idToken') && cookie.value) {
+      const allCookies = cookies.getAll()
+      for (const cookie of allCookies) {
+        if (cookie.name.includes('idToken') && cookie.value) {
           idToken = cookie.value
           break
         }
