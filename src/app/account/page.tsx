@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import { DarkModeToggle } from '@/components/ui/DarkModeToggle'
 
 function AccountPageContent() {
   const router = useRouter()
@@ -96,23 +95,20 @@ function AccountPageContent() {
     <div className="mx-auto max-w-7xl p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold dark:text-white">Account</h1>
-        <div className="flex items-center gap-4">
-          <DarkModeToggle />
-          <button
-            onClick={async () => {
-              try {
-                await signOut()
-                // Redirect to home page after sign out
-                router.push('/')
-              } catch (error) {
-                console.error('Sign out failed:', error)
-              }
-            }}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
-          >
-            Sign Out
-          </button>
-        </div>
+        <button
+          onClick={async () => {
+            try {
+              await signOut()
+              // Redirect to home page after sign out
+              router.push('/')
+            } catch (error) {
+              console.error('Sign out failed:', error)
+            }
+          }}
+          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+        >
+          Sign Out
+        </button>
       </div>
 
       <div className="space-y-6">
