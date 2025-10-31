@@ -16,6 +16,9 @@ interface DailyTierData {
   risk: string
   outlook: string
   disclaimer: string
+  prev_date?: string | null
+  prev_long_tier?: string | null
+  prev_short_tier?: string | null
 }
 
 interface DailyTiersProps {
@@ -452,6 +455,11 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
               </div>
             </div>
           </div>
+          {tiersData.prev_long_tier && tiersData.prev_long_tier !== 'N/A' && (
+            <div className="absolute bottom-3 right-3 z-20">
+              <span className="px-2.5 py-1 rounded-md text-xs bg-zinc-800/80 border border-zinc-700 text-zinc-200">Prev: {tiersData.prev_long_tier}</span>
+            </div>
+          )}
         </motion.div>
 
         {/* Short Tier */}
@@ -608,6 +616,11 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
               </div>
             </div>
           </div>
+          {tiersData.prev_short_tier && tiersData.prev_short_tier !== 'N/A' && (
+            <div className="absolute bottom-3 right-3 z-20">
+              <span className="px-2.5 py-1 rounded-md text-xs bg-zinc-800/80 border border-zinc-700 text-zinc-200">Prev: {tiersData.prev_short_tier}</span>
+            </div>
+          )}
         </motion.div>
       </div>
 

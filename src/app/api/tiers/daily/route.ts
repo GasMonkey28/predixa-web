@@ -56,9 +56,34 @@ export async function GET() {
         console.log(`Successfully fetched data for ${yesterdayStr}`)
       }
       
-      // Transform the data to match our expected format
+      // Transform today's (or actual) data
       const s3Data = response.data
-      
+
+      // Compute previous day string based on actualDate (UTC-safe)
+      const [ay, am, ad] = actualDate.split('-').map((n: string) => parseInt(n, 10))
+      const baseUtc = new Date(Date.UTC(ay, (am || 1) - 1, ad || 1))
+      baseUtc.setUTCDate(baseUtc.getUTCDate() - 1)
+      const prevDateStr = baseUtc.toISOString().slice(0, 10)
+
+      // Try to fetch previous day's tiers
+      let prevLong: string | null = null
+      let prevShort: string | null = null
+      try {
+        const prevUrl = `https://${BUCKET}.s3.amazonaws.com/summary_json/${prevDateStr}.json`
+        const prevResp = await axios.get(prevUrl, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        })
+        const prevData = prevResp.data
+        prevLong = prevData.long_signal || prevData.long_tier || prevData.longTier || 'N/A'
+        prevShort = prevData.short_signal || prevData.short_tier || prevData.shortTier || 'N/A'
+      } catch (prevErr) {
+        // If previous day isn't available, leave as null
+        console.log(`Previous day data not available for ${prevDateStr}`)
+      }
+
       const transformedData = {
         date: actualDate, // Use the actual date of the data fetched
         long_tier: s3Data.long_signal || s3Data.long_tier || s3Data.longTier || 'N/A',
@@ -66,7 +91,7 @@ export async function GET() {
         long_score: s3Data.long_score || s3Data.longScore || 0,
         short_score: s3Data.short_score || s3Data.shortScore || 0,
         summary: cleanText(s3Data.summary || s3Data.SUMMARY || 'No summary available'),
-        suggestions: Array.isArray(s3Data.suggestions) 
+        suggestions: Array.isArray(s3Data.suggestions)
           ? s3Data.suggestions.map(cleanText)
           : Array.isArray(s3Data.SUGGESTIONS)
           ? s3Data.SUGGESTIONS.map(cleanText)
@@ -74,7 +99,10 @@ export async function GET() {
         confidence: cleanText(s3Data.confidence || s3Data.CONFIDENCE || 'Unknown'),
         risk: cleanText(s3Data.risk || s3Data.RISK || 'Unknown'),
         outlook: cleanText(s3Data.outlook || s3Data.OUTLOOK || 'No outlook available'),
-        disclaimer: cleanText(s3Data.disclaimer || s3Data.DISCLAIMER || 'Data provided for informational purposes only.')
+        disclaimer: cleanText(s3Data.disclaimer || s3Data.DISCLAIMER || 'Data provided for informational purposes only.'),
+        prev_date: prevLong || prevShort ? prevDateStr : null,
+        prev_long_tier: prevLong,
+        prev_short_tier: prevShort
       }
       
       return NextResponse.json(transformedData, {
