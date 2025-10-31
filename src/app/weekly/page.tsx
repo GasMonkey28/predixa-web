@@ -65,11 +65,72 @@ function WeeklyPageContent() {
     volume: bar.v || 0
   }))
 
-  // Calculate price change
-  const currentPrice = rows[rows.length - 1]?.c || 0
-  const previousPrice = rows[rows.length - 2]?.c || 0
-  const priceChange = currentPrice - previousPrice
-  const priceChangePercent = previousPrice ? (priceChange / previousPrice) * 100 : 0
+  // Calculate price change vs last trading day's close (same logic as daily page)
+  const allBars = data.bars || []
+  
+  // Filter to only regular market hours (9:30 AM - 4:00 PM ET) and sort by date
+  const nyTZ = 'America/New_York'
+  const regularHoursBars = allBars
+    .map((bar: any) => ({
+      ...bar,
+      date: new Date(bar.t)
+    }))
+    .filter((bar: any) => {
+      // Convert to ET for filtering
+      const etTime = new Date(bar.date.toLocaleString('en-US', { timeZone: nyTZ }))
+      const hour = etTime.getHours()
+      const minute = etTime.getMinutes()
+      
+      // Include bars from 9:30 AM (09:30) to 4:00 PM (16:00) ET
+      if (hour < 9 || hour > 16) return false
+      if (hour === 9 && minute < 30) return false
+      if (hour === 16 && minute > 0) return false
+      return true
+    })
+    .sort((a: any, b: any) => a.date.getTime() - b.date.getTime())
+
+  // Get current bar (last one in regular hours)
+  const currentBar = regularHoursBars[regularHoursBars.length - 1]
+  const currentPrice = currentBar?.c || 0
+  
+  // Get the current bar's trading day start (ET timezone)
+  let previousClose = 0
+  if (currentBar) {
+    // Get the latest bar from all bars to determine the current trading day
+    // This ensures we use the most recent data point, not just the filtered regular hours
+    const latestBar = allBars[allBars.length - 1]
+    const latestBarDate = new Date(latestBar.t)
+    const latestDateET = new Date(latestBarDate.toLocaleString('en-US', { timeZone: nyTZ }))
+    const currentDateStr = latestDateET.toISOString().split('T')[0] // YYYY-MM-DD
+    
+    // Find the previous trading day's 4:00 PM ET close price
+    // Look for the bar with timestamp T15:45:00 (3:45-4:00 PM bar, closes at 4:00 PM) from previous trading day
+    const previousDayBars = allBars.filter((bar: any) => {
+      const barDate = new Date(bar.t)
+      const barDateET = new Date(barDate.toLocaleString('en-US', { timeZone: nyTZ }))
+      const barDateStr = barDateET.toISOString().split('T')[0] // YYYY-MM-DD
+      return barDateStr < currentDateStr
+    })
+    
+    // Find the specific 4:00 PM close bar (T15:45:00) from the previous trading day
+    // This is the 15-minute bar from 3:45 PM to 4:00 PM, which closes at 4:00 PM
+    // Find all T15:45:00 bars from previous days and take the last one (most recent previous trading day)
+    const previousCloseBars = previousDayBars.filter((bar: any) => {
+      // Check if the timestamp contains T15:45:00 (the 4:00 PM close bar)
+      return bar.t && bar.t.includes('T15:45:00')
+    })
+    
+    // Use the last T15:45:00 bar (most recent previous trading day's 4 PM close)
+    // If no T15:45:00 bar found, fall back to the last bar from previous day
+    const previousCloseBar = previousCloseBars.length > 0 
+      ? previousCloseBars[previousCloseBars.length - 1]
+      : previousDayBars[previousDayBars.length - 1]
+    previousClose = previousCloseBar?.c || 0
+  }
+  
+  // Calculate change vs previous trading day's close
+  const priceChange = currentPrice - previousClose
+  const priceChangePercent = previousClose ? (priceChange / previousClose) * 100 : 0
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
