@@ -79,61 +79,8 @@ function FuturePageContent() {
   const deltaBars = data.bars || []
   const priceCandles = data.price_candles || []
 
-  // Add some mock data if no real data is available
-  const mockBubbles = bubbles.length === 0 ? [
-    {
-      expiration: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-      price: 450,
-      strike: 450,
-      option_type: 'call',
-      metric: 'total_diff_money',
-      money: 5000000 // 5M
-    },
-    {
-      expiration: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 60 days from now
-      price: 460,
-      strike: 460,
-      option_type: 'put',
-      metric: 'accumulated_money',
-      money: 3000000 // 3M
-    }
-  ] : bubbles
-
-  const mockDeltaBars = deltaBars.length === 0 ? [
-    {
-      expiration: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      option_type: 'call',
-      windows: {
-        '1d': { money: 1500000 },
-        '3d': { money: 1800000 },
-        '5d': { money: 2200000 },
-        '10d': { money: 2800000 },
-        '20d': { money: 3200000 }
-      }
-    },
-    {
-      expiration: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      option_type: 'put',
-      windows: {
-        '1d': { money: 1200000 },
-        '3d': { money: 1500000 },
-        '5d': { money: 1800000 },
-        '10d': { money: 2200000 },
-        '20d': { money: 2500000 }
-      }
-    },
-    {
-      expiration: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      option_type: 'call',
-      windows: {
-        '1d': { money: 800000 },
-        '3d': { money: 1100000 },
-        '5d': { money: 1400000 },
-        '10d': { money: 1800000 },
-        '20d': { money: 2100000 }
-      }
-    }
-  ] : deltaBars
+  const hasBubblesData = (bubbles?.length || 0) > 0
+  const hasDeltaBarsData = (deltaBars?.length || 0) > 0
 
   const formatMoney = (val: number) => {
     const millions = val / 10_000.0
@@ -162,8 +109,8 @@ function FuturePageContent() {
 
   const bubblesForTimeline = (() => {
     const maxDate = getMaxExpirationDate(timelineFilter)
-    if (!maxDate) return mockBubbles
-    return mockBubbles.filter((b: any) => new Date(b.expiration) <= maxDate)
+    if (!maxDate) return bubbles
+    return bubbles.filter((b: any) => new Date(b.expiration) <= maxDate)
   })()
 
   return (
@@ -312,22 +259,36 @@ function FuturePageContent() {
         </h2>
         
         {viewMode === 'bubbles' ? (
-          <BubblesChart
-            bubbles={bubblesForTimeline}
-            priceCandles={priceCandles}
-            minTotal={minTotal}
-            minMaxAbs={minMaxAbs}
-            minAccum={minAccum}
-            showTotalDiff={selectedBubbleMetrics.includes('total_diff_money')}
-            showAccumulated={selectedBubbleMetrics.includes('accumulated_money')}
-            showMaxAbsDiff={selectedBubbleMetrics.includes('max_abs_diff_money')}
-          />
+          hasBubblesData ? (
+            <BubblesChart
+              bubbles={bubblesForTimeline}
+              priceCandles={priceCandles}
+              minTotal={minTotal}
+              minMaxAbs={minMaxAbs}
+              minAccum={minAccum}
+              showTotalDiff={selectedBubbleMetrics.includes('total_diff_money')}
+              showAccumulated={selectedBubbleMetrics.includes('accumulated_money')}
+              showMaxAbsDiff={selectedBubbleMetrics.includes('max_abs_diff_money')}
+            />
+          ) : (
+            <div className="p-6 rounded-lg border dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 text-center">
+              <div className="text-gray-700 dark:text-gray-300 font-medium">Today's options data isn't available yet.</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">We update after market open (ET). Please check back soon.</div>
+            </div>
+          )
         ) : (
-          <DeltaBarsChart
-            bars={mockDeltaBars}
-            selectedWindows={selectedWindows}
-            timelineFilter={timelineFilter}
-          />
+          hasDeltaBarsData ? (
+            <DeltaBarsChart
+              bars={deltaBars}
+              selectedWindows={selectedWindows}
+              timelineFilter={timelineFilter}
+            />
+          ) : (
+            <div className="p-6 rounded-lg border dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 text-center">
+              <div className="text-gray-700 dark:text-gray-300 font-medium">Today's options data isn't available yet.</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">We update after market open (ET). Please check back soon.</div>
+            </div>
+          )
         )}
       </div>
 
