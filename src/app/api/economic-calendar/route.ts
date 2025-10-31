@@ -1,23 +1,41 @@
 import { NextResponse } from 'next/server'
 import axios from 'axios'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const url = 'https://economic-calendar-python-production.up.railway.app/calendar'
+    // Get optional date query parameter (defaults to today)
+    const { searchParams } = new URL(request.url)
+    const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
+    
+    // Build Railway URL with optional date parameter
+    let url = 'https://economic-calendar-python-production.up.railway.app/calendar'
+    if (date) {
+      url += `?date=${date}`
+    }
+    
     console.log('Economic Calendar API - fetching from:', url)
+    console.log('Economic Calendar API - date parameter:', date)
     
     const response = await axios.get(url, {
       headers: {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache'
       },
-      timeout: 10000 // 10 second timeout
+      timeout: 15000 // 15 second timeout
     })
     
     console.log('Economic Calendar API - response status:', response.status)
-    console.log('Economic Calendar API - response data:', response.data)
+    console.log('Economic Calendar API - response data:', JSON.stringify(response.data, null, 2))
+    console.log('Economic Calendar API - events count:', response.data?.events?.length || response.data?.count || 0)
     
-    return NextResponse.json(response.data, {
+    // Ensure response has events array even if empty
+    const responseData = {
+      ...response.data,
+      events: response.data?.events || [],
+      count: response.data?.count || (response.data?.events?.length || 0)
+    }
+    
+    return NextResponse.json(responseData, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         'Pragma': 'no-cache',
@@ -44,5 +62,6 @@ export async function GET() {
     )
   }
 }
+
 
 

@@ -82,9 +82,14 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
         
         console.log('Transformed events:', transformedEvents)
         
+        // Handle empty events array gracefully - show message instead of error
         if (transformedEvents.length === 0) {
-          console.warn('No events found in API response')
-          throw new Error('No events found')
+          console.warn('No events found in API response - Railway returned empty array')
+          setEvents([])
+          setLastUpdated(new Date())
+          setError(null) // Don't set error for empty results, just show empty state
+          setLoading(false)
+          return // Exit early since there are no events to display
         }
         
         setEvents(transformedEvents)
@@ -237,9 +242,12 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
         }
       })
       
+      // Handle empty events array gracefully
       if (transformedEvents.length === 0) {
-        console.warn('No events found in API response')
-        throw new Error('No events found')
+        console.warn('No events found in API response - Railway returned empty array')
+        setEvents([])
+        setLastUpdated(new Date())
+        return // Exit early since there are no events to display
       }
       
       setEvents(transformedEvents)
