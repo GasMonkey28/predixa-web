@@ -77,7 +77,10 @@ export async function GET(request: NextRequest) {
         const product = typeof price.product === 'string' 
           ? await stripe.products.retrieve(price.product)
           : price.product
-        productName = product?.name || 'Pro Plan'
+        // Check if product is not deleted and has a name property
+        if (product && !product.deleted && 'name' in product) {
+          productName = product.name || 'Pro Plan'
+        }
       } catch (productError) {
         console.error('Error fetching product:', productError)
         // Continue with default name
