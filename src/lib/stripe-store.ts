@@ -38,14 +38,36 @@ export const useStripeStore = create<StripeState & StripeActions>((set, get) => 
   createCheckoutSession: async (priceId: string) => {
     set({ isLoading: true, error: null })
     try {
+      // Get current user info to pass as fallback
+      const { getCurrentUser } = await import('aws-amplify/auth')
+      let userId: string | undefined
+      let userEmail: string | undefined
+      
+      try {
+        const user = await getCurrentUser()
+        userId = user.userId
+        const session = await (await import('aws-amplify/auth')).fetchAuthSession()
+        userEmail = (session.tokens?.idToken?.payload as any)?.email
+      } catch (authError) {
+        console.log('Could not get user info for fallback:', authError)
+      }
+      
       const response = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId })
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Important: include cookies
+        body: JSON.stringify({ priceId, userId, userEmail })
       })
       
       if (!response.ok) {
         const errorData = await response.json()
+        // If user already has subscription, don't redirect - let them handle it
+        if (errorData.hasActiveSubscription) {
+          set({ error: errorData.error, isLoading: false })
+          throw new Error(errorData.error)
+        }
         throw new Error(errorData.error || 'Failed to create checkout session')
       }
       
@@ -74,13 +96,41 @@ export const useStripeStore = create<StripeState & StripeActions>((set, get) => 
   createCustomerPortalSession: async () => {
     set({ isLoading: true, error: null })
     try {
+      // Get current user info to pass as fallback
+      const { getCurrentUser } = await import('aws-amplify/auth')
+      let userId: string | undefined
+      
+      try {
+        const user = await getCurrentUser()
+        userId = user.userId
+      } catch (authError) {
+        console.log('Could not get user info for portal session:', authError)
+      }
+      
       const response = await fetch('/api/stripe/create-portal-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important: include cookies
+        body: JSON.stringify({ userId })
       })
       
-      const { url } = await response.json()
-      window.location.href = url
+      if (!response.ok) {
+        const errorData = await response.json()
+        // If portal needs configuration, include the URL in the error
+        if (errorData.needsConfiguration && errorData.portalUrl) {
+          throw new Error(`${errorData.error}\n\nClick here to configure: ${errorData.portalUrl}`)
+        }
+        throw new Error(errorData.error || 'Failed to create portal session')
+      }
+      
+      const data = await response.json()
+      
+      if (!data.url) {
+        throw new Error('No portal URL returned from server')
+      }
+      
+      // Redirect to Stripe billing portal
+      window.location.href = data.url
     } catch (error: any) {
       set({ error: error.message || 'Failed to create portal session', isLoading: false })
       throw error
@@ -90,7 +140,24 @@ export const useStripeStore = create<StripeState & StripeActions>((set, get) => 
   fetchSubscription: async () => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch('/api/stripe/subscription')
+      // Get current user info to pass as fallback
+      const { getCurrentUser } = await import('aws-amplify/auth')
+      let userId: string | undefined
+      
+      try {
+        const user = await getCurrentUser()
+        userId = user.userId
+      } catch (authError) {
+        console.log('Could not get user info for subscription fetch:', authError)
+      }
+      
+      const url = userId 
+        ? `/api/stripe/subscription?userId=${encodeURIComponent(userId)}`
+        : '/api/stripe/subscription'
+      
+      const response = await fetch(url, {
+        credentials: 'include' // Important: include cookies
+      })
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

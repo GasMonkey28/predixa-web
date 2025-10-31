@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAuthStore } from '@/lib/auth-store'
 import { useStripeStore } from '@/lib/stripe-store'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
@@ -11,6 +11,7 @@ import { DarkModeToggle } from '@/components/ui/DarkModeToggle'
 
 function AccountPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, signOut, isAuthenticated, updateUserProfile, isLoading: isAuthLoading } = useAuthStore()
   const [isEditing, setIsEditing] = useState(false)
   const [givenName, setGivenName] = useState(user?.givenName || '')
@@ -21,6 +22,25 @@ function AccountPageContent() {
     // For testing, always try to fetch subscription regardless of auth status
     fetchSubscription()
   }, [fetchSubscription])
+
+  useEffect(() => {
+    // Check if returning from successful checkout
+    const success = searchParams.get('success')
+    if (success === 'true') {
+      // Wait a bit longer for Stripe to process, then refetch subscription
+      setTimeout(() => {
+        fetchSubscription()
+        toast.success('Subscription activated!')
+        // Remove the query parameter from URL
+        router.replace('/account')
+      }, 2000) // Increased delay to 2 seconds
+      
+      // Also refetch after a longer delay as backup
+      setTimeout(() => {
+        fetchSubscription()
+      }, 5000)
+    }
+  }, [searchParams, fetchSubscription, router])
 
   useEffect(() => {
     // Update local state when user changes
@@ -53,8 +73,14 @@ function AccountPageContent() {
   const handleSubscribe = async (priceId: string) => {
     try {
       await createCheckoutSession(priceId)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create checkout session:', error)
+      // Show user-friendly error message
+      if (error?.message) {
+        toast.error(error.message)
+      } else {
+        toast.error('Failed to start subscription. Please try again.')
+      }
     }
   }
 
@@ -153,65 +179,185 @@ function AccountPageContent() {
 
         {/* Subscription */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6">
-          <h2 className="text-lg font-medium dark:text-white mb-4">Subscription</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-medium dark:text-white">Subscription</h2>
+          </div>
           
           {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded flex justify-between items-center">
-              <span>Error: {error}</span>
-              <button 
-                onClick={clearError}
-                className="text-red-600 hover:text-red-800 underline text-sm"
-              >
-                Dismiss
-              </button>
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <div className="flex justify-between items-start mb-2">
+                <p className="text-red-800 dark:text-red-200 font-medium">Error</p>
+                <button 
+                  onClick={clearError}
+                  className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 text-sm font-medium"
+                >
+                  Dismiss
+                </button>
+              </div>
+              <div className="text-sm text-red-700 dark:text-red-300 whitespace-pre-line mb-3">{error}</div>
+              {error.includes('dashboard.stripe.com') && (
+                <a
+                  href={error.match(/https:\/\/[^\s]+/)?.[0] || 'https://dashboard.stripe.com/test/settings/billing/portal'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Configure Stripe Portal
+                </a>
+              )}
             </div>
           )}
           
           {isLoading ? (
-            <div className="text-gray-600 dark:text-gray-400">Loading subscription...</div>
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-3 text-gray-600 dark:text-gray-400">Loading subscription...</span>
+            </div>
           ) : subscription && subscription.plan ? (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="font-medium dark:text-white">{subscription.plan.name}</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    ${subscription.plan.amount / 100}/{subscription.plan.interval}
-                  </p>
+            <div className="space-y-6">
+              {/* Active Subscription Card */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-xl font-semibold dark:text-white">{subscription.plan.name}</h3>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        subscription.status === 'active' 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
+                          : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                      }`}>
+                        {subscription.status.charAt(0).toUpperCase() + subscription.status.slice(1)}
+                      </span>
+                    </div>
+                    <p className="text-3xl font-bold dark:text-white mb-1">
+                      ${(subscription.plan.amount / 100).toFixed(2)}
+                      <span className="text-lg font-normal text-gray-600 dark:text-gray-400">
+                        /{subscription.plan.interval}
+                      </span>
+                    </p>
+                  </div>
                 </div>
-                <span className={`px-2 py-1 rounded text-sm ${
-                  subscription.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                }`}>
-                  {subscription.status}
-                </span>
+                
+                {subscription.status === 'active' && subscription.current_period_end && (
+                  <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Next billing date: {new Date(subscription.current_period_end * 1000).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}
+                    </p>
+                  </div>
+                )}
               </div>
-              <button
-                onClick={handleManageSubscription}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Manage Subscription
-              </button>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={handleManageSubscription}
+                  disabled={isLoading}
+                  className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Manage Subscription
+                </button>
+                <button
+                  onClick={() => fetchSubscription()}
+                  disabled={isLoading}
+                  className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Refresh
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              <p className="text-gray-600 dark:text-gray-400">No active subscription</p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="border dark:border-gray-700 rounded-lg p-4">
-                  <h3 className="font-medium dark:text-white">Monthly Pro</h3>
-                  <p className="text-2xl font-bold dark:text-white">$19.99<span className="text-sm font-normal">/month</span></p>
+            <div className="space-y-6">
+              <div className="text-center py-4">
+                <p className="text-gray-600 dark:text-gray-400 mb-2">You don't have an active subscription</p>
+                <p className="text-sm text-gray-500 dark:text-gray-500">Choose a plan to get started</p>
+              </div>
+              
+              {/* Pricing Plans */}
+              <div className="grid gap-6 sm:grid-cols-2">
+                {/* Monthly Plan */}
+                <div className="relative border-2 border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:border-blue-300 dark:hover:border-blue-600 transition-colors">
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold dark:text-white mb-2">Monthly Pro</h3>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl font-bold dark:text-white">$19.99</span>
+                      <span className="text-gray-600 dark:text-gray-400">/month</span>
+                    </div>
+                  </div>
+                  <ul className="space-y-2 mb-6 text-sm text-gray-600 dark:text-gray-400">
+                    <li className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Full access to all features
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Cancel anytime
+                    </li>
+                  </ul>
                   <button
                     onClick={() => handleSubscribe('price_1SLR4cCqoRregBRsF7uBCniS')}
-                    className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    disabled={isLoading}
+                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
                   >
                     Subscribe
                   </button>
                 </div>
-                <div className="border dark:border-gray-700 rounded-lg p-4">
-                  <h3 className="font-medium dark:text-white">Yearly Pro</h3>
-                  <p className="text-2xl font-bold dark:text-white">$179.99<span className="text-sm font-normal">/year</span></p>
-                  <p className="text-sm text-green-600 dark:text-green-400">Save $60/year</p>
+
+                {/* Yearly Plan - Featured */}
+                <div className="relative border-2 border-blue-500 dark:border-blue-600 rounded-xl p-6 bg-blue-50 dark:bg-blue-900/10">
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                      Best Value
+                    </span>
+                  </div>
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold dark:text-white mb-2">Yearly Pro</h3>
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className="text-4xl font-bold dark:text-white">$179.99</span>
+                      <span className="text-gray-600 dark:text-gray-400">/year</span>
+                    </div>
+                    <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                      Save $60/year (25% off)
+                    </p>
+                  </div>
+                  <ul className="space-y-2 mb-6 text-sm text-gray-600 dark:text-gray-400">
+                    <li className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Full access to all features
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Cancel anytime
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Best savings
+                    </li>
+                  </ul>
                   <button
                     onClick={() => handleSubscribe('price_1SLR4cCqoRregBRsibd2Jz0B')}
-                    className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    disabled={isLoading}
+                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
                   >
                     Subscribe
                   </button>
