@@ -392,9 +392,7 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                     </div>
                   </div>
                 </div>
-                <span className={`${longConfig.text} text-sm font-bold`}>
-                  {longConfig.strength}/5
-                </span>
+                
               </div>
               
               {/* Enhanced Strength Bars */}
@@ -550,9 +548,7 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                     </div>
                   </div>
                 </div>
-                <span className={`${shortConfig.text} text-sm font-bold`}>
-                  {shortConfig.strength}/5
-                </span>
+                
               </div>
               
               {/* Enhanced Strength Bars */}
