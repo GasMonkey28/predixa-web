@@ -279,7 +279,7 @@ function AccountPageContent() {
           ) : (
             <div className="space-y-6">
               <div className="text-center py-4">
-                <p className="text-gray-600 dark:text-gray-400 mb-2">You don't have an active subscription</p>
+                <p className="text-gray-600 dark:text-gray-400 mb-2">You don&apos;t have an active subscription</p>
                 <p className="text-sm text-gray-500 dark:text-gray-500">Choose a plan to get started</p>
               </div>
               
