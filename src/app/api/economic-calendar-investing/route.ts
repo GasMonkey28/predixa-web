@@ -536,14 +536,23 @@ export async function GET(request: Request) {
       })
       
     } catch (fetchError: any) {
-      console.error('Error fetching from investing.com:', {
+      console.error('[ECONOMIC CALENDAR] Error fetching from investing.com:', {
         message: fetchError.message,
         code: fetchError.code,
         status: fetchError.response?.status,
         statusText: fetchError.response?.statusText,
+        url: fetchUrl,
+        usingProxy: useProxy,
+        proxyUrl: customProxyUrl || scraperApiKey ? 'configured' : 'none',
         responseData: fetchError.response?.data?.substring?.(0, 500), // First 500 chars of response
         stack: fetchError.stack
       })
+      
+      // If using custom proxy and it failed, log specifically
+      if (customProxyUrl) {
+        console.error('[ECONOMIC CALENDAR] Custom proxy request failed. Proxy URL:', customProxyUrl)
+        console.error('[ECONOMIC CALENDAR] Full proxy request URL was:', fetchUrl)
+      }
       
       // Fallback: Return structured sample data
       const fallbackEvents = [
