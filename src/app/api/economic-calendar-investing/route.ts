@@ -28,11 +28,25 @@ export async function GET(request: Request) {
           'Pragma': 'no-cache',
           'Referer': 'https://www.investing.com/'
         },
-        timeout: 15000
+        timeout: 20000, // Increased timeout for production
+        validateStatus: (status) => status < 500 // Accept 4xx responses to handle them
       })
+      
+      console.log('Investing.com response status:', response.status)
+      console.log('Investing.com response data length:', response.data?.length || 0)
+      
+      // Check if we got valid HTML
+      if (!response.data || typeof response.data !== 'string') {
+        throw new Error('Invalid response data from Investing.com')
+      }
       
       // Parse HTML using cheerio
       const $ = cheerio.load(response.data)
+      
+      // Log HTML structure for debugging
+      console.log('HTML loaded, checking for calendar table...')
+      const testSelector = $('#economicCalendarDataTable')
+      console.log('Found #economicCalendarDataTable:', testSelector.length > 0)
       const events: any[] = []
       
       // Investing.com uses a table structure with class 'js-event-item' or similar
@@ -233,6 +247,13 @@ export async function GET(request: Request) {
       // If no events found via scraping, use intelligent fallback
       if (!foundEvents || events.length === 0) {
         console.log('No events found via scraping, using intelligent fallback')
+        console.log('HTML sample (first 1000 chars):', response.data?.substring(0, 1000))
+        console.log('Tried selectors:', eventSelectors)
+        // Try to find any table at all
+        const allTables = $('table')
+        console.log('Total tables found in HTML:', allTables.length)
+        const allRows = $('tr')
+        console.log('Total rows found in HTML:', allRows.length)
         
         // Generate realistic events based on common economic releases
         const today = new Date(date)
@@ -275,7 +296,8 @@ export async function GET(request: Request) {
         events: usaEvents.slice(0, 20), // Limit to 20 events
         count: usaEvents.length,
         source: 'investing.com',
-        date: date
+        date: date,
+        isScraped: foundEvents && events.length > 0 // Flag to indicate if data was scraped or fallback
       }, {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
@@ -286,7 +308,14 @@ export async function GET(request: Request) {
       })
       
     } catch (fetchError: any) {
-      console.error('Error fetching from investing.com:', fetchError.message)
+      console.error('Error fetching from investing.com:', {
+        message: fetchError.message,
+        code: fetchError.code,
+        status: fetchError.response?.status,
+        statusText: fetchError.response?.statusText,
+        responseData: fetchError.response?.data?.substring?.(0, 500), // First 500 chars of response
+        stack: fetchError.stack
+      })
       
       // Fallback: Return structured sample data
       const fallbackEvents = [
@@ -327,7 +356,8 @@ export async function GET(request: Request) {
         count: fallbackEvents.length,
         source: 'investing.com',
         date: date,
-        note: 'Using fallback data due to fetch error'
+        note: 'Using fallback data due to fetch error',
+        isScraped: false // Flag to indicate this is fallback data
       }, {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
