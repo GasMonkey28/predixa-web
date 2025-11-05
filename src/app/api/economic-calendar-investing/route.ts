@@ -103,13 +103,28 @@ export async function GET(request: Request) {
       }
       
       // Check if we got a blocking page (common patterns)
+      // Only flag as blocking if it's a small response AND contains blocking keywords
+      // Large responses (like 386KB) are likely real pages, not blocking pages
       const responseText = response.data.toLowerCase()
-      if (responseText.includes('access denied') || 
-          responseText.includes('blocked') || 
-          responseText.includes('cloudflare') ||
-          responseText.includes('captcha') ||
-          responseText.includes('please enable javascript')) {
-        console.error('[ECONOMIC CALENDAR] BLOCKED: Response appears to be a blocking page')
+      const responseSize = response.data.length
+      const isSmallResponse = responseSize < 50000 // Blocking pages are usually < 50KB
+      
+      // More specific blocking detection - check for actual blocking patterns
+      const hasBlockingPattern = (
+        (responseText.includes('access denied') && responseText.includes('cloudflare')) ||
+        (responseText.includes('checking your browser') && responseText.includes('cloudflare')) ||
+        (responseText.includes('please wait') && responseText.includes('cloudflare')) ||
+        (responseText.includes('captcha') && responseText.includes('verify')) ||
+        (isSmallResponse && responseText.includes('blocked') && !responseText.includes('economic calendar'))
+      )
+      
+      if (hasBlockingPattern) {
+        console.error('[ECONOMIC CALENDAR] BLOCKED: Response appears to be a blocking page', {
+          responseSize,
+          hasCloudflare: responseText.includes('cloudflare'),
+          hasCaptcha: responseText.includes('captcha'),
+          hasAccessDenied: responseText.includes('access denied')
+        })
         throw new Error('Investing.com appears to be blocking the request. Consider using an economic calendar API instead.')
       }
       
@@ -117,6 +132,11 @@ export async function GET(request: Request) {
       if (!responseText.includes('economic') && !responseText.includes('calendar') && !responseText.includes('event')) {
         console.warn('[ECONOMIC CALENDAR] WARNING: Response may not contain calendar data')
         // Don't throw, but log a warning
+      }
+      
+      // If we have a large response with calendar keywords, it's likely real data
+      if (responseSize > 100000 && (responseText.includes('economic') || responseText.includes('calendar'))) {
+        console.log('[ECONOMIC CALENDAR] Large response with calendar keywords - likely real data, proceeding with parsing')
       }
       
       // Parse HTML using cheerio
