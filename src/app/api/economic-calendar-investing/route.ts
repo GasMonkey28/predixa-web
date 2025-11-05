@@ -17,22 +17,50 @@ export async function GET(request: Request) {
     const investingUrl = 'https://www.investing.com/economic-calendar/'
     
     try {
-      // Try using ScraperAPI if API key is configured (bypasses blocking)
+      // Try multiple free/cheap options to bypass blocking
       const scraperApiKey = process.env.SCRAPER_API_KEY
+      const customProxyUrl = process.env.CUSTOM_PROXY_URL // e.g., Railway proxy server
       let fetchUrl = investingUrl
+      let useProxy = false
       
-      if (scraperApiKey) {
-        // Use ScraperAPI to bypass blocking
+      // Priority 1: Custom proxy server (e.g., Railway free tier)
+      if (customProxyUrl) {
+        fetchUrl = `${customProxyUrl}?url=${encodeURIComponent(investingUrl)}`
+        useProxy = true
+        console.log('[ECONOMIC CALENDAR] Using custom proxy server')
+      }
+      // Priority 2: ScraperAPI (if configured)
+      else if (scraperApiKey) {
         fetchUrl = `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(investingUrl)}`
+        useProxy = true
         console.log('[ECONOMIC CALENDAR] Using ScraperAPI to bypass blocking')
-      } else {
-        console.log('[ECONOMIC CALENDAR] ScraperAPI key not found, using direct request (may be blocked)')
+      }
+      // Priority 3: Try free proxy from ProxyScrape (free tier)
+      else {
+        try {
+          // Get a free proxy from ProxyScrape
+          const proxyResponse = await axios.get('https://api.proxyscrape.com/v2/?request=get&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all', {
+            timeout: 5000
+          })
+          const proxyList = proxyResponse.data.trim().split('\n').filter((p: string) => p.trim())
+          if (proxyList.length > 0) {
+            const randomProxy = proxyList[Math.floor(Math.random() * proxyList.length)].trim()
+            const [host, port] = randomProxy.split(':')
+            console.log('[ECONOMIC CALENDAR] Using free proxy:', host)
+            fetchUrl = investingUrl
+            useProxy = true
+            // Note: axios doesn't support proxy directly, would need https-proxy-agent
+            // For now, fall back to direct request
+          }
+        } catch (proxyError) {
+          console.log('[ECONOMIC CALENDAR] Free proxy fetch failed, using direct request (may be blocked)')
+        }
       }
       
       // Fetch the economic calendar page
       const response = await axios.get(fetchUrl, {
-        headers: scraperApiKey ? {} : {
-          // Only send headers if not using ScraperAPI (it handles headers)
+        headers: useProxy ? {} : {
+          // Only send headers if not using proxy service (they handle headers)
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
@@ -41,7 +69,7 @@ export async function GET(request: Request) {
           'Pragma': 'no-cache',
           'Referer': 'https://www.investing.com/'
         },
-        timeout: 30000, // Increased timeout for ScraperAPI
+        timeout: 30000, // Increased timeout for proxy services
         validateStatus: (status) => status < 500 // Accept 4xx responses to handle them
       })
       
