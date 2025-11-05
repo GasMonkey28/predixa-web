@@ -17,9 +17,22 @@ export async function GET(request: Request) {
     const investingUrl = 'https://www.investing.com/economic-calendar/'
     
     try {
+      // Try using ScraperAPI if API key is configured (bypasses blocking)
+      const scraperApiKey = process.env.SCRAPER_API_KEY
+      let fetchUrl = investingUrl
+      
+      if (scraperApiKey) {
+        // Use ScraperAPI to bypass blocking
+        fetchUrl = `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(investingUrl)}`
+        console.log('[ECONOMIC CALENDAR] Using ScraperAPI to bypass blocking')
+      } else {
+        console.log('[ECONOMIC CALENDAR] ScraperAPI key not found, using direct request (may be blocked)')
+      }
+      
       // Fetch the economic calendar page
-      const response = await axios.get(investingUrl, {
-        headers: {
+      const response = await axios.get(fetchUrl, {
+        headers: scraperApiKey ? {} : {
+          // Only send headers if not using ScraperAPI (it handles headers)
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
@@ -28,7 +41,7 @@ export async function GET(request: Request) {
           'Pragma': 'no-cache',
           'Referer': 'https://www.investing.com/'
         },
-        timeout: 20000, // Increased timeout for production
+        timeout: 30000, // Increased timeout for ScraperAPI
         validateStatus: (status) => status < 500 // Accept 4xx responses to handle them
       })
       
