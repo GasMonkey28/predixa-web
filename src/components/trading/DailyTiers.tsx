@@ -279,8 +279,8 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                   {dominantSignal === 'NEUTRAL'
                     ? 'Long and short signals are balanced'
                     : dominantSignal === 'LONG'
-                      ? `Long signal is ${(longStrength / shortStrength * 100).toFixed(0)}% stronger`
-                      : `Short signal is ${(shortStrength / longStrength * 100).toFixed(0)}% stronger`}
+                      ? `Long signal is ${((longStrength / shortStrength * 100) - 100).toFixed(0)}% more stronger`
+                      : `Short signal is ${((shortStrength / longStrength * 100) - 100).toFixed(0)}% more stronger`}
                 </div>
               </div>
             </div>
