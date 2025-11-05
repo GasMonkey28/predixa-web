@@ -32,12 +32,44 @@ export async function GET(request: Request) {
         validateStatus: (status) => status < 500 // Accept 4xx responses to handle them
       })
       
-      console.log('Investing.com response status:', response.status)
-      console.log('Investing.com response data length:', response.data?.length || 0)
+      console.log('[ECONOMIC CALENDAR] Investing.com response status:', response.status)
+      console.log('[ECONOMIC CALENDAR] Response data length:', response.data?.length || 0)
+      
+      // Check if we got blocked (common status codes: 403, 429, 503)
+      if (response.status === 403) {
+        console.error('[ECONOMIC CALENDAR] BLOCKED: Got 403 Forbidden - Investing.com is blocking the request')
+        throw new Error('Investing.com blocked the request (403 Forbidden). Consider using an economic calendar API instead.')
+      }
+      if (response.status === 429) {
+        console.error('[ECONOMIC CALENDAR] RATE LIMITED: Got 429 Too Many Requests')
+        throw new Error('Rate limited by Investing.com (429). Consider using an economic calendar API instead.')
+      }
+      if (response.status >= 400) {
+        console.error(`[ECONOMIC CALENDAR] HTTP ERROR: Status ${response.status}`)
+        throw new Error(`Investing.com returned error ${response.status}`)
+      }
       
       // Check if we got valid HTML
       if (!response.data || typeof response.data !== 'string') {
+        console.error('[ECONOMIC CALENDAR] Invalid response: Not a string')
         throw new Error('Invalid response data from Investing.com')
+      }
+      
+      // Check if we got a blocking page (common patterns)
+      const responseText = response.data.toLowerCase()
+      if (responseText.includes('access denied') || 
+          responseText.includes('blocked') || 
+          responseText.includes('cloudflare') ||
+          responseText.includes('captcha') ||
+          responseText.includes('please enable javascript')) {
+        console.error('[ECONOMIC CALENDAR] BLOCKED: Response appears to be a blocking page')
+        throw new Error('Investing.com appears to be blocking the request. Consider using an economic calendar API instead.')
+      }
+      
+      // Check if we got actual calendar HTML (should contain calendar-related keywords)
+      if (!responseText.includes('economic') && !responseText.includes('calendar') && !responseText.includes('event')) {
+        console.warn('[ECONOMIC CALENDAR] WARNING: Response may not contain calendar data')
+        // Don't throw, but log a warning
       }
       
       // Parse HTML using cheerio
