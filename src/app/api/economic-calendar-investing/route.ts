@@ -121,10 +121,10 @@ export async function GET(request: Request) {
             // Extract actual, forecast, previous values
             // Try multiple methods as Investing.com structure may vary
             // Helper function to extract text from a cell, including data attributes
-            const extractCellValue = (cell: any) => {
+            const extractCellValue = (cell: any): string | null => {
               // First try data attributes
               const dataActual = cell.attr('data-actual') || cell.find('[data-actual]').attr('data-actual')
-              if (dataActual && dataActual.trim() && dataActual !== '-' && dataActual !== 'TBD' && dataActual !== 'N/A') {
+              if (dataActual && typeof dataActual === 'string' && dataActual.trim() && dataActual !== '-' && dataActual !== 'TBD' && dataActual !== 'N/A') {
                 return dataActual.trim()
               }
               
@@ -140,14 +140,19 @@ export async function GET(request: Request) {
               return null
             }
             
-            let actual = null
-            let forecast = null
-            let previous = null
+            let actual: string | null = null
+            let forecast: string | null = null
+            let previous: string | null = null
             
             // Try data attributes first
-            actual = $row.attr('data-actual') || $row.find('[data-actual]').attr('data-actual') || null
-            forecast = $row.attr('data-forecast') || $row.find('[data-forecast]').attr('data-forecast') || null
-            previous = $row.attr('data-previous') || $row.find('[data-previous]').attr('data-previous') || null
+            const dataActualAttr = $row.attr('data-actual') || $row.find('[data-actual]').attr('data-actual')
+            actual = (dataActualAttr && typeof dataActualAttr === 'string') ? dataActualAttr : null
+            
+            const dataForecastAttr = $row.attr('data-forecast') || $row.find('[data-forecast]').attr('data-forecast')
+            forecast = (dataForecastAttr && typeof dataForecastAttr === 'string') ? dataForecastAttr : null
+            
+            const dataPreviousAttr = $row.attr('data-previous') || $row.find('[data-previous]').attr('data-previous')
+            previous = (dataPreviousAttr && typeof dataPreviousAttr === 'string') ? dataPreviousAttr : null
             
             // Try class-based selectors
             if (!actual) {
