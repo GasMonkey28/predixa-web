@@ -25,9 +25,13 @@ export async function GET(request: Request) {
       
       // Priority 1: Custom proxy server (e.g., Railway free tier)
       if (customProxyUrl) {
-        fetchUrl = `${customProxyUrl}?url=${encodeURIComponent(investingUrl)}`
+        // Ensure proxy URL has protocol
+        const proxyUrl = customProxyUrl.startsWith('http://') || customProxyUrl.startsWith('https://') 
+          ? customProxyUrl 
+          : `https://${customProxyUrl}`
+        fetchUrl = `${proxyUrl}?url=${encodeURIComponent(investingUrl)}`
         useProxy = true
-        console.log('[ECONOMIC CALENDAR] Using custom proxy server')
+        console.log('[ECONOMIC CALENDAR] Using custom proxy server:', proxyUrl)
       }
       // Priority 2: ScraperAPI (if configured)
       else if (scraperApiKey) {
