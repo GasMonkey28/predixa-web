@@ -16,12 +16,14 @@ export async function GET(request: Request) {
     // Investing.com economic calendar URL
     const investingUrl = 'https://www.investing.com/economic-calendar/'
     
+    // Declare these outside try block so they're accessible in catch
+    const scraperApiKey = process.env.SCRAPER_API_KEY
+    const customProxyUrl = process.env.CUSTOM_PROXY_URL // e.g., Railway proxy server
+    let fetchUrl = investingUrl
+    let useProxy = false
+    
     try {
       // Try multiple free/cheap options to bypass blocking
-      const scraperApiKey = process.env.SCRAPER_API_KEY
-      const customProxyUrl = process.env.CUSTOM_PROXY_URL // e.g., Railway proxy server
-      let fetchUrl = investingUrl
-      let useProxy = false
       
       // Priority 1: Custom proxy server (e.g., Railway free tier)
       if (customProxyUrl) {
