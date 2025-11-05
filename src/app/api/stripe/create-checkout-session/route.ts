@@ -4,7 +4,7 @@ import { getOrCreateStripeCustomer } from '@/lib/stripe-helpers'
 
 export async function POST(request: NextRequest) {
   try {
-    const { priceId, userId, userEmail } = await request.json()
+    const { priceId, userId, userEmail, promoCode } = await request.json()
 
     // Check if Stripe is configured
     if (!process.env.STRIPE_SECRET_KEY) {
@@ -75,7 +75,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    const session = await stripe.checkout.sessions.create({
+    // Build session configuration
+    const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: 'subscription',
       payment_method_types: ['card'],
       customer: customer.id,
@@ -87,7 +88,50 @@ export async function POST(request: NextRequest) {
       ],
       success_url: `${request.nextUrl.origin}/account?success=true`,
       cancel_url: `${request.nextUrl.origin}/account?canceled=true`,
-    })
+    }
+
+    // If a specific promo code is provided, apply it directly using discounts
+    // NOTE: Cannot use both allow_promotion_codes and discounts at the same time
+    if (promoCode) {
+      try {
+        // Verify the promo code exists and is valid
+        const promoCodeObj = await stripe.promotionCodes.list({
+          code: promoCode,
+          active: true,
+          limit: 1,
+        })
+
+        if (promoCodeObj.data.length > 0) {
+          sessionConfig.discounts = [
+            {
+              promotion_code: promoCodeObj.data[0].id,
+            },
+          ]
+        } else {
+          // If promo code not found, try to find by coupon code
+          const coupons = await stripe.coupons.list({ limit: 100 })
+          const matchingCoupon = coupons.data.find(
+            (c) => c.id.toLowerCase() === promoCode.toLowerCase() || c.name?.toLowerCase() === promoCode.toLowerCase()
+          )
+          if (matchingCoupon) {
+            sessionConfig.discounts = [{ coupon: matchingCoupon.id }]
+          } else {
+            console.warn(`Promo code "${promoCode}" not found, proceeding without discount`)
+            // If promo code not found, allow customers to enter codes on Stripe's checkout page
+            sessionConfig.allow_promotion_codes = true
+          }
+        }
+      } catch (promoError) {
+        console.error('Error applying promo code:', promoError)
+        // Continue without the promo code, allow customers to enter codes on Stripe's checkout page
+        sessionConfig.allow_promotion_codes = true
+      }
+    } else {
+      // No promo code provided, enable promo codes in checkout (customers can enter codes on Stripe's checkout page)
+      sessionConfig.allow_promotion_codes = true
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig)
 
     return NextResponse.json({ sessionId: session.id })
   } catch (error: any) {

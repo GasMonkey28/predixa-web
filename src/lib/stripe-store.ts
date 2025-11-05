@@ -22,7 +22,7 @@ interface StripeState {
 }
 
 interface StripeActions {
-  createCheckoutSession: (priceId: string) => Promise<void>
+  createCheckoutSession: (priceId: string, promoCode?: string) => Promise<void>
   createCustomerPortalSession: () => Promise<void>
   fetchSubscription: () => Promise<void>
   clearError: () => void
@@ -35,7 +35,7 @@ export const useStripeStore = create<StripeState & StripeActions>((set, get) => 
   error: null,
 
   // Actions
-  createCheckoutSession: async (priceId: string) => {
+  createCheckoutSession: async (priceId: string, promoCode?: string) => {
     set({ isLoading: true, error: null })
     try {
       // Get current user info to pass as fallback
@@ -58,7 +58,7 @@ export const useStripeStore = create<StripeState & StripeActions>((set, get) => 
           'Content-Type': 'application/json',
         },
         credentials: 'include', // Important: include cookies
-        body: JSON.stringify({ priceId, userId, userEmail })
+        body: JSON.stringify({ priceId, userId, userEmail, promoCode })
       })
       
       if (!response.ok) {

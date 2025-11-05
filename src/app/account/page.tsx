@@ -15,6 +15,8 @@ function AccountPageContent() {
   const [isEditing, setIsEditing] = useState(false)
   const [givenName, setGivenName] = useState(user?.givenName || '')
   const [familyName, setFamilyName] = useState(user?.familyName || '')
+  const [promoCode, setPromoCode] = useState('')
+  const [showPromoCode, setShowPromoCode] = useState(false)
   const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription, isLoading, error, clearError } = useStripeStore()
 
   useEffect(() => {
@@ -71,7 +73,11 @@ function AccountPageContent() {
 
   const handleSubscribe = async (priceId: string) => {
     try {
-      await createCheckoutSession(priceId)
+      // Use promo code if provided, otherwise use empty string
+      const codeToUse = promoCode.trim() || undefined
+      await createCheckoutSession(priceId, codeToUse)
+      // Clear promo code after successful checkout initiation
+      setPromoCode('')
     } catch (error: any) {
       console.error('Failed to create checkout session:', error)
       // Show user-friendly error message
@@ -268,6 +274,48 @@ function AccountPageContent() {
               <div className="text-center py-4">
                 <p className="text-gray-600 dark:text-gray-400 mb-2">You don&apos;t have an active subscription</p>
                 <p className="text-sm text-gray-500 dark:text-gray-500">Choose a plan to get started</p>
+              </div>
+              
+              {/* Promo Code Input */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setShowPromoCode(!showPromoCode)}
+                  className="flex items-center justify-between w-full text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                >
+                  <span className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Have a promo code?
+                  </span>
+                  <svg 
+                    className={`w-4 h-4 transition-transform ${showPromoCode ? 'rotate-180' : ''}`} 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showPromoCode && (
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      type="text"
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                      placeholder="Enter promo code"
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                    {promoCode && (
+                      <button
+                        onClick={() => setPromoCode('')}
+                        className="px-3 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               
               {/* Pricing Plans */}

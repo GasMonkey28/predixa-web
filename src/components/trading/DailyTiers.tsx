@@ -54,32 +54,32 @@ const tierConfig = {
   A: { 
     label: 'A-Tier', 
     description: 'Strong Signal',
-    bg: 'from-blue-600 via-cyan-600 to-blue-600', 
-    glow: 'bg-cyan-500', 
-    text: 'text-cyan-300', 
-    border: 'border-cyan-500/50',
+    bg: 'from-yellow-500 via-amber-400 to-yellow-500', 
+    glow: 'bg-yellow-400', 
+    text: 'text-yellow-200', 
+    border: 'border-yellow-400/50',
     strength: 4,
-    pulseColor: 'cyan'
+    pulseColor: 'yellow'
   },
   B: { 
     label: 'B-Tier', 
     description: 'Moderate Signal',
-    bg: 'from-emerald-600 via-green-600 to-emerald-600', 
-    glow: 'bg-emerald-500', 
-    text: 'text-emerald-300', 
-    border: 'border-emerald-500/50',
+    bg: 'from-blue-500 via-cyan-400 to-blue-500', 
+    glow: 'bg-blue-400', 
+    text: 'text-blue-200', 
+    border: 'border-blue-400/50',
     strength: 3,
-    pulseColor: 'emerald'
+    pulseColor: 'blue'
   },
   C: { 
     label: 'C-Tier', 
     description: 'Weak Signal',
-    bg: 'from-amber-600 via-orange-600 to-amber-600', 
-    glow: 'bg-amber-500', 
-    text: 'text-amber-300', 
-    border: 'border-amber-500/50',
+    bg: 'from-gray-100 via-white to-gray-100', 
+    glow: 'bg-white', 
+    text: 'text-white', 
+    border: 'border-white/50',
     strength: 2,
-    pulseColor: 'amber'
+    pulseColor: 'white'
   },
   D: { 
     label: 'D-Tier', 
@@ -218,9 +218,9 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
             <div className="mb-2 text-white font-semibold">Signal Strength Guide:</div>
             <ul className="space-y-1 text-zinc-400 text-sm">
               <li className="text-purple-400">• S-Tier: Exceptional (90%+)</li>
-              <li className="text-cyan-400">• A-Tier: Strong (75-89%)</li>
-              <li className="text-emerald-400">• B-Tier: Moderate (60-74%)</li>
-              <li className="text-amber-400">• C-Tier: Weak (45-59%)</li>
+              <li className="text-yellow-400">• A-Tier: Strong (75-89%)</li>
+              <li className="text-blue-400">• B-Tier: Moderate (60-74%)</li>
+              <li className="text-white">• C-Tier: Weak (45-59%)</li>
               <li className="text-gray-400">• D-Tier: Very Weak (below 45%)</li>
             </ul>
           </div>
@@ -387,9 +387,9 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                       <div className="mb-2 text-white font-semibold text-sm">Signal Strength:</div>
                       <ul className="space-y-1 text-zinc-400 text-xs">
                         <li className="text-purple-400">• S-Tier: Exceptional</li>
-                        <li className="text-cyan-400">• A-Tier: Strong</li>
-                        <li className="text-emerald-400">• B-Tier: Moderate</li>
-                        <li className="text-amber-400">• C-Tier: Weak</li>
+                        <li className="text-yellow-400">• A-Tier: Strong</li>
+                        <li className="text-blue-400">• B-Tier: Moderate</li>
+                        <li className="text-white">• C-Tier: Weak</li>
                         <li className="text-gray-400">• D-Tier: Very Weak</li>
                       </ul>
                     </div>
@@ -548,9 +548,9 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                       <div className="mb-2 text-white font-semibold text-sm">Signal Strength:</div>
                       <ul className="space-y-1 text-zinc-400 text-xs">
                         <li className="text-purple-400">• S-Tier: Exceptional</li>
-                        <li className="text-cyan-400">• A-Tier: Strong</li>
-                        <li className="text-emerald-400">• B-Tier: Moderate</li>
-                        <li className="text-amber-400">• C-Tier: Weak</li>
+                        <li className="text-yellow-400">• A-Tier: Strong</li>
+                        <li className="text-blue-400">• B-Tier: Moderate</li>
+                        <li className="text-white">• C-Tier: Weak</li>
                         <li className="text-gray-400">• D-Tier: Very Weak</li>
                       </ul>
                     </div>

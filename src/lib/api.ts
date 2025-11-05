@@ -1,19 +1,18 @@
 import axios from 'axios'
 
 // FORCE COMPLETE REBUILD - MAJOR CHANGE TO BREAK CACHE
-const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET!
+const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET
 const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
 
 // CRITICAL FIX: Force lowercase ticker for S3 access - S3 is case sensitive
 // This is the root cause of the 403 errors - S3 requires lowercase ticker
 const S3_TICKER = 'spy'  // Hardcoded to ensure lowercase
 
-console.log('API MODULE LOADED - FORCE REBUILD:', {
-  BUCKET,
-  TICKER,
-  S3_TICKER,
-  timestamp: new Date().toISOString()
-})
+if (!BUCKET) {
+  console.error('⚠️ NEXT_PUBLIC_S3_BUCKET is not set! Please add it to your .env.local file')
+}
+
+// Removed console.log to avoid exposing bucket name in browser console
 
 export type Bar = { t: string; o: number; h: number; l: number; c: number; v?: number }
 export type BarsPayload = {
@@ -24,36 +23,17 @@ export type BarsPayload = {
 }
 
 export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
+  if (!BUCKET) {
+    throw new Error('NEXT_PUBLIC_S3_BUCKET environment variable is not set. Please add it to your .env.local file.')
+  }
+  
   // FORCE COMPLETE REBUILD - MAJOR CHANGE TO BREAK DEPLOYMENT CACHE
   // Using s3.amazonaws.com format for public access - S3 is case sensitive
   // CRITICAL FIX: Force lowercase ticker for S3 access - this fixes 403 errors
   const url = `https://s3.amazonaws.com/${BUCKET}/bars/${S3_TICKER}/15min/latest.json`
   
-  console.log('FORCE REBUILD - fetchWeeklyBars called:', {
-    url,
-    BUCKET,
-    TICKER,
-    S3_TICKER,
-    force,
-    timestamp: new Date().toISOString()
-  })
-  
+  // Removed verbose console.logs to avoid exposing bucket name in browser console
   try {
-    console.log('Environment check:', {
-      NODE_ENV: process.env.NODE_ENV,
-      NEXT_PUBLIC_S3_BUCKET: process.env.NEXT_PUBLIC_S3_BUCKET,
-      NEXT_PUBLIC_TICKER: process.env.NEXT_PUBLIC_TICKER,
-      BUCKET: BUCKET,
-      TICKER: TICKER,
-      S3_TICKER: S3_TICKER
-    })
-    
-    console.log(`Fetching bars from: ${url}`)
-    console.log(`BUCKET: ${BUCKET}`)
-    console.log(`TICKER: ${TICKER}`)
-    console.log(`S3_TICKER: ${S3_TICKER}`)
-    console.log('FORCE CLEAN BUILD - Using s3.amazonaws.com format with lowercase ticker')
-    console.log('CRITICAL FIX: URL should use spy (lowercase), not SPY (uppercase)')
     const resp = await axios.get(url, { 
       headers: {
         ...noCacheHeaders(force)
@@ -117,6 +97,54 @@ export async function fetchEconomicCalendar(): Promise<any> {
     return resp.data
   } catch (error: any) {
     console.error('Economic Calendar API - error details:', {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    })
+    throw error
+  }
+}
+
+export async function fetchEconomicCalendarFred(): Promise<any> {
+  const url = '/api/economic-calendar-fred'
+  console.log('FRED Economic Calendar API - attempting to fetch from:', url)
+  
+  try {
+    const resp = await axios.get(url, { 
+      headers: noCacheHeaders(true),
+      timeout: 15000 // 15 second timeout for our API route
+    })
+    console.log('FRED Economic Calendar API - response status:', resp.status)
+    console.log('FRED Economic Calendar API - response data:', resp.data)
+    return resp.data
+  } catch (error: any) {
+    console.error('FRED Economic Calendar API - error details:', {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    })
+    throw error
+  }
+}
+
+export async function fetchEconomicCalendarInvesting(): Promise<any> {
+  const url = '/api/economic-calendar-investing'
+  console.log('Investing.com Economic Calendar API - attempting to fetch from:', url)
+  
+  try {
+    const resp = await axios.get(url, { 
+      headers: noCacheHeaders(true),
+      timeout: 20000 // 20 second timeout for scraping
+    })
+    console.log('Investing.com Economic Calendar API - response status:', resp.status)
+    console.log('Investing.com Economic Calendar API - response data:', resp.data)
+    return resp.data
+  } catch (error: any) {
+    console.error('Investing.com Economic Calendar API - error details:', {
       message: error.message,
       code: error.code,
       status: error.response?.status,

@@ -5,7 +5,7 @@ import { motion } from 'motion/react'
 import AttractivePriceCard from '@/components/trading/AttractivePriceCard'
 import AttractiveChartSection from '@/components/trading/AttractiveChartSection'
 import DailyTiers from '@/components/trading/DailyTiers'
-import EconomicCalendar from '@/components/trading/EconomicCalendar'
+import EconomicCalendarInvesting from '@/components/trading/EconomicCalendarInvesting'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 type ChartType = 'line' | 'candlestick'
@@ -199,8 +199,7 @@ function DailyPageContent() {
 
             {/* Economic Calendar - Bottom Right */}
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6 h-full">
-              <h3 className="text-xl font-semibold text-white mb-4">Economic Calendar</h3>
-              <EconomicCalendar minImpact={2} />
+              <EconomicCalendarInvesting />
             </div>
           </div>
         </motion.div>

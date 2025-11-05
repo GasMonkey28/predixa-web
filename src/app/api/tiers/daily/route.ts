@@ -32,9 +32,7 @@ export async function GET() {
     const yesterdayStr = yesterdayEt.toLocaleDateString('en-CA')
     
     let url = `https://s3.amazonaws.com/${BUCKET}/summary_json/${today}.json`
-    console.log(`Trying S3 URL: ${url}`)
-    console.log(`BUCKET: ${BUCKET}`)
-    console.log(`TODAY: ${today}`)
+    // Removed console.logs to avoid exposing bucket name
     
     try {
       let response

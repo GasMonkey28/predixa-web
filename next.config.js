@@ -1,11 +1,19 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['tradespark-822233328169-us-east-1.s3.amazonaws.com'],
+    domains: process.env.NEXT_PUBLIC_S3_BUCKET 
+      ? [`${process.env.NEXT_PUBLIC_S3_BUCKET}.s3.amazonaws.com`]
+      : [],
   },
   env: {
-    NEXT_PUBLIC_S3_BUCKET: 'tradespark-822233328169-us-east-1',
-    NEXT_PUBLIC_TICKER: 'SPY',
+    // These are now set via environment variables (.env.local or Vercel)
+    // NEXT_PUBLIC_S3_BUCKET should be set in your environment
+    // NEXT_PUBLIC_TICKER defaults to 'SPY' if not set
+    NEXT_PUBLIC_TICKER: process.env.NEXT_PUBLIC_TICKER || 'SPY',
+  },
+  // Allow app to build even if some env vars are missing (they'll fail gracefully at runtime)
+  webpack: (config) => {
+    return config
   },
 }
 

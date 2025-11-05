@@ -10,10 +10,7 @@ export async function GET() {
     
     const url = `https://s3.amazonaws.com/${BUCKET}/bars/${S3_TICKER}/15min/latest.json`
     
-    console.log('DAILY-FIXED - fetching from:', url)
-    console.log('BUCKET:', BUCKET)
-    console.log('TICKER:', TICKER)
-    console.log('S3_TICKER:', S3_TICKER)
+    // Removed console.logs to avoid exposing bucket name
     
     const response = await axios.get(url, {
       headers: {

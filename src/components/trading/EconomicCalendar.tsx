@@ -41,16 +41,137 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
           eventsArray = data.data
         } else {
           console.warn('Unexpected API response structure:', data)
-          throw new Error('Invalid API response structure')
+          // If error in response, treat as no data
+          setEvents([])
+          setError(null)
+          setLoading(false)
+          return
         }
         
-        // Transform the API data to match our interface
-        const transformedEvents: EconomicEvent[] = eventsArray.map((event: any, index: number) => {
-          console.log(`Event ${index}:`, {
-            originalImpact: event.impact,
-            eventTitle: event.event || event.title || event.name || event.description
+        // Get today's date in YYYY-MM-DD format for filtering
+        const today = new Date().toISOString().split('T')[0]
+        
+        // Transform the API data to match our interface and filter to today only
+        const transformedEvents: EconomicEvent[] = eventsArray
+          .filter((event: any) => {
+            // Filter events to only show today's events
+            const eventDate = event.date || event.datetime || event.time
+            if (!eventDate) return false // Skip events without dates
+            
+            // Try to parse the date in various formats
+            let eventDateStr = ''
+            if (typeof eventDate === 'string') {
+              // Extract date from datetime strings like "2024-01-15T08:30:00" or "2024-01-15"
+              eventDateStr = eventDate.split('T')[0]
+            } else if (eventDate instanceof Date) {
+              eventDateStr = eventDate.toISOString().split('T')[0]
+            }
+            
+            // Only include events for today
+            return eventDateStr === today
           })
+          .map((event: any, index: number) => {
+            console.log(`Event ${index}:`, {
+              originalImpact: event.impact,
+              eventTitle: event.event || event.title || event.name || event.description
+            })
+            
+            // More intelligent impact mapping
+            let impact = 2 // Default to medium
+            if (event.impact === 'high' || event.impact === 3) {
+              impact = 3
+            } else if (event.impact === 'medium' || event.impact === 2) {
+              impact = 2
+            } else if (event.impact === 'low' || event.impact === 1) {
+              impact = 1
+            } else {
+              // For unknown impact, try to infer from event name
+              const eventName = (event.event || event.title || event.name || '').toLowerCase()
+              if (eventName.includes('fed') || eventName.includes('fomc') || eventName.includes('rate') || eventName.includes('cpi') || eventName.includes('gdp')) {
+                impact = 3 // High impact for major economic indicators
+              } else if (eventName.includes('mortgage') || eventName.includes('inventory') || eventName.includes('sales')) {
+                impact = 1 // Low impact for secondary indicators
+              }
+            }
+            
+            return {
+              id: event.id || event.event_id || `event-${index}`,
+              time: event.time || event.datetime || event.release_time || 'TBD',
+              event: event.event || event.title || event.name || event.description || 'Unknown Event',
+              impact: impact,
+              actual: event.actual || event.actual_value,
+              forecast: event.forecast || event.forecast_value,
+              previous: event.previous || event.previous_value
+            }
+          })
+        
+        console.log('Transformed events (filtered to today):', transformedEvents)
+        
+        // Set events (even if empty) and clear any errors
+        setEvents(transformedEvents)
+        setLastUpdated(new Date())
+        setError(null) // Clear any previous errors
+      } catch (err) {
+        console.error('Failed to fetch economic calendar:', err)
+        // On error, just show no data - don't set error state or use mock data
+        setEvents([])
+        setError(null)
+        setLastUpdated(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchEvents()
+  }, [])
+
+  const refreshEvents = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      console.log('Refreshing economic calendar data...')
+      const data = await fetchEconomicCalendar()
+      console.log('Refreshed economic calendar data:', data)
+      
+      // Handle different possible API response structures
+      let eventsArray = []
+      if (Array.isArray(data)) {
+        eventsArray = data
+      } else if (data.events && Array.isArray(data.events)) {
+        eventsArray = data.events
+      } else if (data.data && Array.isArray(data.data)) {
+        eventsArray = data.data
+      } else {
+        console.warn('Unexpected API response structure:', data)
+        setEvents([])
+        setLastUpdated(null)
+        setLoading(false)
+        return
+      }
+      
+      // Get today's date in YYYY-MM-DD format for filtering
+      const today = new Date().toISOString().split('T')[0]
+      
+      // Transform the API data and filter to today only
+      const transformedEvents: EconomicEvent[] = eventsArray
+        .filter((event: any) => {
+          // Filter events to only show today's events
+          const eventDate = event.date || event.datetime || event.time
+          if (!eventDate) return false // Skip events without dates
           
+          // Try to parse the date in various formats
+          let eventDateStr = ''
+          if (typeof eventDate === 'string') {
+            // Extract date from datetime strings like "2024-01-15T08:30:00" or "2024-01-15"
+            eventDateStr = eventDate.split('T')[0]
+          } else if (eventDate instanceof Date) {
+            eventDateStr = eventDate.toISOString().split('T')[0]
+          }
+          
+          // Only include events for today
+          return eventDateStr === today
+        })
+        .map((event: any, index: number) => {
           // More intelligent impact mapping
           let impact = 2 // Default to medium
           if (event.impact === 'high' || event.impact === 3) {
@@ -79,182 +200,15 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
             previous: event.previous || event.previous_value
           }
         })
-        
-        console.log('Transformed events:', transformedEvents)
-        
-        // Handle empty events array gracefully - show message instead of error
-        if (transformedEvents.length === 0) {
-          console.warn('No events found in API response - Railway returned empty array')
-          setEvents([])
-          setLastUpdated(new Date())
-          setError(null) // Don't set error for empty results, just show empty state
-          setLoading(false)
-          return // Exit early since there are no events to display
-        }
-        
-        setEvents(transformedEvents)
-        setLastUpdated(new Date())
-        setError(null) // Clear any previous errors
-      } catch (err) {
-        console.error('Failed to fetch economic calendar:', err)
-        setError(`Failed to load economic calendar: ${err instanceof Error ? err.message : 'Unknown error'}`)
-        
-        // Fallback to mock data if API fails
-        console.log('Using fallback mock data')
-        const today = new Date()
-        const isAfterHours = today.getHours() > 16
-        
-        const mockEvents: EconomicEvent[] = [
-          {
-            id: '1',
-            time: '08:30',
-            event: 'Consumer Price Index (CPI)',
-            impact: 3,
-            actual: isAfterHours ? '3.2%' : undefined,
-            forecast: '3.1%',
-            previous: '3.0%'
-          },
-          {
-            id: '2',
-            time: '10:00',
-            event: 'Consumer Sentiment Index',
-            impact: 2,
-            actual: isAfterHours ? '68.5' : undefined,
-            forecast: '68.5',
-            previous: '67.2'
-          },
-          {
-            id: '3',
-            time: '14:00',
-            event: 'Federal Reserve Chair Speech',
-            impact: 3,
-            actual: isAfterHours ? 'Dovish tone' : undefined
-          },
-          {
-            id: '4',
-            time: '16:00',
-            event: 'Industrial Production',
-            impact: 2,
-            actual: isAfterHours ? '0.3%' : undefined,
-            forecast: '0.3%',
-            previous: '0.1%'
-          },
-          {
-            id: '5',
-            time: '08:30',
-            event: 'Retail Sales',
-            impact: 2,
-            actual: isAfterHours ? '0.5%' : undefined,
-            forecast: '0.5%',
-            previous: '0.3%'
-          },
-          {
-            id: '6',
-            time: '10:30',
-            event: 'Crude Oil Inventories',
-            impact: 2,
-            forecast: '-2.1M',
-            previous: '-1.8M'
-          },
-          {
-            id: '7',
-            time: '12:00',
-            event: 'Fed Funds Rate Decision',
-            impact: 3,
-            forecast: '5.25%',
-            previous: '5.25%'
-          },
-          {
-            id: '8',
-            time: '09:00',
-            event: 'MBA Mortgage Applications',
-            impact: 1,
-            forecast: '2.1%',
-            previous: '1.8%'
-          },
-          {
-            id: '9',
-            time: '11:00',
-            event: 'Wholesale Inventories',
-            impact: 1,
-            forecast: '0.2%',
-            previous: '0.1%'
-          }
-        ]
-        setEvents(mockEvents)
-        setLastUpdated(new Date())
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchEvents()
-  }, [])
-
-  const refreshEvents = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      console.log('Refreshing economic calendar data...')
-      const data = await fetchEconomicCalendar()
-      console.log('Refreshed economic calendar data:', data)
-      
-      // Handle different possible API response structures
-      let eventsArray = []
-      if (Array.isArray(data)) {
-        eventsArray = data
-      } else if (data.events && Array.isArray(data.events)) {
-        eventsArray = data.events
-      } else if (data.data && Array.isArray(data.data)) {
-        eventsArray = data.data
-      } else {
-        console.warn('Unexpected API response structure:', data)
-        throw new Error('Invalid API response structure')
-      }
-      
-      const transformedEvents: EconomicEvent[] = eventsArray.map((event: any, index: number) => {
-        // More intelligent impact mapping
-        let impact = 2 // Default to medium
-        if (event.impact === 'high' || event.impact === 3) {
-          impact = 3
-        } else if (event.impact === 'medium' || event.impact === 2) {
-          impact = 2
-        } else if (event.impact === 'low' || event.impact === 1) {
-          impact = 1
-        } else {
-          // For unknown impact, try to infer from event name
-          const eventName = (event.event || event.title || event.name || '').toLowerCase()
-          if (eventName.includes('fed') || eventName.includes('fomc') || eventName.includes('rate') || eventName.includes('cpi') || eventName.includes('gdp')) {
-            impact = 3 // High impact for major economic indicators
-          } else if (eventName.includes('mortgage') || eventName.includes('inventory') || eventName.includes('sales')) {
-            impact = 1 // Low impact for secondary indicators
-          }
-        }
-        
-        return {
-          id: event.id || event.event_id || `event-${index}`,
-          time: event.time || event.datetime || event.release_time || 'TBD',
-          event: event.event || event.title || event.name || event.description || 'Unknown Event',
-          impact: impact,
-          actual: event.actual || event.actual_value,
-          forecast: event.forecast || event.forecast_value,
-          previous: event.previous || event.previous_value
-        }
-      })
-      
-      // Handle empty events array gracefully
-      if (transformedEvents.length === 0) {
-        console.warn('No events found in API response - Railway returned empty array')
-        setEvents([])
-        setLastUpdated(new Date())
-        return // Exit early since there are no events to display
-      }
       
       setEvents(transformedEvents)
       setLastUpdated(new Date())
     } catch (err) {
       console.error('Failed to refresh economic calendar:', err)
-      setError(`Failed to refresh economic calendar: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      // On error, just show no data
+      setEvents([])
+      setError(null)
+      setLastUpdated(null)
     } finally {
       setLoading(false)
     }
@@ -327,29 +281,6 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
     )
   }
 
-  if (error) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
-        <div className="text-center">
-          <div className="text-red-600 dark:text-red-400 mb-4">
-            <div className="text-lg font-semibold mb-2">⚠️ Economic Calendar Error</div>
-            <div className="text-sm">{error}</div>
-          </div>
-          <button
-            onClick={refreshEvents}
-            disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? 'Retrying...' : 'Retry'}
-          </button>
-          <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-            Showing sample data below
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -381,7 +312,11 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
       </div>
 
       {/* Events List */}
-      {filteredEvents.length === 0 ? (
+      {events.length === 0 ? (
+        <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+          No data available
+        </div>
+      ) : filteredEvents.length === 0 ? (
         <div className="text-center text-gray-500 dark:text-gray-400 py-8">
           No events {selectedImpact > 0 ? `with impact ≥ ${selectedImpact}` : ''} today
         </div>
@@ -445,19 +380,21 @@ export default function EconomicCalendar({ minImpact = 0 }: EconomicCalendarProp
         </div>
       )}
 
-      {/* Warning Notice */}
-      <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-orange-600 dark:text-orange-400">⚠️</span>
-          <h3 className="text-sm font-semibold text-orange-800 dark:text-orange-300">
-            High-Impact Events Warning
-          </h3>
+      {/* Warning Notice - Only show when there are events */}
+      {events.length > 0 && (
+        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-orange-600 dark:text-orange-400">⚠️</span>
+            <h3 className="text-sm font-semibold text-orange-800 dark:text-orange-300">
+              High-Impact Events Warning
+            </h3>
+          </div>
+          <p className="text-sm text-orange-700 dark:text-orange-400">
+            High-impact events (3 dots) like FOMC meetings, CPI reports, and NFP can cause extreme volatility 
+            that may override trading signals. Consider reducing position sizes around major announcements.
+          </p>
         </div>
-        <p className="text-sm text-orange-700 dark:text-orange-400">
-          High-impact events (3 dots) like FOMC meetings, CPI reports, and NFP can cause extreme volatility 
-          that may override trading signals. Consider reducing position sizes around major announcements.
-        </p>
-      </div>
+      )}
     </div>
   )
 }
