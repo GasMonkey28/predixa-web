@@ -102,6 +102,7 @@ export async function GET() {
         risk: cleanText(s3Data.risk || s3Data.RISK || 'Unknown'),
         outlook: cleanText(s3Data.outlook || s3Data.OUTLOOK || 'No outlook available'),
         disclaimer: cleanText(s3Data.disclaimer || s3Data.DISCLAIMER || 'Data provided for informational purposes only.'),
+        compensation_explanation: cleanText(s3Data.compensation_explanation || s3Data.compensationExplanation || ''),
         prev_date: prevDateStr,
         prev_long_tier: prevLong ?? 'N/A',
         prev_short_tier: prevShort ?? 'N/A'

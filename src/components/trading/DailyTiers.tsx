@@ -16,6 +16,7 @@ interface DailyTierData {
   risk: string
   outlook: string
   disclaimer: string
+  compensation_explanation?: string
   prev_date?: string | null
   prev_long_tier?: string | null
   prev_short_tier?: string | null
@@ -658,12 +659,42 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
         </motion.div>
       </div>
 
+      {/* Compensation Explanation */}
+      {tiersData.compensation_explanation && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="relative overflow-hidden rounded-xl bg-gradient-to-br from-indigo-900/40 via-purple-900/30 to-indigo-900/40 border border-indigo-500/30 p-4"
+        >
+          <motion.div
+            className="absolute inset-0 bg-indigo-500 opacity-10 blur-2xl"
+            animate={{
+              scale: [1, 1.1, 1],
+              opacity: [0.1, 0.15, 0.1]
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-indigo-400 mb-2">
+              <Info className="w-5 h-5" />
+              <span className="text-xs font-semibold">Market Context</span>
+            </div>
+            <div className="text-indigo-200 text-sm leading-relaxed">{tiersData.compensation_explanation}</div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Quick Insights Section */}
       {(tiersData.summary || tiersData.suggestions?.length > 0) && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
+          transition={{ delay: 0.45 }}
           className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-950/60 via-indigo-950/40 to-purple-950/60 border-2 border-blue-700/30 p-6"
         >
           <motion.div
