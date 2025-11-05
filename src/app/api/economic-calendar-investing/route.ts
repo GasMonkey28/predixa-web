@@ -176,8 +176,60 @@ export async function GET(request: Request) {
             const tds = $row.find('td')
             
             if (tds.length >= 5) {
-              // Try multiple extraction strategies
-              // Strategy 1: Last 3 columns (most common for 7-8 column tables)
+              // Strategy 1: Try all columns systematically and look for data-value attributes
+              tds.each((i: number, el: any) => {
+                const $td = $(el)
+                const text = $td.text().trim()
+                const html = $td.html() || ''
+                
+                // Check for data attributes
+                const dataActual = $td.attr('data-actual') || $td.find('[data-actual]').attr('data-actual')
+                const dataForecast = $td.attr('data-forecast') || $td.find('[data-forecast]').attr('data-forecast')
+                const dataPrevious = $td.attr('data-previous') || $td.find('[data-previous]').attr('data-previous')
+                
+                if (dataActual && !actual) {
+                  actual = String(dataActual).trim()
+                }
+                if (dataForecast && !forecast) {
+                  forecast = String(dataForecast).trim()
+                }
+                if (dataPrevious && !previous) {
+                  previous = String(dataPrevious).trim()
+                }
+                
+                // Check for class names that indicate the column type
+                const className = $td.attr('class') || ''
+                if (className.includes('actual') || className.includes('bold') || className.includes('green')) {
+                  if (!actual && text && text !== '-' && text.length < 30) {
+                    actual = text
+                  }
+                }
+                if (className.includes('forecast')) {
+                  if (!forecast && text && text !== '-' && text.length < 30) {
+                    forecast = text
+                  }
+                }
+                if (className.includes('previous')) {
+                  if (!previous && text && text !== '-' && text.length < 30) {
+                    previous = text
+                  }
+                }
+                
+                // Look for bold text (often indicates actual values)
+                const hasBold = $td.find('strong, b, .bold').length > 0 || /<strong|<b/.test(html)
+                const hasGreen = className.includes('green') || html.includes('green')
+                
+                // Actual values are often bold, green, or have special styling
+                if (!actual && text && text !== '-' && text.length < 30 && (hasBold || hasGreen)) {
+                  // Check if it looks like a number/percentage/currency value
+                  const cleanText = text.replace(/[\s]/g, '')
+                  if (/^[\d.,+-]+[KMB%]?$|^[\d.,+-]+[KMB]$/.test(cleanText)) {
+                    actual = text
+                  }
+                }
+              })
+              
+              // Strategy 2: Last 3 columns (most common for 7-8 column tables)
               // Actual is usually 3rd from last, Forecast is 2nd from last, Previous is last
               const actualIndex = tds.length - 3
               const forecastIndex = tds.length - 2
@@ -201,7 +253,7 @@ export async function GET(request: Request) {
                 previous = extractCellValue(previousCell)
               }
               
-              // Strategy 2: For 8-column tables, try positions 4, 5, 6 (if Strategy 1 didn't work)
+              // Strategy 3: For 8-column tables, try positions 4, 5, 6 (if Strategy 2 didn't work)
               if (tds.length === 8 && (!actual || !forecast || !previous)) {
                 if (!actual) {
                   actual = extractCellValue(tds.eq(4))
@@ -214,22 +266,44 @@ export async function GET(request: Request) {
                 }
               }
               
-              // Strategy 3: Try all columns and look for patterns (actual often has special styling)
+              // Strategy 4: Try positions 5, 6, 7 for 7-column tables
+              if (tds.length === 7 && (!actual || !forecast || !previous)) {
+                if (!actual) {
+                  actual = extractCellValue(tds.eq(4))
+                }
+                if (!forecast) {
+                  forecast = extractCellValue(tds.eq(5))
+                }
+                if (!previous) {
+                  previous = extractCellValue(tds.eq(6))
+                }
+              }
+              
+              // Strategy 5: Try all columns in reverse order (last columns are more likely to have values)
               if (!actual || !forecast || !previous) {
-                tds.each((i: number, el: any) => {
-                  const $td = $(el)
+                for (let i = tds.length - 1; i >= 0; i--) {
+                  const $td = tds.eq(i)
                   const text = $td.text().trim()
-                  const hasBold = $td.find('strong, b').length > 0
-                  const hasSpecialClass = $td.attr('class')?.includes('actual') || $td.attr('class')?.includes('bold')
+                  const className = $td.attr('class') || ''
                   
-                  // Actual values are often bold or have special styling
-                  if (!actual && (hasBold || hasSpecialClass) && text && text !== '-' && text.length < 20) {
-                    // Check if it looks like a number/percentage
-                    if (/^[\d.,+-]+[KMB%]?$/.test(text.replace(/[\s]/g, ''))) {
+                  // Skip if it's clearly not a value column (too long, contains event name, etc.)
+                  if (text.length > 50 || text === eventName) continue
+                  
+                  // Check if it looks like a numeric value
+                  const cleanText = text.replace(/[\s]/g, '')
+                  const isNumeric = /^[\d.,+-]+[KMB%]?$/.test(cleanText)
+                  
+                  if (isNumeric) {
+                    // Try to determine which field this is based on position and styling
+                    if (!actual && i >= tds.length - 3) {
                       actual = text
+                    } else if (!forecast && i >= tds.length - 2 && !actual) {
+                      forecast = text
+                    } else if (!previous && i >= tds.length - 1 && !actual && !forecast) {
+                      previous = text
                     }
                   }
-                })
+                }
               }
             }
             
@@ -259,19 +333,27 @@ export async function GET(request: Request) {
             }
             
             if (eventName && eventName !== 'Economic Event') {
-              // Debug logging for first few events
-              if (index < 3) {
-                const tds = $row.find('td')
-                const columnData: any = {}
-                tds.each((i: number, el: any) => {
-                  columnData[`col_${i}`] = $(el).text().trim()
-                })
-                console.log(`Event ${index}:`, {
+              // Debug logging for all events to help diagnose extraction issues
+              const tds = $row.find('td')
+              const columnData: any = {}
+              tds.each((i: number, el: any) => {
+                const $td = $(el)
+                columnData[`col_${i}`] = {
+                  text: $td.text().trim(),
+                  class: $td.attr('class') || '',
+                  hasBold: $td.find('strong, b').length > 0,
+                  html: $td.html()?.substring(0, 100) || ''
+                }
+              })
+              
+              // Log first 5 events with full details
+              if (index < 5) {
+                console.log(`[ECONOMIC CALENDAR] Event ${index}:`, {
                   event: eventName,
                   time,
-                  actual,
-                  forecast,
-                  previous,
+                  actual: actual || 'NOT FOUND',
+                  forecast: forecast || 'NOT FOUND',
+                  previous: previous || 'NOT FOUND',
                   country,
                   tdsCount: tds.length,
                   columns: columnData
@@ -341,7 +423,25 @@ export async function GET(request: Request) {
         return country === 'US' || country === 'USA' || country.includes('UNITED STATES') || country.startsWith('US')
       })
       
-      console.log('Investing.com Economic Calendar API - parsed events:', events.length, 'USA events:', usaEvents.length)
+      // Calculate statistics about extracted values
+      const eventsWithActual = usaEvents.filter(e => e.actual).length
+      const eventsWithForecast = usaEvents.filter(e => e.forecast).length
+      const eventsWithPrevious = usaEvents.filter(e => e.previous).length
+      
+      console.log('[ECONOMIC CALENDAR] Summary:', {
+        totalEvents: events.length,
+        usaEvents: usaEvents.length,
+        withActual: eventsWithActual,
+        withForecast: eventsWithForecast,
+        withPrevious: eventsWithPrevious,
+        isScraped: foundEvents && events.length > 0,
+        sampleEvent: usaEvents[0] ? {
+          event: usaEvents[0].event,
+          actual: usaEvents[0].actual || 'MISSING',
+          forecast: usaEvents[0].forecast || 'MISSING',
+          previous: usaEvents[0].previous || 'MISSING'
+        } : null
+      })
       
       return NextResponse.json({
         events: usaEvents.slice(0, 20), // Limit to 20 events
