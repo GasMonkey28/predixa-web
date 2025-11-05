@@ -1,13 +1,27 @@
 import { NextResponse } from 'next/server'
-import { fetchEconomicCalendarInvesting } from '@/lib/api'
+import axios from 'axios'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     console.log('[TEST] Testing economic calendar API...')
-    const data = await fetchEconomicCalendarInvesting()
+    
+    // Get the base URL from the request
+    const url = new URL(request.url)
+    const baseUrl = `${url.protocol}//${url.host}`
+    
+    // Call the economic calendar API directly with absolute URL
+    const apiUrl = `${baseUrl}/api/economic-calendar-investing`
+    console.log('[TEST] Calling API:', apiUrl)
+    
+    const response = await axios.get(apiUrl, {
+      timeout: 30000,
+      validateStatus: () => true // Accept all status codes
+    })
+    
+    const data = response.data
     
     console.log('[TEST] Economic calendar API response:', {
       isArray: Array.isArray(data),
