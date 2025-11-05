@@ -43,11 +43,45 @@ export async function GET(request: Request) {
       // Parse HTML using cheerio
       const $ = cheerio.load(response.data)
       
+      // Try to extract data from JavaScript/JSON embedded in the page first
+      // Investing.com often embeds calendar data in JavaScript variables
+      const events: any[] = []
+      let jsDataFound = false
+      
+      // Look for JavaScript variables containing calendar data
+      const scriptMatches = response.data.match(/var\s+economicCalendar\s*=\s*(\[.*?\]);/s) ||
+                           response.data.match(/window\.economicCalendarData\s*=\s*(\[.*?\]);/s) ||
+                           response.data.match(/economicCalendarData\s*:\s*(\[.*?\])/s) ||
+                           response.data.match(/data:\s*(\[.*?\])/s)
+      
+      if (scriptMatches && scriptMatches[1]) {
+        try {
+          const jsonData = JSON.parse(scriptMatches[1])
+          if (Array.isArray(jsonData) && jsonData.length > 0) {
+            console.log('Found JavaScript-embedded calendar data:', jsonData.length, 'events')
+            jsDataFound = true
+            jsonData.forEach((event: any, index: number) => {
+              events.push({
+                id: `investing-js-${index}-${Date.now()}`,
+                time: event.time || event.release_time || '08:30',
+                event: event.event || event.title || event.name || event.description || 'Economic Event',
+                impact: event.impact || (event.importance === 'high' ? 3 : event.importance === 'medium' ? 2 : 1),
+                country: event.country || event.currency === 'USD' ? 'US' : 'US',
+                actual: event.actual || event.actual_value || null,
+                forecast: event.forecast || event.forecast_value || null,
+                previous: event.previous || event.previous_value || null
+              })
+            })
+          }
+        } catch (parseError) {
+          console.log('Failed to parse JavaScript-embedded data:', parseError)
+        }
+      }
+      
       // Log HTML structure for debugging
       console.log('HTML loaded, checking for calendar table...')
       const testSelector = $('#economicCalendarDataTable')
       console.log('Found #economicCalendarDataTable:', testSelector.length > 0)
-      const events: any[] = []
       
       // Investing.com uses a table structure with class 'js-event-item' or similar
       // Try multiple selectors to find the events
@@ -59,13 +93,15 @@ export async function GET(request: Request) {
         '#economicCalendarDataTable tbody tr'
       ]
       
-      let foundEvents = false
+      let foundEvents = jsDataFound // If we found JS data, we already have events
       
-      for (const selector of eventSelectors) {
-        const rows = $(selector)
-        if (rows.length > 0) {
-          foundEvents = true
-          rows.each((index: number, element: any) => {
+      // Only try HTML scraping if we didn't find JavaScript-embedded data
+      if (!jsDataFound) {
+        for (const selector of eventSelectors) {
+          const rows = $(selector)
+          if (rows.length > 0) {
+            foundEvents = true
+            rows.each((index: number, element: any) => {
             const $row = $(element)
             
             // Extract event data from the row
@@ -84,20 +120,50 @@ export async function GET(request: Request) {
             
             // Extract actual, forecast, previous values
             // Try multiple methods as Investing.com structure may vary
-            let actual = $row.find('[data-actual]').attr('data-actual') || 
-                        $row.find('.actual').text().trim() || 
-                        $row.find('[id*="actual"]').text().trim() ||
-                        null
+            // Helper function to extract text from a cell, including data attributes
+            const extractCellValue = (cell: any) => {
+              // First try data attributes
+              const dataActual = cell.attr('data-actual') || cell.find('[data-actual]').attr('data-actual')
+              if (dataActual && dataActual.trim() && dataActual !== '-' && dataActual !== 'TBD' && dataActual !== 'N/A') {
+                return dataActual.trim()
+              }
+              
+              // Then try text content
+              const text = cell.text().trim()
+              const nested = cell.find('span, div, strong, a').first().text().trim()
+              const finalText = nested || text
+              
+              if (finalText && finalText !== '-' && finalText !== '' && finalText !== 'TBD' && finalText !== 'N/A') {
+                return finalText
+              }
+              
+              return null
+            }
             
-            let forecast = $row.find('[data-forecast]').attr('data-forecast') || 
-                          $row.find('.forecast').text().trim() || 
-                          $row.find('[id*="forecast"]').text().trim() ||
-                          null
-                          
-            let previous = $row.find('[data-previous]').attr('data-previous') || 
-                          $row.find('.previous').text().trim() || 
-                          $row.find('[id*="previous"]').text().trim() ||
-                          null
+            let actual = null
+            let forecast = null
+            let previous = null
+            
+            // Try data attributes first
+            actual = $row.attr('data-actual') || $row.find('[data-actual]').attr('data-actual') || null
+            forecast = $row.attr('data-forecast') || $row.find('[data-forecast]').attr('data-forecast') || null
+            previous = $row.attr('data-previous') || $row.find('[data-previous]').attr('data-previous') || null
+            
+            // Try class-based selectors
+            if (!actual) {
+              const actualEl = $row.find('.actual, [class*="actual"], [id*="actual"]').first()
+              actual = extractCellValue(actualEl)
+            }
+            
+            if (!forecast) {
+              const forecastEl = $row.find('.forecast, [class*="forecast"], [id*="forecast"]').first()
+              forecast = extractCellValue(forecastEl)
+            }
+            
+            if (!previous) {
+              const previousEl = $row.find('.previous, [class*="previous"], [id*="previous"]').first()
+              previous = extractCellValue(previousEl)
+            }
             
             // If table structure, try to get values from td cells by position
             // Investing.com typically has columns in this order:
@@ -107,86 +173,65 @@ export async function GET(request: Request) {
             if (tds.length >= 5) {
               // Try multiple extraction strategies
               // Strategy 1: Last 3 columns (most common for 7-8 column tables)
+              // Actual is usually 3rd from last, Forecast is 2nd from last, Previous is last
               const actualIndex = tds.length - 3
               const forecastIndex = tds.length - 2
               const previousIndex = tds.length - 1
               
-              // Helper function to extract text from a cell
-              const extractCellText = (cell: any) => {
-                const text = cell.text().trim()
-                const nested = cell.find('span, div, strong').first().text().trim()
-                return nested || text
-              }
-              
               // Extract actual (usually 3rd from last)
-              if (!actual || actual === '') {
+              if (!actual) {
                 const actualCell = tds.eq(actualIndex)
-                const actualText = extractCellText(actualCell)
-                if (actualText && actualText !== '-' && actualText !== '' && actualText !== 'TBD' && actualText !== 'N/A') {
-                  actual = actualText
-                }
+                actual = extractCellValue(actualCell)
               }
               
               // Extract forecast (usually 2nd from last)
-              if (!forecast || forecast === '') {
+              if (!forecast) {
                 const forecastCell = tds.eq(forecastIndex)
-                const forecastText = extractCellText(forecastCell)
-                if (forecastText && forecastText !== '-' && forecastText !== '' && forecastText !== 'TBD' && forecastText !== 'N/A') {
-                  forecast = forecastText
-                }
+                forecast = extractCellValue(forecastCell)
               }
               
-              // Extract previous (usually last column) - try multiple approaches
-              if (!previous || previous === '') {
-                // Try last column first
+              // Extract previous (usually last column)
+              if (!previous) {
                 const previousCell = tds.eq(previousIndex)
-                let previousText = extractCellText(previousCell)
-                
-                // If last column is empty, try second to last or third to last
-                if (!previousText || previousText === '-' || previousText === '' || previousText === 'TBD' || previousText === 'N/A') {
-                  // Try second to last
-                  const prev2Cell = tds.eq(tds.length - 2)
-                  previousText = extractCellText(prev2Cell)
-                  
-                  // If still empty, try third to last
-                  if (!previousText || previousText === '-' || previousText === '' || previousText === 'TBD' || previousText === 'N/A') {
-                    const prev3Cell = tds.eq(tds.length - 4)
-                    previousText = extractCellText(prev3Cell)
-                  }
-                }
-                
-                if (previousText && previousText !== '-' && previousText !== '' && previousText !== 'TBD' && previousText !== 'N/A') {
-                  previous = previousText
-                }
+                previous = extractCellValue(previousCell)
               }
               
               // Strategy 2: For 8-column tables, try positions 4, 5, 6 (if Strategy 1 didn't work)
               if (tds.length === 8 && (!actual || !forecast || !previous)) {
-                if (!actual || actual === '') {
-                  const altActual = extractCellText(tds.eq(4))
-                  if (altActual && altActual !== '-' && altActual !== '' && altActual !== 'TBD' && altActual !== 'N/A') {
-                    actual = altActual
-                  }
+                if (!actual) {
+                  actual = extractCellValue(tds.eq(4))
                 }
-                if (!forecast || forecast === '') {
-                  const altForecast = extractCellText(tds.eq(5))
-                  if (altForecast && altForecast !== '-' && altForecast !== '' && altForecast !== 'TBD' && altForecast !== 'N/A') {
-                    forecast = altForecast
-                  }
+                if (!forecast) {
+                  forecast = extractCellValue(tds.eq(5))
                 }
-                if (!previous || previous === '') {
-                  const altPrevious = extractCellText(tds.eq(6))
-                  if (altPrevious && altPrevious !== '-' && altPrevious !== '' && altPrevious !== 'TBD' && altPrevious !== 'N/A') {
-                    previous = altPrevious
-                  }
+                if (!previous) {
+                  previous = extractCellValue(tds.eq(6))
                 }
+              }
+              
+              // Strategy 3: Try all columns and look for patterns (actual often has special styling)
+              if (!actual || !forecast || !previous) {
+                tds.each((i: number, el: any) => {
+                  const $td = $(el)
+                  const text = $td.text().trim()
+                  const hasBold = $td.find('strong, b').length > 0
+                  const hasSpecialClass = $td.attr('class')?.includes('actual') || $td.attr('class')?.includes('bold')
+                  
+                  // Actual values are often bold or have special styling
+                  if (!actual && (hasBold || hasSpecialClass) && text && text !== '-' && text.length < 20) {
+                    // Check if it looks like a number/percentage
+                    if (/^[\d.,+-]+[KMB%]?$/.test(text.replace(/[\s]/g, ''))) {
+                      actual = text
+                    }
+                  }
+                })
               }
             }
             
-            // Clean up the values - remove empty strings
-            if (actual === '' || actual === '-') actual = null
-            if (forecast === '' || forecast === '-') forecast = null
-            if (previous === '' || previous === '-') previous = null
+            // Clean up the values - convert empty strings to null, but preserve valid values
+            if (actual === '' || actual === '-' || actual === 'TBD' || actual === 'N/A') actual = null
+            if (forecast === '' || forecast === '-' || forecast === 'TBD' || forecast === 'N/A') forecast = null
+            if (previous === '' || previous === '-' || previous === 'TBD' || previous === 'N/A') previous = null
             
             // Extract country - try multiple methods to identify US events
             let country = $row.find('.flagCur').text().trim() || 
@@ -243,8 +288,9 @@ export async function GET(request: Request) {
           break // Found events, no need to try other selectors
         }
       }
+    }
       
-      // If no events found via scraping, use intelligent fallback
+      // If no events found via scraping or JS extraction, use intelligent fallback
       if (!foundEvents || events.length === 0) {
         console.log('No events found via scraping, using intelligent fallback')
         console.log('HTML sample (first 1000 chars):', response.data?.substring(0, 1000))

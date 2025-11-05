@@ -70,15 +70,23 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
             }
           }
           
+          // Helper to normalize value - handle empty strings, null, undefined
+          const normalizeValue = (val: any): string | null => {
+            if (val === null || val === undefined) return null
+            const str = String(val).trim()
+            if (str === '' || str === '-' || str === 'TBD' || str === 'N/A') return null
+            return str
+          }
+          
           return {
             id: event.id || event.event_id || `investing-event-${index}`,
             time: event.time || event.datetime || event.release_time || '08:30',
             event: event.event || event.title || event.name || event.description || 'Unknown Event',
             impact: impact,
             country: event.country || 'US',
-            actual: event.actual || event.actual_value || null,
-            forecast: event.forecast || event.forecast_value || null,
-            previous: event.previous || event.previous_value || null
+            actual: normalizeValue(event.actual || event.actual_value),
+            forecast: normalizeValue(event.forecast || event.forecast_value),
+            previous: normalizeValue(event.previous || event.previous_value)
           }
         })
         
@@ -207,15 +215,23 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
           }
         }
         
+        // Helper to normalize value - handle empty strings, null, undefined
+        const normalizeValue = (val: any): string | null => {
+          if (val === null || val === undefined) return null
+          const str = String(val).trim()
+          if (str === '' || str === '-' || str === 'TBD' || str === 'N/A') return null
+          return str
+        }
+        
         return {
           id: event.id || event.event_id || `investing-event-${index}`,
           time: event.time || event.datetime || event.release_time || '08:30',
           event: event.event || event.title || event.name || event.description || 'Unknown Event',
           impact: impact,
           country: event.country || 'US',
-          actual: event.actual || event.actual_value || null,
-          forecast: event.forecast || event.forecast_value || null,
-          previous: event.previous || event.previous_value || null
+          actual: normalizeValue(event.actual || event.actual_value),
+          forecast: normalizeValue(event.forecast || event.forecast_value),
+          previous: normalizeValue(event.previous || event.previous_value)
         }
       })
       
@@ -394,35 +410,37 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
 
                 {/* Event Data */}
                 <div className="grid grid-cols-3 gap-4 text-sm">
-                  {event.actual !== null && event.actual !== undefined && (
+                  {event.actual !== null && event.actual !== undefined && event.actual !== '' && (
                     <div>
-                      <span className="text-gray-600 dark:text-gray-400">Actual: </span>
-                      <span className={`font-mono ${comparison?.color || 'text-gray-900 dark:text-gray-100'}`}>
+                      <div className="text-gray-600 dark:text-gray-400 text-xs mb-1">Actual</div>
+                      <div className={`font-mono flex items-center gap-1 ${comparison?.color || 'text-emerald-400'}`}>
                         {event.actual}
-                      </span>
-                      {comparison && (
-                        <span className={`ml-1 ${comparison.color}`}>
-                          {comparison.symbol}
-                        </span>
-                      )}
+                        {comparison ? (
+                          <span className={comparison.color}>
+                            {comparison.symbol}
+                          </span>
+                        ) : (
+                          <span className="text-emerald-400">▲</span>
+                        )}
+                      </div>
                     </div>
                   )}
                   
-                  {event.forecast !== null && event.forecast !== undefined && (
+                  {event.forecast !== null && event.forecast !== undefined && event.forecast !== '' && (
                     <div>
-                      <span className="text-gray-600 dark:text-gray-400">Forecast: </span>
-                      <span className="font-mono text-gray-900 dark:text-gray-100">
+                      <div className="text-gray-600 dark:text-gray-400 text-xs mb-1">Forecast</div>
+                      <div className="font-mono text-gray-900 dark:text-gray-100">
                         {event.forecast}
-                      </span>
+                      </div>
                     </div>
                   )}
                   
-                  {event.previous !== null && event.previous !== undefined && (
+                  {event.previous !== null && event.previous !== undefined && event.previous !== '' && (
                     <div>
-                      <span className="text-gray-600 dark:text-gray-400">Previous: </span>
-                      <span className="font-mono text-gray-900 dark:text-gray-100">
+                      <div className="text-gray-600 dark:text-gray-400 text-xs mb-1">Previous</div>
+                      <div className="font-mono text-gray-900 dark:text-gray-100">
                         {event.previous}
-                      </span>
+                      </div>
                     </div>
                   )}
                 </div>
