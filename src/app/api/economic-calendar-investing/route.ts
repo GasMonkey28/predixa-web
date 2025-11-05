@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         const rows = $(selector)
         if (rows.length > 0) {
           foundEvents = true
-          rows.each((index, element) => {
+          rows.each((index: number, element: any) => {
             const $row = $(element)
             
             // Extract event data from the row
@@ -199,7 +199,7 @@ export async function GET(request: Request) {
               if (index < 3) {
                 const tds = $row.find('td')
                 const columnData: any = {}
-                tds.each((i, el) => {
+                tds.each((i: number, el: any) => {
                   columnData[`col_${i}`] = $(el).text().trim()
                 })
                 console.log(`Event ${index}:`, {
