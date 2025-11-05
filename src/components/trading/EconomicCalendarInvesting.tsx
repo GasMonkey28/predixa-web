@@ -396,11 +396,6 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
                       {event.time}
                     </span>
                     {getImpactDots(event.impact)}
-                    {event.country && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
-                        {event.country}
-                      </span>
-                    )}
                   </div>
                 </div>
 
