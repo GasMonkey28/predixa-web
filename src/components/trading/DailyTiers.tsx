@@ -77,7 +77,7 @@ const tierConfig = {
     description: 'Weak Signal',
     bg: 'from-gray-100 via-white to-gray-100', 
     glow: 'bg-white', 
-    text: 'text-white', 
+    text: 'text-gray-900', 
     border: 'border-white/50',
     strength: 2,
     pulseColor: 'white'
@@ -292,7 +292,11 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                 dominantSignal === 'LONG' ? longConfig.bg : dominantSignal === 'SHORT' ? shortConfig.bg : 'from-zinc-700 via-gray-700 to-zinc-700'
               } shadow-2xl`}
             >
-              <div className="text-white text-2xl font-bold">
+              <div className={`text-2xl font-bold ${
+                dominantSignal === 'NEUTRAL' 
+                  ? (longConfig.text || 'text-white') 
+                  : (dominantSignal === 'LONG' ? (longConfig.text || 'text-white') : (shortConfig.text || 'text-white'))
+              }`}>
                 {dominantSignal === 'NEUTRAL' ? `${tiersData.long_tier} / ${tiersData.short_tier}` : (dominantSignal === 'LONG' ? tiersData.long_tier : tiersData.short_tier)}
               </div>
             </motion.div>
@@ -371,7 +375,7 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                     ease: "easeInOut"
                   }}
                 />
-                <span className="relative z-10 text-white text-3xl font-black tracking-wider">
+                <span className={`relative z-10 text-3xl font-black tracking-wider ${longConfig.text || 'text-white'}`}>
                   {tiersData.long_tier}
                 </span>
               </motion.div>
@@ -532,7 +536,7 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                     ease: "easeInOut"
                   }}
                 />
-                <span className="relative z-10 text-white text-3xl font-black tracking-wider">
+                <span className={`relative z-10 text-3xl font-black tracking-wider ${shortConfig.text || 'text-white'}`}>
                   {tiersData.short_tier}
                 </span>
               </motion.div>
