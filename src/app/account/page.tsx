@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { stripeConfig } from '@/lib/stripe-config'
 
 function AccountPageContent() {
   const router = useRouter()
@@ -271,6 +272,14 @@ function AccountPageContent() {
             </div>
           ) : (
             <div className="space-y-6">
+              {!stripeConfig.isConfigured && (
+                <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <p className="text-yellow-800 dark:text-yellow-200 font-medium mb-1">⚠️ Configuration Required</p>
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                    Stripe price IDs are not configured. Please add NEXT_PUBLIC_STRIPE_PRICE_ID_MONTHLY and NEXT_PUBLIC_STRIPE_PRICE_ID_YEARLY to your environment variables.
+                  </p>
+                </div>
+              )}
               <div className="text-center py-4">
                 <p className="text-gray-600 dark:text-gray-400 mb-2">You don&apos;t have an active subscription</p>
                 <p className="text-sm text-gray-500 dark:text-gray-500">Choose a plan to get started</p>
@@ -344,11 +353,17 @@ function AccountPageContent() {
                     </li>
                   </ul>
                   <button
-                    onClick={() => handleSubscribe('price_1SLR4cCqoRregBRsF7uBCniS')}
-                    disabled={isLoading}
+                    onClick={() => {
+                      if (!stripeConfig.priceIdMonthly) {
+                        toast.error('Monthly subscription price is not configured. Please contact support.')
+                        return
+                      }
+                      handleSubscribe(stripeConfig.priceIdMonthly)
+                    }}
+                    disabled={isLoading || !stripeConfig.priceIdMonthly}
                     className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
                   >
-                    Subscribe
+                    {!stripeConfig.priceIdMonthly ? 'Not Available' : 'Subscribe'}
                   </button>
                 </div>
 
@@ -390,11 +405,17 @@ function AccountPageContent() {
                     </li>
                   </ul>
                   <button
-                    onClick={() => handleSubscribe('price_1SLR4cCqoRregBRsibd2Jz0B')}
-                    disabled={isLoading}
+                    onClick={() => {
+                      if (!stripeConfig.priceIdYearly) {
+                        toast.error('Yearly subscription price is not configured. Please contact support.')
+                        return
+                      }
+                      handleSubscribe(stripeConfig.priceIdYearly)
+                    }}
+                    disabled={isLoading || !stripeConfig.priceIdYearly}
                     className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
                   >
-                    Subscribe
+                    {!stripeConfig.priceIdYearly ? 'Not Available' : 'Subscribe'}
                   </button>
                 </div>
               </div>
