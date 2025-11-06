@@ -39,11 +39,22 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       console.log('Attempting email/password sign in for:', email)
+      console.log('🔍 Sign in config check:', {
+        userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ? '✅' : '❌',
+        clientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ? '✅' : '❌',
+        region: process.env.NEXT_PUBLIC_AWS_REGION || 'missing',
+      })
       await signIn({ username: email, password })
       console.log('Email/password sign in successful')
       await get().checkAuth()
     } catch (error: any) {
       console.error('Email/password sign in error:', error)
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        underlyingError: error.underlyingError,
+      })
       set({ error: error.message || 'Sign in failed', isLoading: false })
       throw error
     }

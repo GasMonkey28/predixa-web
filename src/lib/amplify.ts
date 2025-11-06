@@ -39,6 +39,17 @@ const amplifyConfig = {
 }
 
 export const configureAmplify = () => {
+  // Debug logging for local development
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('🔍 Amplify Config Debug:', {
+      userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ? '✅ Set' : '❌ Missing',
+      clientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ? '✅ Set' : '❌ Missing',
+      region: process.env.NEXT_PUBLIC_AWS_REGION ? '✅ Set' : '❌ Missing',
+      domain: process.env.NEXT_PUBLIC_COGNITO_DOMAIN ? '✅ Set' : '❌ Missing',
+      userPoolIdValue: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID?.substring(0, 10) + '...',
+      clientIdValue: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID?.substring(0, 10) + '...',
+    })
+  }
   Amplify.configure(amplifyConfig)
 }
 

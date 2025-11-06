@@ -178,7 +178,7 @@ function DailyPageContent() {
           </div>
 
           {/* Right Column - SPY Daily OHLC + Economic Calendar */}
-          <div className="lg:col-span-1 space-y-4">
+          <div className="lg:col-span-1 flex flex-col gap-4">
             {/* SPY Daily OHLC - Top Right */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -198,7 +198,7 @@ function DailyPageContent() {
             </motion.div>
 
             {/* Economic Calendar - Bottom Right */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6 h-full">
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6 flex-1 flex flex-col">
               <EconomicCalendarInvesting />
             </div>
           </div>
