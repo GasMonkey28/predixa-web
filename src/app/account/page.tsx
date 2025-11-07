@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useAuthStore } from '@/lib/auth-store'
 import { useStripeStore } from '@/lib/stripe-store'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -9,7 +9,7 @@ import { toast } from 'react-hot-toast'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { stripeConfig } from '@/lib/stripe-config'
 
-function AccountPageContent() {
+function AccountPageContentInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, signOut, isAuthenticated, updateUserProfile, isLoading: isAuthLoading } = useAuthStore()
@@ -494,6 +494,18 @@ function AccountPageContent() {
         </div>
       </div>
     </div>
+  )
+}
+
+function AccountPageContent() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    }>
+      <AccountPageContentInner />
+    </Suspense>
   )
 }
 

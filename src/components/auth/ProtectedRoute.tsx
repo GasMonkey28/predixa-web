@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { subscriptionService } from '@/lib/subscription-service'
 import { useAuthStore } from '@/lib/auth-store'
 
@@ -16,7 +16,6 @@ export default function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, checkAuth } = useAuthStore()
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [isChecking, setIsChecking] = useState(true)
   const [hasSubscription, setHasSubscription] = useState<boolean | null>(null)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
