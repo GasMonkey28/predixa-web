@@ -345,7 +345,7 @@ export default function SignupForm() {
 
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
             <p className="text-xs text-center text-gray-600 dark:text-gray-400 mb-3">
-              Didn't receive the code?
+              Didn&apos;t receive the code?
             </p>
             <button
               type="button"
