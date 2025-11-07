@@ -9,11 +9,68 @@ const protectedRoutes = [
   '/account'
 ]
 
+// Define routes that require active subscription (not just authentication)
+const subscriptionRequiredRoutes = [
+  '/daily',
+  '/weekly',
+  '/future'
+]
+
+// Account page is accessible to authenticated users (for subscription management)
+const accountRoute = '/account'
+
+/**
+ * Check subscription status via entitlements API.
+ * Returns true if user has active subscription or trial.
+ */
+async function checkSubscriptionStatus(idToken: string): Promise<boolean> {
+  try {
+    const entitlementsApiUrl = process.env.ENTITLEMENTS_API_GATEWAY_URL
+    
+    if (!entitlementsApiUrl) {
+      // If entitlements API is not configured, allow access (graceful degradation)
+      console.warn('ENTITLEMENTS_API_GATEWAY_URL not configured, skipping subscription check')
+      return true
+    }
+
+    const response = await fetch(entitlementsApiUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      // If API returns 401, user is not authenticated (shouldn't happen here)
+      // If other error, allow access but log warning
+      console.warn(`Entitlements API error: ${response.status}`)
+      return false
+    }
+
+    const entitlements = await response.json()
+    const status = entitlements.status || 'none'
+    
+    // Allow access for 'active' or 'trialing' status
+    return status === 'active' || status === 'trialing'
+  } catch (error) {
+    console.error('Error checking subscription status:', error)
+    // On error, deny access (fail secure)
+    return false
+  }
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
   // Skip middleware for home page to allow OAuth callbacks
   if (pathname === '/') {
+    return NextResponse.next()
+  }
+  
+  // Skip API routes (they handle their own auth)
+  if (pathname.startsWith('/api/')) {
     return NextResponse.next()
   }
   
@@ -27,9 +84,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
   
-  // Only check authentication for protected routes
+  // Check authentication for protected routes
   try {
-    // Check if user is authenticated using Amplify
     const session = await fetchAuthSession()
     
     // If no session or no tokens, redirect to home page
@@ -38,8 +94,32 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/', request.url))
     }
     
-    // User is authenticated, allow access
-    console.log('Middleware: User is authenticated, allowing access')
+    const idToken = session.tokens.idToken.toString()
+    
+    // Account page: only requires authentication (no subscription check)
+    if (pathname.startsWith(accountRoute)) {
+      console.log('Middleware: User is authenticated, allowing access to account page')
+      return NextResponse.next()
+    }
+    
+    // Subscription-required routes: check subscription status
+    const requiresSubscription = subscriptionRequiredRoutes.some(route => 
+      pathname.startsWith(route)
+    )
+    
+    if (requiresSubscription) {
+      const hasActiveSubscription = await checkSubscriptionStatus(idToken)
+      
+      if (!hasActiveSubscription) {
+        console.log('Middleware: User does not have active subscription, redirecting to account')
+        // Redirect to account page where they can subscribe
+        return NextResponse.redirect(new URL('/account?subscription_required=true', request.url))
+      }
+      
+      console.log('Middleware: User has active subscription, allowing access')
+    }
+    
+    // User is authenticated (and has subscription if required), allow access
     return NextResponse.next()
     
   } catch (error) {

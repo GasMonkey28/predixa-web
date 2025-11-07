@@ -17,7 +17,7 @@ interface AuthState {
 
 interface AuthActions {
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string, givenName?: string, familyName?: string) => Promise<void>
+  signUp: (email: string, password: string, givenName?: string, familyName?: string) => Promise<any>
   confirmSignUp: (email: string, code: string) => Promise<void>
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
@@ -63,7 +63,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   signUp: async (email: string, password: string, givenName?: string, familyName?: string) => {
     set({ isLoading: true, error: null })
     try {
-      await signUp({
+      const result = await signUp({
         username: email,
         password,
         options: {
@@ -75,6 +75,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         }
       })
       set({ isLoading: false })
+      return result
     } catch (error: any) {
       set({ error: error.message || 'Sign up failed', isLoading: false })
       throw error

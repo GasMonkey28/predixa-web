@@ -19,11 +19,37 @@ export default function SignupForm() {
     clearError()
     
     try {
-      await signUp(email, password, givenName, familyName)
+      const result = await signUp(email, password, givenName, familyName)
+      // Sign-up succeeded - always show confirmation form
+      // AWS Cognito requires email confirmation for new sign-ups
+      console.log('Sign up successful, result:', result)
       setIsConfirming(true)
       toast.success('Please check your email for the confirmation code')
-    } catch (error) {
-      toast.error('Sign up failed')
+    } catch (error: any) {
+      // Check if the error indicates the user needs to confirm
+      // Some Cognito errors (like user already exists but unconfirmed) still require confirmation
+      const errorMessage = error?.message || ''
+      const errorCode = error?.code || error?.name || ''
+      
+      console.log('Sign up error:', { errorMessage, errorCode, error })
+      
+      // If user already exists but is unconfirmed, show confirmation form
+      if (
+        errorMessage.includes('already exists') ||
+        errorMessage.includes('UsernameExistsException') ||
+        errorMessage.includes('AliasExistsException') ||
+        errorCode === 'UsernameExistsException' ||
+        errorCode === 'AliasExistsException' ||
+        errorMessage.toLowerCase().includes('confirmation') ||
+        errorMessage.toLowerCase().includes('unconfirmed')
+      ) {
+        // User needs to confirm - show confirmation form
+        setIsConfirming(true)
+        toast.success('Please check your email for the confirmation code')
+      } else {
+        // For other errors, show error message
+        toast.error(errorMessage || 'Sign up failed')
+      }
     }
   }
 
@@ -58,12 +84,12 @@ export default function SignupForm() {
 
   if (isConfirming) {
     return (
-      <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold mb-6 text-center">Confirm Your Account</h2>
+      <div className="max-w-md mx-auto mt-8 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md">
+        <h2 className="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-white">Confirm Your Account</h2>
         
         <form onSubmit={handleConfirm} className="space-y-4">
           <div>
-            <label htmlFor="code" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="code" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Confirmation Code
             </label>
             <input
@@ -72,12 +98,12 @@ export default function SignupForm() {
               value={confirmationCode}
               onChange={(e) => setConfirmationCode(e.target.value)}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
           {error && (
-            <div className="text-red-600 text-sm">{error}</div>
+            <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
           )}
 
           <button
@@ -131,14 +157,14 @@ export default function SignupForm() {
           <div className="w-full border-t border-gray-300"></div>
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="px-2 bg-white text-gray-500">Or continue with email</span>
+          <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Or continue with email</span>
         </div>
       </div>
       
       <form onSubmit={handleSignUp} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="givenName" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="givenName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               First Name
             </label>
             <input
@@ -146,12 +172,12 @@ export default function SignupForm() {
               id="givenName"
               value={givenName}
               onChange={(e) => setGivenName(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
           <div>
-            <label htmlFor="familyName" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="familyName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Last Name
             </label>
             <input
@@ -159,13 +185,13 @@ export default function SignupForm() {
               id="familyName"
               value={familyName}
               onChange={(e) => setFamilyName(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
         </div>
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Email
           </label>
           <input
@@ -174,12 +200,12 @@ export default function SignupForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Password
           </label>
           <input
@@ -189,12 +215,12 @@ export default function SignupForm() {
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
 
         {error && (
-          <div className="text-red-600 text-sm">{error}</div>
+          <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
         )}
 
         <button

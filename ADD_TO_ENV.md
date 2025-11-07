@@ -1,41 +1,67 @@
-# ✅ Add Identity Pool ID to Your Environment
+# Environment Variables to Add
 
-## Copy This to Your .env.local File
+## New Environment Variables for Entitlements API Integration
 
-Add this line to your `.env.local` file:
+Add these to your `.env.local` (for local development) and Vercel environment variables (for production):
 
-```bash
-NEXT_PUBLIC_IDENTITY_POOL_ID=us-east-1:204b03b2-f315-413d-8e5f-1b430513feb2
-```
-
----
-
-## What Was Set Up
-
-✅ **Identity Pool Created**: `us-east-1:204b03b2-f315-413d-8e5f-1b430513feb2`  
-✅ **IAM Role Created**: `Cognito_predixa-profiles_Auth_Role`  
-✅ **DynamoDB Permissions Added**: IAM policy attached  
-✅ **Identity Pool Configured**: Roles set up correctly  
-
----
-
-## Now Test It!
+### Required
 
 ```bash
-npm run dev
+# Entitlements API Gateway URL
+# This is the API Gateway endpoint URL for your entitlements Lambda function
+# Format: https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod/me/entitlements
+ENTITLEMENTS_API_GATEWAY_URL=https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod/me/entitlements
 ```
 
-1. Sign in with Google
-2. Go to Account page
-3. Edit your name
-4. **Should work now!** ✨
+### How to Get the API Gateway URL
 
----
+1. **After deploying the entitlements Lambda:**
+   - Go to AWS Console → API Gateway
+   - Find your REST API (e.g., `predixa-entitlements-api`)
+   - Go to Stages → `prod` (or your stage name)
+   - Copy the "Invoke URL"
+   - Append `/me/entitlements` to get the full URL
 
-## Summary
+2. **Example URL format:**
+   ```
+   https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod/me/entitlements
+   ```
 
-- **Email users** → Update Cognito attributes ✅
-- **Google/Apple users** → Use DynamoDB (with IAM credentials) ✅
+### Optional (for backward compatibility)
 
-Both work now! 🎉
+If you want to keep the old Stripe direct API calls as a fallback:
 
+```bash
+# Stripe API (already configured)
+STRIPE_SECRET_KEY=sk_live_xxx
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxx
+```
+
+### Lambda Environment Variables
+
+The Lambda functions need these (set in Lambda configuration, not in Next.js):
+
+```bash
+AWS_REGION=us-east-1
+USERS_TABLE=UserProfiles
+ENTITLEMENTS_TABLE=predixa_entitlements
+STRIPE_API_KEY=sk_live_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+```
+
+## Testing
+
+After adding the environment variable:
+
+1. Restart your Next.js dev server: `npm run dev`
+2. Sign in to your app
+3. Navigate to a protected route (e.g., `/daily`)
+4. Check browser console for any errors
+5. Check Network tab to see if `/api/entitlements` is being called
+
+## Troubleshooting
+
+- **"Entitlements API not configured"**: Make sure `ENTITLEMENTS_API_GATEWAY_URL` is set
+- **401 Unauthorized**: Check that your Cognito JWT is being sent correctly
+- **CORS errors**: Make sure API Gateway has CORS enabled for your domain
+- **502 Bad Gateway**: Check Lambda function logs in CloudWatch

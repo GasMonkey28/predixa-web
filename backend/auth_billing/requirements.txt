@@ -1,0 +1,12 @@
+# Predixa Auth & Billing Lambda Dependencies
+
+# AWS SDK (boto3 is included in Lambda runtime, but specify for local testing)
+boto3>=1.28.0
+
+# Stripe SDK
+stripe>=6.0.0
+
+# Optional: For JWT verification if not using API Gateway Cognito Authorizer
+# PyJWT>=2.8.0
+# cryptography>=41.0.0
+

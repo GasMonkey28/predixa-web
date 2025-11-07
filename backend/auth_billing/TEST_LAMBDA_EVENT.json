@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "region": "us-east-1",
+  "userPoolId": "us-east-1_g5anv7",
+  "userName": "test-user-123",
+  "triggerSource": "PostConfirmation_ConfirmSignUp",
+  "request": {
+    "userAttributes": {
+      "sub": "test-user-123",
+      "email": "test@example.com",
+      "email_verified": "true",
+      "given_name": "Test",
+      "family_name": "User"
+    }
+  },
+  "response": {}
+}
+
