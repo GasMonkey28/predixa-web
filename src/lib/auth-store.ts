@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getCurrentUser, signIn, signUp, confirmSignUp, signOut, fetchUserAttributes, signInWithRedirect, updateUserAttributes, fetchAuthSession } from 'aws-amplify/auth'
+import { getCurrentUser, signIn, signUp, confirmSignUp, resendSignUpCode, signOut, fetchUserAttributes, signInWithRedirect, updateUserAttributes, fetchAuthSession } from 'aws-amplify/auth'
 
 export interface User {
   userId: string
@@ -19,6 +19,7 @@ interface AuthActions {
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, givenName?: string, familyName?: string) => Promise<any>
   confirmSignUp: (email: string, code: string) => Promise<void>
+  resendConfirmationCode: (email: string) => Promise<void>
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
@@ -89,6 +90,17 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       set({ isLoading: false })
     } catch (error: any) {
       set({ error: error.message || 'Confirmation failed', isLoading: false })
+      throw error
+    }
+  },
+
+  resendConfirmationCode: async (email: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      await resendSignUpCode({ username: email })
+      set({ isLoading: false })
+    } catch (error: any) {
+      set({ error: error.message || 'Failed to resend code', isLoading: false })
       throw error
     }
   },

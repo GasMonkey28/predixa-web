@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
+import { subscriptionService } from '@/lib/subscription-service'
 import { toast } from 'react-hot-toast'
 
 export default function SignupForm() {
@@ -9,10 +11,55 @@ export default function SignupForm() {
   const [password, setPassword] = useState('')
   const [givenName, setGivenName] = useState('')
   const [familyName, setFamilyName] = useState('')
-  const [isConfirming, setIsConfirming] = useState(false)
+  // Persist confirmation state in localStorage to survive re-renders
+  const [isConfirming, setIsConfirming] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('signup_confirming')
+      const savedEmail = localStorage.getItem('signup_confirming_email')
+      if (saved === 'true' && savedEmail) {
+        console.log('🔄 Restoring confirmation state from localStorage, email:', savedEmail)
+        return true
+      }
+    }
+    return false
+  })
   const [confirmationCode, setConfirmationCode] = useState('')
+  const [isResending, setIsResending] = useState(false)
+  const [hasInitialized, setHasInitialized] = useState(false)
+  const [isConfirmingCode, setIsConfirmingCode] = useState(false)
   
-  const { signUp, confirmSignUp, signInWithGoogle, signInWithApple, isLoading, error, clearError } = useAuthStore()
+  const router = useRouter()
+  const { signUp, confirmSignUp, resendConfirmationCode, signIn, signInWithGoogle, signInWithApple, isLoading, error, clearError, checkAuth } = useAuthStore()
+
+  // Initialize: Restore email from localStorage on mount if in confirmation state
+  useEffect(() => {
+    if (!hasInitialized && typeof window !== 'undefined') {
+      const saved = localStorage.getItem('signup_confirming')
+      const savedEmail = localStorage.getItem('signup_confirming_email')
+      if (saved === 'true' && savedEmail) {
+        console.log('📧 Initializing: Restoring email from localStorage:', savedEmail)
+        setEmail(savedEmail)
+        setIsConfirming(true)
+      }
+      setHasInitialized(true)
+    }
+  }, [hasInitialized])
+
+  // Debug: Log when isConfirming changes
+  useEffect(() => {
+    console.log('🔍 SignupForm: isConfirming changed to:', isConfirming)
+    console.log('🔍 SignupForm: email:', email)
+    if (isConfirming) {
+      console.log('✅ Confirmation form should be visible now!')
+      // Persist to localStorage whenever isConfirming is true
+      if (typeof window !== 'undefined' && email) {
+        localStorage.setItem('signup_confirming', 'true')
+        localStorage.setItem('signup_confirming_email', email)
+        console.log('💾 Saved to localStorage: isConfirming=true, email=', email)
+      }
+    }
+    // Don't clear localStorage in useEffect - only clear on explicit actions
+  }, [isConfirming, email])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,8 +69,30 @@ export default function SignupForm() {
       const result = await signUp(email, password, givenName, familyName)
       // Sign-up succeeded - always show confirmation form
       // AWS Cognito requires email confirmation for new sign-ups
-      console.log('Sign up successful, result:', result)
+      console.log('✅ Sign up successful, result:', result)
+      console.log('✅ Setting isConfirming to true, email:', email)
+      // Persist email, password (temporarily), and confirmation state BEFORE setting state (synchronous)
+      if (typeof window !== 'undefined' && email) {
+        localStorage.setItem('signup_confirming', 'true')
+        localStorage.setItem('signup_confirming_email', email)
+        // Store password temporarily in sessionStorage for auto sign-in after confirmation
+        // sessionStorage is cleared when tab closes, more secure than localStorage
+        if (password) {
+          sessionStorage.setItem('signup_password_temp', password)
+          console.log('💾 Saved password to sessionStorage for auto sign-in')
+        }
+        console.log('💾 Saved to localStorage BEFORE state update')
+      }
+      // Set state immediately - localStorage is already saved
       setIsConfirming(true)
+      console.log('✅ State updated: isConfirming = true')
+      
+      // Double-check localStorage was saved (defensive programming)
+      if (typeof window !== 'undefined') {
+        const checkSaved = localStorage.getItem('signup_confirming')
+        const checkEmail = localStorage.getItem('signup_confirming_email')
+        console.log('🔍 Verification: localStorage check:', { checkSaved, checkEmail })
+      }
       toast.success('Please check your email for the confirmation code')
     } catch (error: any) {
       // Check if the error indicates the user needs to confirm
@@ -31,24 +100,47 @@ export default function SignupForm() {
       const errorMessage = error?.message || ''
       const errorCode = error?.code || error?.name || ''
       
-      console.log('Sign up error:', { errorMessage, errorCode, error })
+      console.log('⚠️ Sign up error:', { errorMessage, errorCode, error })
       
       // If user already exists but is unconfirmed, show confirmation form
-      if (
+      // Also show confirmation form for ANY error if we got this far (code was sent)
+      const needsConfirmation = 
         errorMessage.includes('already exists') ||
         errorMessage.includes('UsernameExistsException') ||
         errorMessage.includes('AliasExistsException') ||
         errorCode === 'UsernameExistsException' ||
         errorCode === 'AliasExistsException' ||
         errorMessage.toLowerCase().includes('confirmation') ||
-        errorMessage.toLowerCase().includes('unconfirmed')
-      ) {
+        errorMessage.toLowerCase().includes('unconfirmed') ||
+        errorMessage.toLowerCase().includes('code') ||
+        errorMessage.toLowerCase().includes('verify')
+      
+      if (needsConfirmation) {
         // User needs to confirm - show confirmation form
+        console.log('✅ User needs confirmation, setting isConfirming to true, email:', email)
+        // Persist email and confirmation state
+        if (typeof window !== 'undefined' && email) {
+          localStorage.setItem('signup_confirming', 'true')
+          localStorage.setItem('signup_confirming_email', email)
+          console.log('💾 Saved to localStorage BEFORE state update')
+        }
         setIsConfirming(true)
+        console.log('✅ State updated: isConfirming = true')
         toast.success('Please check your email for the confirmation code')
       } else {
-        // For other errors, show error message
-        toast.error(errorMessage || 'Sign up failed')
+        // For other errors, show error message but still try to show confirmation form
+        // because if they received a code, they need to confirm
+        console.log('⚠️ Unexpected error, but showing confirmation form anyway, email:', email)
+        // Persist email and confirmation state
+        if (typeof window !== 'undefined' && email) {
+          localStorage.setItem('signup_confirming', 'true')
+          localStorage.setItem('signup_confirming_email', email)
+          console.log('💾 Saved to localStorage BEFORE state update')
+        }
+        setIsConfirming(true)
+        console.log('✅ State updated: isConfirming = true')
+        toast.success('Please check your email for the confirmation code')
+        console.error('Sign up error details:', error)
       }
     }
   }
@@ -56,13 +148,112 @@ export default function SignupForm() {
   const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault()
     clearError()
+    setIsConfirmingCode(true)
     
     try {
-      await confirmSignUp(email, confirmationCode)
-      toast.success('Account confirmed! You can now sign in.')
-      setIsConfirming(false)
-    } catch (error) {
-      toast.error('Confirmation failed')
+      const emailToConfirm = email || (typeof window !== 'undefined' ? localStorage.getItem('signup_confirming_email') || '' : '')
+      if (!emailToConfirm) {
+        toast.error('Email not found. Please try signing up again.')
+        setIsConfirmingCode(false)
+        return
+      }
+      
+      // Confirm the signup code
+      await confirmSignUp(emailToConfirm, confirmationCode)
+      console.log('✅ Account confirmed successfully')
+      
+      // Automatically sign in the user with their credentials
+      // Try to get password from state first, then from sessionStorage (for auto sign-in after confirmation)
+      const passwordToUse = password || (typeof window !== 'undefined' ? sessionStorage.getItem('signup_password_temp') || '' : '')
+      
+      if (!passwordToUse) {
+        toast.success('Account confirmed! Please sign in to continue.')
+        setIsConfirming(false)
+        setConfirmationCode('')
+        setIsConfirmingCode(false)
+        // Clear localStorage and sessionStorage
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('signup_confirming')
+          localStorage.removeItem('signup_confirming_email')
+          sessionStorage.removeItem('signup_password_temp')
+        }
+        // Redirect to login
+        router.push('/')
+        return
+      }
+      
+      try {
+        console.log('🔄 Signing in automatically after confirmation...')
+        await signIn(emailToConfirm, passwordToUse)
+        console.log('✅ Signed in successfully')
+        
+        // Clear password from sessionStorage immediately after use (security)
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('signup_password_temp')
+        }
+        
+        // Wait a bit for auth state to update
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Check subscription status
+        console.log('🔍 Checking subscription status...')
+        const hasActive = await subscriptionService.hasActiveSubscription()
+        console.log('📊 Subscription status:', hasActive ? 'Active/Trial' : 'No subscription')
+        
+        // Clear localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('signup_confirming')
+          localStorage.removeItem('signup_confirming_email')
+        }
+        
+        // Redirect based on subscription status
+        if (hasActive) {
+          console.log('✅ Redirecting to /daily (has active subscription/trial)')
+          toast.success('Welcome! Redirecting to your dashboard...')
+          router.push('/daily')
+        } else {
+          console.log('📝 Redirecting to /account (no active subscription)')
+          toast.success('Account confirmed! Please set up your subscription.')
+          router.push('/account')
+        }
+      } catch (signInError: any) {
+        console.error('❌ Auto sign-in failed:', signInError)
+        // If auto sign-in fails, show success message and redirect to login
+        toast.success('Account confirmed! Please sign in to continue.')
+        setIsConfirming(false)
+        setConfirmationCode('')
+        setIsConfirmingCode(false)
+        // Clear localStorage and sessionStorage
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('signup_confirming')
+          localStorage.removeItem('signup_confirming_email')
+          sessionStorage.removeItem('signup_password_temp')
+        }
+        router.push('/')
+      }
+    } catch (error: any) {
+      console.error('❌ Confirmation failed:', error)
+      toast.error(error?.message || 'Confirmation failed. Please check your code and try again.')
+      setIsConfirmingCode(false)
+    }
+  }
+
+  const handleResendCode = async () => {
+    setIsResending(true)
+    clearError()
+    
+    try {
+      const emailToResend = email || (typeof window !== 'undefined' ? localStorage.getItem('signup_confirming_email') || '' : '')
+      if (!emailToResend) {
+        toast.error('Email not found. Please try signing up again.')
+        return
+      }
+      await resendConfirmationCode(emailToResend)
+      toast.success('Confirmation code resent! Please check your email.')
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to resend code. Please try again.')
+    } finally {
+      setIsResending(false)
     }
   }
 
@@ -82,37 +273,109 @@ export default function SignupForm() {
     }
   }
 
-  if (isConfirming) {
+  // Check localStorage as fallback in case component remounted
+  const shouldShowConfirmation = isConfirming || (typeof window !== 'undefined' && localStorage.getItem('signup_confirming') === 'true')
+  
+  // Ensure email is set from localStorage if needed
+  const displayEmail = email || (typeof window !== 'undefined' ? localStorage.getItem('signup_confirming_email') || '' : '')
+  
+  // Sync state with localStorage if they're out of sync
+  if (!isConfirming && typeof window !== 'undefined' && localStorage.getItem('signup_confirming') === 'true') {
+    console.log('🔄 Syncing state with localStorage - setting isConfirming to true')
+    setIsConfirming(true)
+    if (!email && displayEmail) {
+      setEmail(displayEmail)
+    }
+  }
+
+  if (shouldShowConfirmation) {
     return (
-      <div className="max-w-md mx-auto mt-8 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-white">Confirm Your Account</h2>
+      <div className="max-w-md mx-auto mt-8 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md border-2 border-blue-500">
+        <div className="mb-4">
+          <div className="flex items-center justify-center mb-4">
+            <div className="bg-blue-100 dark:bg-blue-900 rounded-full p-3">
+              <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold mb-2 text-center text-gray-900 dark:text-white">Check Your Email</h2>
+          <p className="text-sm text-center text-gray-600 dark:text-gray-400 mb-4">
+            We sent a confirmation code to
+          </p>
+          <p className="text-sm font-semibold text-center text-gray-900 dark:text-white mb-6">
+            {displayEmail}
+          </p>
+        </div>
         
         <form onSubmit={handleConfirm} className="space-y-4">
           <div>
-            <label htmlFor="code" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Confirmation Code
+            <label htmlFor="code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Enter Confirmation Code
             </label>
             <input
               type="text"
               id="code"
               value={confirmationCode}
               onChange={(e) => setConfirmationCode(e.target.value)}
+              placeholder="123456"
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              autoFocus
+              maxLength={6}
+              className="mt-1 block w-full px-4 py-3 text-center text-lg font-mono border-2 border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+              Enter the 6-digit code from your email
+            </p>
           </div>
 
           {error && (
-            <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+              <p className="text-red-600 dark:text-red-400 text-sm text-center">{error}</p>
+            </div>
           )}
 
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            disabled={isLoading || isConfirmingCode || !confirmationCode}
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Confirming...' : 'Confirm Account'}
+            {isLoading || isConfirmingCode ? 'Confirming and signing in...' : 'Confirm Account'}
           </button>
+
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <p className="text-xs text-center text-gray-600 dark:text-gray-400 mb-3">
+              Didn't receive the code?
+            </p>
+            <button
+              type="button"
+              onClick={handleResendCode}
+              disabled={isResending || isLoading}
+              className="w-full flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isResending ? 'Sending...' : 'Resend Code'}
+            </button>
+          </div>
+
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setIsConfirming(false)
+                setConfirmationCode('')
+                clearError()
+                // Clear localStorage and sessionStorage when going back
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('signup_confirming')
+                  localStorage.removeItem('signup_confirming_email')
+                  sessionStorage.removeItem('signup_password_temp')
+                }
+              }}
+              className="w-full text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+            >
+              ← Back to sign up
+            </button>
+          </div>
         </form>
       </div>
     )
