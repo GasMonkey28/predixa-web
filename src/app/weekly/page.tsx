@@ -204,7 +204,7 @@ function WeeklyPageContent() {
 
 export default function WeeklyPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requireSubscription>
       <WeeklyPageContent />
     </ProtectedRoute>
   )

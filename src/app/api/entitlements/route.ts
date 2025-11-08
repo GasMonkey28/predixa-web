@@ -1,14 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchAuthSession } from 'aws-amplify/auth'
 
-/**
- * Entitlements API Route
- * 
- * Proxies requests to the Lambda entitlements API Gateway endpoint.
- * This route handles authentication and forwards the request with the Cognito JWT.
- * 
- * The Lambda function uses API Gateway Cognito Authorizer to validate the JWT.
- */
+function extractIdToken(request: NextRequest): string | null {
+  const authHeader = request.headers.get('authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.slice('Bearer '.length).trim() || null
+  }
+
+  const clientId =
+    process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ||
+    process.env.COGNITO_CLIENT_ID ||
+    ''
+
+  const candidateNames = [
+    clientId ? `CognitoIdentityServiceProvider.${clientId}.idToken` : null,
+    'CognitoIdentityServiceProvider.undefined.idToken',
+  ].filter(Boolean) as string[]
+
+  for (const name of candidateNames) {
+    const value = request.cookies.get(name)?.value
+    if (value) return value
+  }
+
+  for (const cookie of request.cookies.getAll()) {
+    if (cookie.name.includes('idToken') && cookie.value) {
+      return cookie.value
+    }
+  }
+
+  return null
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Get the API Gateway URL from environment variables
@@ -23,18 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the current user's session to extract JWT
-    let idToken: string | null = null
-    
-    try {
-      const session = await fetchAuthSession()
-      idToken = session.tokens?.idToken?.toString() || null
-    } catch (authError) {
-      console.error('Error fetching auth session:', authError)
-      return NextResponse.json(
-        { error: 'Unauthorized - please sign in' },
-        { status: 401 }
-      )
-    }
+    const idToken = extractIdToken(request)
 
     if (!idToken) {
       return NextResponse.json(

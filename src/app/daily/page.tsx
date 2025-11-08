@@ -210,7 +210,7 @@ function DailyPageContent() {
 
 export default function DailyPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requireSubscription>
       <DailyPageContent />
     </ProtectedRoute>
   )

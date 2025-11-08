@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useCallback } from 'react'
 import { useAuthStore } from '@/lib/auth-store'
 import { useStripeStore } from '@/lib/stripe-store'
+import { fetchAuthSession } from 'aws-amplify/auth'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { stripeConfig } from '@/lib/stripe-config'
+import { EntitlementsResponse } from '@/lib/subscription-service'
 
 function AccountPageContentInner() {
   const router = useRouter()
@@ -18,12 +20,49 @@ function AccountPageContentInner() {
   const [familyName, setFamilyName] = useState(user?.familyName || '')
   const [promoCode, setPromoCode] = useState('')
   const [showPromoCode, setShowPromoCode] = useState(false)
+  const [entitlements, setEntitlements] = useState<EntitlementsResponse | null>(null)
+  const [isEntitlementsLoading, setIsEntitlementsLoading] = useState(true)
   const { subscription, createCheckoutSession, createCustomerPortalSession, fetchSubscription, isLoading, error, clearError } = useStripeStore()
+
+  const loadEntitlements = useCallback(async () => {
+    try {
+      setIsEntitlementsLoading(true)
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      try {
+        const session = await fetchAuthSession()
+        const idToken = session.tokens?.idToken?.toString()
+        if (idToken) {
+          headers.Authorization = `Bearer ${idToken}`
+        }
+      } catch (error) {
+        console.warn('AccountPage: unable to fetch auth session', error)
+      }
+
+      const response = await fetch('/api/entitlements', {
+        method: 'GET',
+        headers,
+        cache: 'no-store',
+        credentials: 'include',
+      })
+      if (!response.ok) {
+        setEntitlements(null)
+        return
+      }
+      const data = (await response.json()) as EntitlementsResponse
+      setEntitlements(data)
+    } catch (error) {
+      console.error('Failed to load entitlements:', error)
+      setEntitlements(null)
+    } finally {
+      setIsEntitlementsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     // For testing, always try to fetch subscription regardless of auth status
     fetchSubscription()
-  }, [fetchSubscription])
+    loadEntitlements()
+  }, [fetchSubscription, loadEntitlements])
 
   useEffect(() => {
     // Check if returning from successful checkout
@@ -32,6 +71,7 @@ function AccountPageContentInner() {
       // Wait a bit longer for Stripe to process, then refetch subscription
       setTimeout(() => {
         fetchSubscription()
+        loadEntitlements()
         toast.success('Subscription activated!')
         // Remove the query parameter from URL
         router.replace('/account')
@@ -40,9 +80,10 @@ function AccountPageContentInner() {
       // Also refetch after a longer delay as backup
       setTimeout(() => {
         fetchSubscription()
+        loadEntitlements()
       }, 5000)
     }
-  }, [searchParams, fetchSubscription, router])
+  }, [searchParams, fetchSubscription, loadEntitlements, router])
 
   useEffect(() => {
     // Update local state when user changes
@@ -97,6 +138,12 @@ function AccountPageContentInner() {
       console.error('Failed to create portal session:', error)
     }
   }
+
+  const trialActive = entitlements?.trial_active ?? false
+  const trialDaysRemaining = entitlements?.trial_days_remaining ?? 0
+  const trialExpiresAt = entitlements?.trial_expires_at ?? null
+  const accessReason = entitlements?.access_reason ?? null
+  const hasSubscription = subscription && subscription.plan
 
   return (
     <div className="mx-auto max-w-7xl p-6">
@@ -185,6 +232,44 @@ function AccountPageContentInner() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-medium dark:text-white">Subscription</h2>
           </div>
+
+          {!isEntitlementsLoading && entitlements && (
+            <div className="mb-6">
+              {trialActive ? (
+                <div className="rounded-lg border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-4">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
+                    You&apos;re on a free trial — {trialDaysRemaining} {trialDaysRemaining === 1 ? 'day' : 'days'} remaining.
+                  </p>
+                  {trialExpiresAt && (
+                    <p className="mt-1 text-xs text-blue-800 dark:text-blue-300">
+                      Subscribe any time — we&apos;ll honor your free access through{' '}
+                      {new Date(trialExpiresAt * 1000).toLocaleDateString(undefined, {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                      . Your paid plan starts the day after.
+                    </p>
+                  )}
+                </div>
+              ) : accessReason === 'trial_expired' ? (
+                <div className="rounded-lg border border-yellow-200 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 p-4">
+                  <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                    Your free trial ended. Subscribe now to keep access to premium forecasts.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {isEntitlementsLoading && (
+            <div className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Checking your trial status…</p>
+              </div>
+            </div>
+          )}
           
           {error && (
             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">

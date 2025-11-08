@@ -399,7 +399,7 @@ function FuturePageContent() {
 
 export default function FuturePage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requireSubscription>
       <FuturePageContent />
     </ProtectedRoute>
   )

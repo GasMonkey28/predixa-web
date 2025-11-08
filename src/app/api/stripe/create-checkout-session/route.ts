@@ -1,6 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb'
 import { getOrCreateStripeCustomer } from '@/lib/stripe-helpers'
+
+const REGION = process.env.NEXT_PUBLIC_AWS_REGION || process.env.AWS_REGION || 'us-east-1'
+const ENTITLEMENTS_TABLE = process.env.ENTITLEMENTS_TABLE || 'predixa_entitlements'
+
+const dynamoClient = new DynamoDBClient({
+  region: REGION,
+  credentials:
+    process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+      ? {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        }
+      : undefined,
+})
+
+const docClient = DynamoDBDocumentClient.from(dynamoClient)
+
+async function getEntitlementRecord(cognitoSub: string) {
+  if (!cognitoSub) return null
+  try {
+    const result = await docClient.send(
+      new GetCommand({
+        TableName: ENTITLEMENTS_TABLE,
+        Key: { cognito_sub: cognitoSub },
+      })
+    )
+    return result.Item || null
+  } catch (error) {
+    console.error('Failed to read entitlement record:', error)
+    return null
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -75,6 +109,30 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    const cognitoUserId =
+      customer.metadata?.cognito_user_id ||
+      customer.metadata?.cognito_sub ||
+      userId
+
+    let trialEndTimestamp: number | undefined
+
+    const entitlement =
+      cognitoUserId ? await getEntitlementRecord(cognitoUserId) : null
+
+    if (
+      entitlement &&
+      typeof entitlement.trial_expires_at === 'number' &&
+      entitlement.trial_expires_at > Math.floor(Date.now() / 1000)
+    ) {
+      trialEndTimestamp = entitlement.trial_expires_at
+    } else if (
+      customer.metadata?.trial_expires_at &&
+      Number(customer.metadata.trial_expires_at) >
+        Math.floor(Date.now() / 1000)
+    ) {
+      trialEndTimestamp = Number(customer.metadata.trial_expires_at)
+    }
+
     // Build session configuration
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: 'subscription',
@@ -88,6 +146,15 @@ export async function POST(request: NextRequest) {
       ],
       success_url: `${request.nextUrl.origin}/account?success=true`,
       cancel_url: `${request.nextUrl.origin}/account?canceled=true`,
+    }
+
+    if (trialEndTimestamp) {
+      sessionConfig.subscription_data = {
+        trial_end: trialEndTimestamp,
+        metadata: {
+          trial_converted_via: 'checkout_session',
+        },
+      }
     }
 
     // If a specific promo code is provided, apply it directly using discounts

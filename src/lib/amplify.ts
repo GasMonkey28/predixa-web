@@ -9,7 +9,7 @@ const amplifyConfig = {
       loginWith: {
         oauth: {
           domain: process.env.NEXT_PUBLIC_COGNITO_DOMAIN!,
-          scopes: ['email', 'openid', 'profile'],
+          scopes: ['email', 'openid', 'profile', 'aws.cognito.signin.user.admin'],
           redirectSignIn: [
             'http://localhost:3000',
             'http://localhost:3001',

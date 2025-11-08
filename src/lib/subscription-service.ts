@@ -1,4 +1,4 @@
-import { getCurrentUser } from 'aws-amplify/auth'
+import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth'
 
 export interface UnifiedSubscription {
   id: string
@@ -14,10 +14,15 @@ export interface UnifiedSubscription {
 }
 
 export interface EntitlementsResponse {
-  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'none'
+  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'none' | 'trial_expired'
   plan: string | null
   current_period_end: number | null
   trial_expires_at: number | null
+  trial_started_at: string | null
+  trial_days_remaining: number
+  trial_active: boolean
+  access_granted: boolean
+  access_reason: string
 }
 
 export class SubscriptionService {
@@ -45,20 +50,36 @@ export class SubscriptionService {
       // First, try the new entitlements API (DynamoDB-backed)
       const entitlements = await this.getEntitlements()
       
-      if (entitlements && entitlements.status !== 'none') {
-        // Convert entitlements response to UnifiedSubscription format
-        return {
-          id: entitlements.plan || 'unknown',
-          status: entitlements.status,
-          platform: 'stripe', // Entitlements API currently only tracks Stripe
-          current_period_end: entitlements.current_period_end || 0,
-          plan: {
-            id: entitlements.plan || '',
-            name: this.getPlanName(entitlements.plan),
-            amount: 0, // Not stored in entitlements table
-            interval: 'month' as const, // Default, could be enhanced
+      if (entitlements) {
+        if (entitlements.access_granted) {
+          const derivedStatus =
+            entitlements.status === 'active'
+              ? 'active'
+              : ('trialing' as const)
+          const effectivePeriodEnd =
+            entitlements.current_period_end ??
+            entitlements.trial_expires_at ??
+            0
+          const planName =
+            entitlements.status === 'trialing' && entitlements.trial_active
+              ? 'Free Trial'
+              : this.getPlanName(entitlements.plan)
+          return {
+            id: entitlements.plan || 'trial',
+            status: derivedStatus,
+            platform: 'stripe',
+            current_period_end: effectivePeriodEnd,
+            plan: {
+              id: entitlements.plan || 'trial',
+              name: planName,
+              amount: 0,
+              interval: 'month',
+            },
           }
         }
+
+        // Convert entitlements response to UnifiedSubscription format
+        // No access granted - fall through to other providers / null
       }
 
       // Fallback: Check Stripe directly (for backward compatibility)
@@ -92,7 +113,23 @@ export class SubscriptionService {
    */
   private async getEntitlements(): Promise<EntitlementsResponse | null> {
     try {
-      const response = await fetch('/api/entitlements')
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      try {
+        const session = await fetchAuthSession()
+        const idToken = session.tokens?.idToken?.toString()
+        if (idToken) {
+          headers.Authorization = `Bearer ${idToken}`
+        }
+      } catch (error) {
+        console.warn('Entitlements: unable to fetch auth session', error)
+      }
+
+      const response = await fetch('/api/entitlements', {
+        method: 'GET',
+        headers,
+        cache: 'no-store',
+        credentials: 'include',
+      })
       
       if (!response.ok) {
         // 401 means not authenticated - that's expected for logged-out users
@@ -171,6 +208,13 @@ export class SubscriptionService {
    * Returns true for 'active' or 'trialing' status.
    */
   async hasActiveSubscription(): Promise<boolean> {
+    const entitlements = await this.getEntitlements()
+    if (entitlements) {
+      if (entitlements.access_granted) {
+        return true
+      }
+    }
+
     const subscription = await this.getUnifiedSubscription()
     return subscription?.status === 'active' || subscription?.status === 'trialing' || false
   }
@@ -189,7 +233,18 @@ export class SubscriptionService {
    */
   async getSubscriptionStatus(): Promise<'active' | 'trialing' | 'past_due' | 'canceled' | 'none'> {
     const entitlements = await this.getEntitlements()
-    return entitlements?.status || 'none'
+    if (entitlements) {
+      if (entitlements.access_granted) {
+        if (entitlements.status === 'trialing' && entitlements.trial_active) {
+          return 'trialing'
+        }
+        if (entitlements.status === 'active') {
+          return 'active'
+        }
+      }
+      return entitlements.status === 'trial_expired' ? 'none' : entitlements.status
+    }
+    return 'none'
   }
 
   async getSubscriptionPlatform(): Promise<'stripe' | 'revenuecat' | null> {
