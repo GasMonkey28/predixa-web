@@ -144,6 +144,13 @@ function AccountPageContentInner() {
   const trialExpiresAt = entitlements?.trial_expires_at ?? null
   const accessReason = entitlements?.access_reason ?? null
   const hasSubscription = subscription && subscription.plan
+  const yearlyPlanPrice = 179.99
+  const yearlyPlanMonthlyEquivalent = Math.round((yearlyPlanPrice / 12) * 100) / 100
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(amount)
 
   return (
     <div className="mx-auto max-w-7xl p-6">
@@ -415,7 +422,7 @@ function AccountPageContentInner() {
               {/* Pricing Plans */}
               <div className="grid gap-6 sm:grid-cols-2">
                 {/* Monthly Plan */}
-                <div className="relative border-2 border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:border-blue-300 dark:hover:border-blue-600 transition-colors">
+                <div className="relative border-2 border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:border-blue-300 dark:hover:border-blue-600 transition-colors flex flex-col">
                   <div className="mb-4">
                     <h3 className="text-lg font-semibold dark:text-white mb-2">Monthly Pro</h3>
                     <div className="flex items-baseline gap-1">
@@ -446,14 +453,14 @@ function AccountPageContentInner() {
                       handleSubscribe(stripeConfig.priceIdMonthly)
                     }}
                     disabled={isLoading || !stripeConfig.priceIdMonthly}
-                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
+                    className="mt-auto w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
                   >
                     {!stripeConfig.priceIdMonthly ? 'Not Available' : 'Subscribe'}
                   </button>
                 </div>
 
                 {/* Yearly Plan - Featured */}
-                <div className="relative border-2 border-blue-500 dark:border-blue-600 rounded-xl p-6 bg-blue-50 dark:bg-blue-900/10">
+                <div className="relative border-2 border-blue-500 dark:border-blue-600 rounded-xl p-6 bg-blue-50 dark:bg-blue-900/10 flex flex-col">
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
                       Best Value
@@ -462,9 +469,12 @@ function AccountPageContentInner() {
                   <div className="mb-4">
                     <h3 className="text-lg font-semibold dark:text-white mb-2">Yearly Pro</h3>
                     <div className="flex items-baseline gap-1 mb-1">
-                      <span className="text-4xl font-bold dark:text-white">$179.99</span>
-                      <span className="text-gray-600 dark:text-gray-400">/year</span>
+                      <span className="text-4xl font-bold dark:text-white">${formatCurrency(yearlyPlanMonthlyEquivalent)}</span>
+                      <span className="text-gray-600 dark:text-gray-400">/month</span>
                     </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Billed annually at ${formatCurrency(yearlyPlanPrice)}
+                    </p>
                     <p className="text-sm font-medium text-green-600 dark:text-green-400">
                       Save $60/year (25% off)
                     </p>
@@ -498,7 +508,7 @@ function AccountPageContentInner() {
                       handleSubscribe(stripeConfig.priceIdYearly)
                     }}
                     disabled={isLoading || !stripeConfig.priceIdYearly}
-                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
+                    className="mt-auto w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
                   >
                     {!stripeConfig.priceIdYearly ? 'Not Available' : 'Subscribe'}
                   </button>
