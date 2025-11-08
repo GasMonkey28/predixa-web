@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getCurrentUser, signIn, signUp, confirmSignUp, resendSignUpCode, signOut, fetchUserAttributes, signInWithRedirect, updateUserAttributes, fetchAuthSession } from 'aws-amplify/auth'
+import { getCurrentUser, signIn, signUp, confirmSignUp, resendSignUpCode, signOut, fetchUserAttributes, signInWithRedirect, updateUserAttributes, fetchAuthSession, resetPassword, confirmResetPassword } from 'aws-amplify/auth'
 
 export interface User {
   userId: string
@@ -20,6 +20,8 @@ interface AuthActions {
   signUp: (email: string, password: string, givenName?: string, familyName?: string) => Promise<any>
   confirmSignUp: (email: string, code: string) => Promise<void>
   resendConfirmationCode: (email: string) => Promise<void>
+  requestPasswordReset: (email: string) => Promise<any>
+  confirmPasswordReset: (email: string, code: string, newPassword: string) => Promise<void>
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
@@ -101,6 +103,31 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       set({ isLoading: false })
     } catch (error: any) {
       set({ error: error.message || 'Failed to resend code', isLoading: false })
+      throw error
+    }
+  },
+
+  requestPasswordReset: async (email: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const result = await resetPassword({ username: email })
+      set({ isLoading: false })
+      return result
+    } catch (error: any) {
+      console.error('Password reset request error:', error)
+      set({ error: error.message || 'Failed to send reset code', isLoading: false })
+      throw error
+    }
+  },
+
+  confirmPasswordReset: async (email: string, code: string, newPassword: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      await confirmResetPassword({ username: email, confirmationCode: code, newPassword })
+      set({ isLoading: false })
+    } catch (error: any) {
+      console.error('Password reset confirmation error:', error)
+      set({ error: error.message || 'Failed to reset password', isLoading: false })
       throw error
     }
   },

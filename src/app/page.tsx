@@ -30,8 +30,8 @@ export default function HomePage() {
     setShowSignup(true)
   }
 
-  // Show loading while checking authentication or during redirect
-  if (isLoading || isAuthenticated) {
+  // Show loading while redirecting authenticated users
+  if (isAuthenticated) {
     return (
       <main className="mx-auto max-w-7xl p-6">
         <div className="flex items-center justify-center h-64">
@@ -41,10 +41,15 @@ export default function HomePage() {
     )
   }
 
-  // Only show login/signup if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <main className="mx-auto max-w-7xl p-6">
+  return (
+    <main className="relative mx-auto max-w-7xl p-6">
+      {isLoading && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 dark:bg-gray-900/70">
+          <div className="animate-spin rounded-full h-24 w-24 border-b-2 border-blue-600"></div>
+        </div>
+      )}
+      
+      <div className={isLoading ? 'pointer-events-none opacity-50' : ''}>
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <img 
@@ -103,10 +108,7 @@ export default function HomePage() {
             </div>
           )}
         </div>
-      </main>
-    )
-  }
-
-  // This should never be reached due to redirect, but included for safety
-  return null
+      </div>
+    </main>
+  )
 }

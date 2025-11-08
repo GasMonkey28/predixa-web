@@ -12,6 +12,7 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 # DynamoDB Table Names
 USERS_TABLE = os.getenv("USERS_TABLE", "UserProfiles")  # Existing table, will extend
 ENTITLEMENTS_TABLE = os.getenv("ENTITLEMENTS_TABLE", "predixa_entitlements")
+EMAIL_INDEX_NAME = os.getenv("EMAIL_INDEX_NAME", "EmailIndex")
 
 # Stripe Configuration
 STRIPE_API_KEY = os.getenv("STRIPE_API_KEY", os.getenv("STRIPE_SECRET_KEY", ""))
