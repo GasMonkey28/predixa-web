@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchAuthSession } from 'aws-amplify/auth'
+
+import { SESSION_COOKIE_NAME } from '@/lib/constants'
+import { verifyCognitoToken } from '@/lib/server/cognito-token'
 
 // Define protected routes that require authentication
-const protectedRoutes = [
-  '/daily',
-  '/weekly',
-  '/future',
-  '/account'
-]
+const protectedRoutes = ['/daily', '/weekly', '/future', '/account']
 
 // Define routes that require active subscription (not just authentication)
-const subscriptionRequiredRoutes = [
-  '/daily',
-  '/weekly',
-  '/future'
-]
+const subscriptionRequiredRoutes = ['/daily', '/weekly', '/future']
 
 // Account page is accessible to authenticated users (for subscription management)
 const accountRoute = '/account'
@@ -86,15 +79,18 @@ export async function middleware(request: NextRequest) {
   
   // Check authentication for protected routes
   try {
-    const session = await fetchAuthSession()
-    
-    // If no session or no tokens, redirect to home page
-    if (!session || !session.tokens || !session.tokens.idToken) {
-      console.log('Middleware: No valid session found, redirecting to home')
+    const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value
+    if (!sessionCookie) {
+      console.log('Middleware: No session cookie found, redirecting to home')
       return NextResponse.redirect(new URL('/', request.url))
     }
     
-    const idToken = session.tokens.idToken.toString()
+    try {
+      await verifyCognitoToken(sessionCookie)
+    } catch (error) {
+      console.warn('Middleware: Invalid session cookie, redirecting to home', error)
+      return NextResponse.redirect(new URL('/', request.url))
+    }
     
     // Account page: only requires authentication (no subscription check)
     if (pathname.startsWith(accountRoute)) {
@@ -108,7 +104,7 @@ export async function middleware(request: NextRequest) {
     )
     
     if (requiresSubscription) {
-      const hasActiveSubscription = await checkSubscriptionStatus(idToken)
+      const hasActiveSubscription = await checkSubscriptionStatus(sessionCookie)
       
       if (!hasActiveSubscription) {
         console.log('Middleware: User does not have active subscription, redirecting to account')

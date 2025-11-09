@@ -1,6 +1,44 @@
 import { create } from 'zustand'
 import { getCurrentUser, signIn, signUp, confirmSignUp, resendSignUpCode, signOut, fetchUserAttributes, signInWithRedirect, updateUserAttributes, fetchAuthSession, resetPassword, confirmResetPassword } from 'aws-amplify/auth'
 
+const clearSessionCookie = async () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    await fetch('/api/auth/session', {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+  } catch (error) {
+    console.error('Failed to clear session cookie:', error)
+  }
+}
+
+const persistSessionCookie = async (idToken: string | null | undefined) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (!idToken) {
+    await clearSessionCookie()
+    return
+  }
+
+  try {
+    await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+      credentials: 'include',
+    })
+  } catch (error) {
+    console.error('Failed to persist session cookie:', error)
+  }
+}
+
 export interface User {
   userId: string
   email: string
@@ -137,10 +175,12 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     try {
       console.log('Signing out...')
       await signOut()
+      await clearSessionCookie()
       console.log('Sign out successful')
       set({ user: null, isAuthenticated: false, isLoading: false })
     } catch (error: any) {
       console.error('Sign out error:', error)
+      await clearSessionCookie()
       // Even if signOut fails, clear the local state
       set({ user: null, isAuthenticated: false, isLoading: false })
       // Don't throw error for sign out - just log it
@@ -246,6 +286,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       const session = await fetchAuthSession()
       if (!session || !session.tokens || !session.tokens.idToken) {
         console.log('checkAuth: No valid session found')
+        await clearSessionCookie()
         set({ user: null, isAuthenticated: false, isLoading: false, error: null })
         return
       }
@@ -254,7 +295,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       console.log('checkAuth: User found:', user.userId)
       
       // Extract email from token
-      const email = session.tokens?.idToken?.payload?.email as string || ''
+      const idToken = session.tokens.idToken
+      await persistSessionCookie(idToken.toString())
+
+      const email = (idToken.payload?.email as string) || ''
       console.log('checkAuth: Email from token:', email)
       
       let givenName = ''
@@ -328,6 +372,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       console.log('checkAuth: Auth state updated successfully')
     } catch (error) {
       console.error('checkAuth: Error checking auth:', error)
+      await clearSessionCookie()
       set({ user: null, isAuthenticated: false, isLoading: false, error: null })
     }
   },

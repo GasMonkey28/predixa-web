@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { SESSION_COOKIE_NAME } from '@/lib/constants'
+
 function extractIdToken(request: NextRequest): string | null {
   const authHeader = request.headers.get('authorization')
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice('Bearer '.length).trim() || null
+  }
+
+  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  if (sessionCookie) {
+    return sessionCookie
   }
 
   const clientId =
