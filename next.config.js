@@ -1,3 +1,5 @@
+const { withSentryConfig } = require('@sentry/nextjs')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -17,4 +19,10 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+const sentryWebpackPluginOptions = {
+  silent: true,
+}
+
+module.exports = process.env.SENTRY_DSN
+  ? withSentryConfig(nextConfig, sentryWebpackPluginOptions)
+  : nextConfig

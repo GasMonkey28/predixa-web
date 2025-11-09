@@ -15,4 +15,7 @@ process.env.ENTITLEMENTS_API_GATEWAY_URL =
   process.env.ENTITLEMENTS_API_GATEWAY_URL || 'https://example.com/entitlements'
 process.env.NEXT_PUBLIC_S3_BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET || 'test-bucket'
 process.env.NEXT_PUBLIC_TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
+process.env.SENTRY_DSN = process.env.SENTRY_DSN || ''
+process.env.SENTRY_ENVIRONMENT = process.env.SENTRY_ENVIRONMENT || 'test'
+process.env.SENTRY_TRACES_SAMPLE_RATE = process.env.SENTRY_TRACES_SAMPLE_RATE || '0'
 

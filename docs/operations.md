@@ -79,7 +79,7 @@ The `backend/auth_billing` tree contains zipped Lambda packages (`entitlements_a
 
 | Component | Monitoring | Suggested Actions |
 | --- | --- | --- |
-| Vercel Next.js | Vercel dashboard, Web analytics | Track slow endpoint logs; enable Sentry for client/server errors. |
+| Vercel Next.js | Vercel dashboard, Web analytics, Sentry (`SENTRY_DSN`) | Track slow endpoint logs; raise Sentry alerts on uncaught errors. |
 | Stripe | Dashboard → Developers → Logs | Verify webhook deliveries, subscription events, portal sessions. |
 | AWS Lambda (entitlements/webhooks) | CloudWatch Logs | Set alarms on errors/timeouts. |
 | DynamoDB Entitlements | CloudWatch metrics | Alert on throttled writes/reads; ensure TTL cleanup. |

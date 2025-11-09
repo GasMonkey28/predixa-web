@@ -20,6 +20,9 @@ const optionalButRecommended = [
   'SCRAPER_API_KEY',
   'CUSTOM_PROXY_URL',
   'FRED_API_KEY',
+  'SENTRY_DSN',
+  'SENTRY_ENVIRONMENT',
+  'SENTRY_TRACES_SAMPLE_RATE',
 ]
 
 function checkVars(names, { required }) {
