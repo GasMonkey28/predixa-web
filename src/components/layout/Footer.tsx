@@ -25,24 +25,28 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Legal</h3>
             <ul className="space-y-2">
               <li>
-                <a
-                  href="https://www.notion.so/Predixa-Terms-of-Service-28ff89ca672480f3b8a7d4bb82346fe4?source=copy_link"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  href="/about"
+                  className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                >
+                  About Us
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/terms"
                   className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                   Terms of Service
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="https://www.notion.so/Predixa-Privacy-Policy-7e268254f7e149a1b0ace9572ac70e78?source=copy_link"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  href="/privacy"
                   className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                   Privacy Policy
-                </a>
+                </Link>
               </li>
               <li>
                 <a
@@ -79,14 +83,12 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Support</h3>
             <ul className="space-y-2">
               <li>
-                <a
-                  href="https://www.notion.so/Predixa-App-Support-28ef89ca67248053b3f9d19aec86068a?source=copy_link"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  href="/support"
                   className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                   Help Center
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

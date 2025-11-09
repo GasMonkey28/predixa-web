@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { stripeConfig } from '@/lib/stripe-config'
 import { EntitlementsResponse } from '@/lib/subscription-service'
+import Link from 'next/link'
 
 function AccountPageContentInner() {
   const router = useRouter()
@@ -522,39 +523,33 @@ function AccountPageContentInner() {
         <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6">
           <h2 className="text-lg font-medium dark:text-white mb-4">Legal & Support</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <a
-              href="https://www.notion.so/Predixa-Terms-of-Service-28ff89ca672480f3b8a7d4bb82346fe4?source=copy_link"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/terms"
               className="flex items-center gap-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               Terms of Service
-            </a>
-            <a
-              href="https://www.notion.so/Predixa-Privacy-Policy-7e268254f7e149a1b0ace9572ac70e78?source=copy_link"
-              target="_blank"
-              rel="noopener noreferrer"
+            </Link>
+            <Link
+              href="/privacy"
               className="flex items-center gap-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
               Privacy Policy
-            </a>
-            <a
-              href="https://www.notion.so/Predixa-App-Support-28ef89ca67248053b3f9d19aec86068a?source=copy_link"
-              target="_blank"
-              rel="noopener noreferrer"
+            </Link>
+            <Link
+              href="/support"
               className="flex items-center gap-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
               Support
-            </a>
+            </Link>
             <a
               href="#"
               className="flex items-center gap-2 text-gray-500 dark:text-gray-400 cursor-not-allowed"
