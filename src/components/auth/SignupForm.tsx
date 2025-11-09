@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
 import { subscriptionService } from '@/lib/subscription-service'
@@ -11,6 +12,7 @@ export default function SignupForm() {
   const [password, setPassword] = useState('')
   const [givenName, setGivenName] = useState('')
   const [familyName, setFamilyName] = useState('')
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false)
   // Persist confirmation state in localStorage to survive re-renders
   const [isConfirming, setIsConfirming] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -64,6 +66,11 @@ export default function SignupForm() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
     clearError()
+
+    if (!acceptedPolicies) {
+      toast.error('Please agree to the Terms of Service and Privacy Policy before creating an account.')
+      return
+    }
     
     try {
       const result = await signUp(email, password, givenName, familyName)
@@ -258,6 +265,10 @@ export default function SignupForm() {
   }
 
   const handleGoogleSignIn = async () => {
+    if (!acceptedPolicies) {
+      toast.error('Please agree to the Terms of Service and Privacy Policy before continuing.')
+      return
+    }
     try {
       await signInWithGoogle()
     } catch (error) {
@@ -266,6 +277,10 @@ export default function SignupForm() {
   }
 
   const handleAppleSignIn = async () => {
+    if (!acceptedPolicies) {
+      toast.error('Please agree to the Terms of Service and Privacy Policy before continuing.')
+      return
+    }
     try {
       await signInWithApple()
     } catch (error) {
@@ -390,7 +405,7 @@ export default function SignupForm() {
         <button
           type="button"
           onClick={handleGoogleSignIn}
-          disabled={isLoading}
+          disabled={isLoading || !acceptedPolicies}
           className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -405,7 +420,7 @@ export default function SignupForm() {
         <button
           type="button"
           onClick={handleAppleSignIn}
-          disabled={isLoading}
+          disabled={isLoading || !acceptedPolicies}
           className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-black text-sm font-medium text-white hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="white">
@@ -486,9 +501,31 @@ export default function SignupForm() {
           <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
         )}
 
+        <div className="flex items-start gap-3 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-3 py-4">
+          <input
+            id="acceptPolicies"
+            type="checkbox"
+            checked={acceptedPolicies}
+            onChange={(e) => setAcceptedPolicies(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            required
+          />
+          <label htmlFor="acceptPolicies" className="text-sm text-gray-600 dark:text-gray-300">
+            I agree to Predixa&apos;s{' '}
+            <Link href="/terms" className="underline text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link href="/privacy" className="underline text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+              Privacy Policy
+            </Link>
+            .
+          </label>
+        </div>
+
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || !acceptedPolicies}
           className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
         >
           {isLoading ? 'Creating Account...' : 'Sign Up'}
