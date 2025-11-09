@@ -118,12 +118,45 @@ export async function GET() {
         }
       })
     } catch (s3Error) {
-      console.error(`S3 data not available for ${today} - THROWING ERROR TO SEE REAL ISSUE`)
-      console.error('S3 Error details:', s3Error instanceof Error ? s3Error.message : String(s3Error))
+      const message =
+        s3Error instanceof Error ? s3Error.message : typeof s3Error === 'string' ? s3Error : 'Unknown error'
+      console.error(`S3 data not available for ${today}`)
+      console.error('S3 Error details:', message)
       console.error('BUCKET:', BUCKET)
-      
-      // Throw the error instead of trying fallback to see the real issue
-      throw s3Error
+
+      const fallback = {
+        date: today,
+        long_tier: 'N/A',
+        short_tier: 'N/A',
+        long_score: 0,
+        short_score: 0,
+        summary: 'Real-time market summary is temporarily unavailable.',
+        suggestions: [
+          'Verify your network connection and reload the page.',
+          'Check back shortly—data refresh runs regularly during market hours.',
+        ],
+        confidence: 'Unknown',
+        risk: 'Unknown',
+        outlook: 'Data temporarily unavailable.',
+        disclaimer:
+          'Live tier data is temporarily unavailable. This fallback preserves access while the data pipeline recovers.',
+        compensation_explanation: '',
+        prev_date: null,
+        prev_long_tier: 'N/A',
+        prev_short_tier: 'N/A',
+        fallback: true,
+        error: message,
+      }
+
+      return NextResponse.json(fallback, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'Surrogate-Control': 'no-store',
+        },
+        status: 200,
+      })
     }
   } catch (error) {
     console.error('Error fetching daily tiers:', error)
