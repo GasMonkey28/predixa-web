@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { SESSION_COOKIE_NAME } from '@/lib/constants'
+import { config } from '@/lib/server/config'
 import { verifyCognitoToken } from '@/lib/server/cognito-token'
 
 function getBearerToken(request: NextRequest): string | null {
@@ -21,7 +22,7 @@ function buildCookieOptions(maxAge: number) {
   return {
     name: SESSION_COOKIE_NAME,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: config.aws.region !== 'development' && process.env.NODE_ENV === 'production',
     sameSite: 'strict' as const,
     path: '/',
     maxAge,

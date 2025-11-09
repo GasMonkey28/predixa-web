@@ -1,15 +1,10 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose'
 
-const region =
-  process.env.NEXT_PUBLIC_AWS_REGION ||
-  process.env.AWS_REGION ||
-  process.env.COGNITO_REGION
-const userPoolId =
-  process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ||
-  process.env.COGNITO_USER_POOL_ID
-const clientId =
-  process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ||
-  process.env.COGNITO_CLIENT_ID
+import { config } from '@/lib/server/config'
+
+const region = config.aws.region
+const userPoolId = config.cognito.userPoolId
+const clientId = config.cognito.clientId
 
 const issuer =
   region && userPoolId

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { SESSION_COOKIE_NAME } from '@/lib/constants'
+import { config } from '@/lib/server/config'
 import { verifyCognitoToken } from '@/lib/server/cognito-token'
 
 // Define protected routes that require authentication
@@ -18,7 +19,7 @@ const accountRoute = '/account'
  */
 async function checkSubscriptionStatus(idToken: string): Promise<boolean> {
   try {
-    const entitlementsApiUrl = process.env.ENTITLEMENTS_API_GATEWAY_URL
+    const entitlementsApiUrl = config.entitlements.apiGatewayUrl
     
     if (!entitlementsApiUrl) {
       // If entitlements API is not configured, allow access (graceful degradation)

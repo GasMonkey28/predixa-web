@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { SESSION_COOKIE_NAME } from '@/lib/constants'
+import { config } from '@/lib/server/config'
 
 function extractIdToken(request: NextRequest): string | null {
   const authHeader = request.headers.get('authorization')
@@ -40,7 +41,7 @@ function extractIdToken(request: NextRequest): string | null {
 export async function GET(request: NextRequest) {
   try {
     // Get the API Gateway URL from environment variables
-    const entitlementsApiUrl = process.env.ENTITLEMENTS_API_GATEWAY_URL
+    const entitlementsApiUrl = config.entitlements.apiGatewayUrl
     
     if (!entitlementsApiUrl) {
       console.error('ENTITLEMENTS_API_GATEWAY_URL is not configured')
