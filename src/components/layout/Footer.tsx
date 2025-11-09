@@ -49,31 +49,28 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <a
-                  href="#"
-                  className="text-sm text-gray-500 dark:text-gray-500 cursor-not-allowed"
-                  title="Coming soon"
+                <Link
+                  href="/cookies"
+                  className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                   Cookie Policy
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#"
-                  className="text-sm text-gray-500 dark:text-gray-500 cursor-not-allowed"
-                  title="Coming soon"
+                <Link
+                  href="/refund"
+                  className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                   Refund Policy
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#"
-                  className="text-sm text-gray-500 dark:text-gray-500 cursor-not-allowed"
-                  title="Coming soon"
+                <Link
+                  href="/disclaimer"
+                  className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                   Disclaimer
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

@@ -43,6 +43,24 @@ const policyLinks: Array<{
     status: 'available',
   },
   {
+    title: 'Cookie Policy',
+    description: 'Understand how we use cookies and similar technologies to support authentication, preferences, and analytics.',
+    href: '/cookies',
+    status: 'available',
+  },
+  {
+    title: 'Refund Policy',
+    description: 'Review how cancellations, refunds, and billing disputes are handled for Predixa subscriptions.',
+    href: '/refund',
+    status: 'available',
+  },
+  {
+    title: 'Disclaimer',
+    description: 'Important disclosures about the educational nature of Predixa and the risks of trading and investing.',
+    href: '/disclaimer',
+    status: 'available',
+  },
+  {
     title: 'Risk Disclaimer',
     description: 'Learn more about trading risks and how to use our analytics responsibly as part of your process.',
     status: 'coming-soon',
