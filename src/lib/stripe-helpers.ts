@@ -13,7 +13,6 @@ if (!Amplify.getConfig().Auth) {
       Cognito: {
         userPoolId: config.cognito.userPoolId,
         userPoolClientId: config.cognito.clientId,
-        region: config.aws.region,
       },
     },
   })
