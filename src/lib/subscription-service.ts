@@ -51,26 +51,30 @@ export class SubscriptionService {
       const entitlements = await this.getEntitlements()
       
       if (entitlements) {
-        if (entitlements.access_granted) {
-          const derivedStatus =
-            entitlements.status === 'active'
-              ? 'active'
-              : ('trialing' as const)
+        const status = entitlements.status
+        const isTrialing =
+          status === 'trialing' && entitlements.trial_active
+        const isActive = status === 'active'
+        const hasAccess =
+          entitlements.access_granted || isActive || isTrialing
+
+        if (hasAccess) {
+          const derivedStatus = isActive ? 'active' : ('trialing' as const)
           const effectivePeriodEnd =
             entitlements.current_period_end ??
             entitlements.trial_expires_at ??
             0
-          const planName =
-            entitlements.status === 'trialing' && entitlements.trial_active
-              ? 'Free Trial'
-              : this.getPlanName(entitlements.plan)
+          const planName = isTrialing
+            ? 'Free Trial'
+            : this.getPlanName(entitlements.plan)
+
           return {
-            id: entitlements.plan || 'trial',
+            id: entitlements.plan || (isTrialing ? 'trial' : 'plan'),
             status: derivedStatus,
             platform: 'stripe',
             current_period_end: effectivePeriodEnd,
             plan: {
-              id: entitlements.plan || 'trial',
+              id: entitlements.plan || (isTrialing ? 'trial' : 'plan'),
               name: planName,
               amount: 0,
               interval: 'month',
@@ -166,7 +170,22 @@ export class SubscriptionService {
 
   private async getStripeSubscription(): Promise<UnifiedSubscription | null> {
     try {
-      const response = await fetch('/api/stripe/subscription')
+      let url = '/api/stripe/subscription'
+
+      try {
+        const user = await getCurrentUser()
+        if (user?.userId) {
+          const params = new URLSearchParams({ userId: user.userId })
+          url = `${url}?${params.toString()}`
+        }
+      } catch (error) {
+        console.warn('Stripe subscription: unable to get current user', error)
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        cache: 'no-store',
+      })
       if (!response.ok) return null
 
       const subscription = await response.json()
@@ -210,12 +229,19 @@ export class SubscriptionService {
   async hasActiveSubscription(): Promise<boolean> {
     const entitlements = await this.getEntitlements()
     if (entitlements) {
-      if (entitlements.access_granted) {
+      console.log('SubscriptionService.hasActiveSubscription: entitlements', entitlements)
+      const status = entitlements.status
+      const isTrialing =
+        status === 'trialing' && entitlements.trial_active
+      const isActive = status === 'active'
+
+      if (entitlements.access_granted || isTrialing || isActive) {
         return true
       }
     }
 
     const subscription = await this.getUnifiedSubscription()
+    console.log('SubscriptionService.hasActiveSubscription: unified subscription', subscription)
     return subscription?.status === 'active' || subscription?.status === 'trialing' || false
   }
 

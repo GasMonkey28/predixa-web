@@ -165,7 +165,7 @@ export const useStripeStore = create<StripeState & StripeActions>((set, get) => 
       
       const subscription = await response.json()
       // If subscription is null, that's fine - just means no active subscription
-      set({ subscription, isLoading: false })
+      set({ subscription, isLoading: false, error: null })
     } catch (error: any) {
       set({ error: error.message || 'Failed to fetch subscription', isLoading: false })
     }
