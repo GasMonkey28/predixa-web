@@ -3,6 +3,7 @@
   "version": "0.1.2",
   "private": true,
   "scripts": {
+    "prebuild": "node scripts/verify-env.js",
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
