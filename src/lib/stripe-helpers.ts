@@ -4,15 +4,18 @@ import { Amplify } from 'aws-amplify'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { decodeJwt } from 'jose'
 
+import { config } from '@/lib/server/config'
+
 // Configure Amplify for server-side use if not already configured
 if (!Amplify.getConfig().Auth) {
   Amplify.configure({
     Auth: {
       Cognito: {
-        userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID!,
-        userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!,
-      }
-    }
+        userPoolId: config.cognito.userPoolId,
+        userPoolClientId: config.cognito.clientId,
+        region: config.aws.region,
+      },
+    },
   })
 }
 
@@ -23,7 +26,7 @@ if (!Amplify.getConfig().Auth) {
 async function getUserFromRequest(request: NextRequest): Promise<{ userId: string; email: string } | null> {
   try {
     const cookies = request.cookies
-    const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID
+    const clientId = config.cognito.clientId
     
     // Try multiple cookie name patterns that Amplify might use
     let idToken: string | undefined
@@ -93,11 +96,7 @@ async function getUserFromRequest(request: NextRequest): Promise<{ userId: strin
  */
 export async function getOrCreateStripeCustomer(request: NextRequest): Promise<Stripe.Customer | null> {
   try {
-    if (!process.env.STRIPE_SECRET_KEY) {
-      throw new Error('STRIPE_SECRET_KEY is not configured')
-    }
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    const stripe = new Stripe(config.stripe.secretKey, {
       apiVersion: '2023-10-16',
     })
 

@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 
+import { config } from '@/lib/server/config'
+
 // Create DynamoDB client with credentials
 // For local dev: uses AWS CLI credentials
 // For production: uses IAM role (Lambda/Vercel)
 const client = new DynamoDBClient({
-  region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1',
-  credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-    ? {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      }
-    : undefined, // Will use default credential provider chain
+  region: config.aws.region,
+  credentials:
+    config.aws.accessKeyId && config.aws.secretAccessKey
+      ? {
+          accessKeyId: config.aws.accessKeyId,
+          secretAccessKey: config.aws.secretAccessKey,
+        }
+      : undefined, // Will use default credential provider chain
 })
 
 const docClient = DynamoDBDocumentClient.from(client)
@@ -82,7 +85,7 @@ export async function POST(request: NextRequest) {
       name: error?.name,
       message: error?.message,
       code: error?.code,
-      region: process.env.NEXT_PUBLIC_AWS_REGION,
+      region: config.aws.region,
     })
     return NextResponse.json({ error: error.message || 'Failed to update profile' }, { status: 500 })
   }

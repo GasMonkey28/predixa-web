@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
 import axios from 'axios'
 
+import { config } from '@/lib/server/config'
+
 // Force dynamic rendering - prevents Next.js from caching this route
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-const FRED_API_KEY = process.env.FRED_API_KEY
+const FRED_API_KEY = config.fred.apiKey
 const FRED_BASE_URL = 'https://api.stlouisfed.org/fred'
 
 export async function GET(request: Request) {

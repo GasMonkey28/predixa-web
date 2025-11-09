@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import axios from 'axios'
 const cheerio = require('cheerio')
 
+import { config } from '@/lib/server/config'
+
 // Force dynamic rendering - prevents Next.js from caching this route
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,8 +19,8 @@ export async function GET(request: Request) {
     const investingUrl = 'https://www.investing.com/economic-calendar/'
     
     // Declare these outside try block so they're accessible in catch
-    const scraperApiKey = process.env.SCRAPER_API_KEY
-    const customProxyUrl = process.env.CUSTOM_PROXY_URL // e.g., Railway proxy server
+    const scraperApiKey = config.proxies.scraperApiKey
+    const customProxyUrl = config.proxies.customProxyUrl // e.g., Railway proxy server
     let fetchUrl = investingUrl
     let useProxy = false
     

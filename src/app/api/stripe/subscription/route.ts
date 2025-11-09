@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getOrCreateStripeCustomer } from '@/lib/stripe-helpers'
+import { config } from '@/lib/server/config'
 
 // Force dynamic rendering since we use searchParams
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    // Check if Stripe is configured
-    if (!process.env.STRIPE_SECRET_KEY) {
-      console.error('STRIPE_SECRET_KEY is not configured')
-      return NextResponse.json(null)
-    }
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    const stripe = new Stripe(config.stripe.secretKey, {
       apiVersion: '2023-10-16',
     })
 

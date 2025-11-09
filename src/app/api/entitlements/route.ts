@@ -14,13 +14,8 @@ function extractIdToken(request: NextRequest): string | null {
     return sessionCookie
   }
 
-  const clientId =
-    process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ||
-    process.env.COGNITO_CLIENT_ID ||
-    ''
-
   const candidateNames = [
-    clientId ? `CognitoIdentityServiceProvider.${clientId}.idToken` : null,
+    config.cognito.clientId ? `CognitoIdentityServiceProvider.${config.cognito.clientId}.idToken` : null,
     'CognitoIdentityServiceProvider.undefined.idToken',
   ].filter(Boolean) as string[]
 

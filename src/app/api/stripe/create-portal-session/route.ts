@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getOrCreateStripeCustomer } from '@/lib/stripe-helpers'
+import { config } from '@/lib/server/config'
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if Stripe is configured
-    if (!process.env.STRIPE_SECRET_KEY) {
-      console.error('STRIPE_SECRET_KEY is not configured')
-      return NextResponse.json({ error: 'Stripe is not configured' }, { status: 500 })
-    }
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    const stripe = new Stripe(config.stripe.secretKey, {
       apiVersion: '2023-10-16',
     })
 
@@ -61,7 +56,7 @@ export async function POST(request: NextRequest) {
           portalError?.message?.includes('No configuration provided') ||
           portalError?.message?.includes('test mode default configuration')) {
         console.error('Stripe Billing Portal not configured:', portalError.message)
-        const isTestMode = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_')
+        const isTestMode = config.stripe.secretKey.startsWith('sk_test_')
         const portalUrl = isTestMode 
           ? 'https://dashboard.stripe.com/test/settings/billing/portal'
           : 'https://dashboard.stripe.com/settings/billing/portal'

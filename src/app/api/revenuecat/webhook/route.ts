@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { CognitoIdentityProviderClient, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider'
 
+import { config } from '@/lib/server/config'
+
 const cognitoClient = new CognitoIdentityProviderClient({
-  region: process.env.NEXT_PUBLIC_AWS_REGION!,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  }
+  region: config.aws.region,
+  credentials:
+    config.aws.accessKeyId && config.aws.secretAccessKey
+      ? {
+          accessKeyId: config.aws.accessKeyId,
+          secretAccessKey: config.aws.secretAccessKey,
+        }
+      : undefined,
 })
 
 export async function POST(request: NextRequest) {
@@ -60,8 +65,8 @@ export async function POST(request: NextRequest) {
     // For real events, try to find the Cognito user
     try {
       const getUserCommand = new AdminGetUserCommand({
-        UserPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID!,
-        Username: app_user_id
+        UserPoolId: config.cognito.userPoolId,
+        Username: app_user_id,
       })
       
       const cognitoUser = await cognitoClient.send(getUserCommand)

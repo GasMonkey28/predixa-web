@@ -3,17 +3,15 @@ import Stripe from 'stripe'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb'
 import { getOrCreateStripeCustomer } from '@/lib/stripe-helpers'
-
-const REGION = process.env.NEXT_PUBLIC_AWS_REGION || process.env.AWS_REGION || 'us-east-1'
-const ENTITLEMENTS_TABLE = process.env.ENTITLEMENTS_TABLE || 'predixa_entitlements'
+import { config } from '@/lib/server/config'
 
 const dynamoClient = new DynamoDBClient({
-  region: REGION,
+  region: config.aws.region,
   credentials:
-    process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+    config.aws.accessKeyId && config.aws.secretAccessKey
       ? {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+          accessKeyId: config.aws.accessKeyId,
+          secretAccessKey: config.aws.secretAccessKey,
         }
       : undefined,
 })
@@ -25,7 +23,7 @@ async function getEntitlementRecord(cognitoSub: string) {
   try {
     const result = await docClient.send(
       new GetCommand({
-        TableName: ENTITLEMENTS_TABLE,
+        TableName: config.entitlements.tableName,
         Key: { cognito_sub: cognitoSub },
       })
     )
@@ -40,12 +38,7 @@ export async function POST(request: NextRequest) {
   try {
     const { priceId, userId, userEmail, promoCode } = await request.json()
 
-    // Check if Stripe is configured
-    if (!process.env.STRIPE_SECRET_KEY) {
-      return NextResponse.json({ error: 'Stripe is not configured' }, { status: 500 })
-    }
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    const stripe = new Stripe(config.stripe.secretKey, {
       apiVersion: '2023-10-16',
     })
 
