@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { SESSION_COOKIE_NAME } from '@/lib/constants'
 import { config } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
 
 function extractIdToken(request: NextRequest): string | null {
   const authHeader = request.headers.get('authorization')
@@ -39,17 +40,20 @@ export async function GET(request: NextRequest) {
     const entitlementsApiUrl = config.entitlements.apiGatewayUrl
     
     if (!entitlementsApiUrl) {
-      console.error('ENTITLEMENTS_API_GATEWAY_URL is not configured')
-      return NextResponse.json(
-        { error: 'Entitlements API not configured' },
-        { status: 500 }
-      )
+      logger.warn('Entitlements API gateway URL not configured; returning default access=false')
+      return NextResponse.json({
+        status: 'none',
+        access_granted: false,
+        plan: null,
+        trial_active: false,
+      })
     }
 
     // Get the current user's session to extract JWT
     const idToken = extractIdToken(request)
 
     if (!idToken) {
+      logger.warn({ ip: request.ip ?? 'unknown' }, 'Entitlements request without authentication token')
       return NextResponse.json(
         { error: 'Unauthorized - no authentication token' },
         { status: 401 }
@@ -69,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error(`Entitlements API error (${response.status}):`, errorText)
+      logger.error({ status: response.status, error: errorText }, 'Entitlements API returned error')
       
       // If 401, user is not authenticated
       if (response.status === 401) {
@@ -87,10 +91,18 @@ export async function GET(request: NextRequest) {
     }
 
     const entitlements = await response.json()
+    logger.info(
+      {
+        status: entitlements?.status,
+        accessGranted: entitlements?.access_granted,
+        plan: entitlements?.plan,
+      },
+      'Entitlements retrieved successfully'
+    )
     
     return NextResponse.json(entitlements)
   } catch (error: any) {
-    console.error('Error in entitlements API route:', error)
+    logger.error({ error }, 'Error in entitlements API route')
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
