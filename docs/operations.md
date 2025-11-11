@@ -84,7 +84,7 @@ The `backend/auth_billing` tree contains zipped Lambda packages (`entitlements_a
 | AWS Lambda (entitlements/webhooks) | CloudWatch Logs | Set alarms on errors/timeouts; include request IDs in logs. |
 ### Rate Limiting & Abuse Protection
 - API routes support a lightweight token-bucket limiter (default 100 req / 60s). Tune via `RATE_LIMIT_REQUESTS_PER_WINDOW` and `RATE_LIMIT_WINDOW_MS`.
-- Sensitive routes (`/api/stripe/*`, `/api/entitlements`) should emit structured logs with trace IDs and avoid logging PII.
+- Sensitive routes (`/api/stripe/*`, `/api/entitlements`) now emit structured logs (Pino) with secrets redacted—forward them to CloudWatch / log drain for auditing.
 - Consider upgrading to Redis/Edge KV if abuse is observed or traffic scales.
 | DynamoDB Entitlements | CloudWatch metrics | Alert on throttled writes/reads; ensure TTL cleanup. |
 | S3 Market Data | S3 Inventory / scheduled Lambda check | Alert when latest files are older than trading day. |

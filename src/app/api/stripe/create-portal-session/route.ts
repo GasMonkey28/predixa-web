@@ -2,8 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getOrCreateStripeCustomer } from '@/lib/stripe-helpers'
 import { config } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
+import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 
 export async function POST(request: NextRequest) {
+  const clientIp =
+    (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    request.ip ||
+    'anonymous'
+
+  if (!checkRateLimit(clientIp)) {
+    logger.warn({ ip: clientIp }, 'Stripe portal rate limit exceeded')
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: getRateLimitHeaders(clientIp) }
+    )
+  }
+
   try {
     const stripe = new Stripe(config.stripe.secretKey, {
       apiVersion: '2023-10-16',
@@ -18,7 +34,7 @@ export async function POST(request: NextRequest) {
     
     // Fallback: if cookie extraction fails, try using userId from request body
     if (!customer && userId) {
-      console.log('Cookie extraction failed, using userId from request:', userId)
+      logger.warn({ userId }, 'Cookie extraction failed; falling back to userId for portal session lookup')
       // Search for existing customer by Cognito user ID
       const existingCustomers = await stripe.customers.search({
         query: `metadata['cognito_user_id']:'${userId}'`,
@@ -31,10 +47,14 @@ export async function POST(request: NextRequest) {
     }
     
     if (!customer) {
-      return NextResponse.json({ 
-        error: 'User authentication required. Please sign in and try again.',
-        debug: 'No customer found and no userId provided'
-      }, { status: 401 })
+      logger.warn({ userId }, 'Portal session requested without authenticated customer')
+      return NextResponse.json(
+        {
+          error: 'User authentication required. Please sign in and try again.',
+          debug: 'No customer found and no userId provided',
+        },
+        { status: 401, headers: getRateLimitHeaders(clientIp) }
+      )
     }
 
     // Check if billing portal is configured in Stripe
@@ -48,30 +68,37 @@ export async function POST(request: NextRequest) {
         throw new Error('No portal URL returned from Stripe')
       }
 
-      return NextResponse.json({ url: session.url })
+      logger.info({ customerId: customer.id }, 'Stripe customer portal session created')
+      return NextResponse.json({ url: session.url }, { headers: getRateLimitHeaders(clientIp) })
     } catch (portalError: any) {
       // Common error: billing portal not configured
       if (portalError?.code === 'resource_missing' || 
           portalError?.message?.includes('billing portal') ||
           portalError?.message?.includes('No configuration provided') ||
           portalError?.message?.includes('test mode default configuration')) {
-        console.error('Stripe Billing Portal not configured:', portalError.message)
+        logger.error({ error: portalError, customerId: customer.id }, 'Stripe Billing Portal not configured')
         const isTestMode = config.stripe.secretKey.startsWith('sk_test_')
         const portalUrl = isTestMode 
           ? 'https://dashboard.stripe.com/test/settings/billing/portal'
           : 'https://dashboard.stripe.com/settings/billing/portal'
         
-        return NextResponse.json({ 
-          error: `Stripe Billing Portal is not configured. Please configure it in your Stripe Dashboard (Test Mode). Visit: ${portalUrl}`,
-          portalUrl: portalUrl,
-          needsConfiguration: true
-        }, { status: 500 })
+        return NextResponse.json(
+          {
+            error: `Stripe Billing Portal is not configured. Please configure it in your Stripe Dashboard (Test Mode). Visit: ${portalUrl}`,
+            portalUrl: portalUrl,
+            needsConfiguration: true,
+          },
+          { status: 500, headers: getRateLimitHeaders(clientIp) }
+        )
       }
       throw portalError
     }
   } catch (error: any) {
-    console.error('Error creating portal session:', error)
-    return NextResponse.json({ error: error.message || 'Failed to create portal session' }, { status: 500 })
+    logger.error({ error }, 'Error creating portal session')
+    return NextResponse.json(
+      { error: error.message || 'Failed to create portal session' },
+      { status: 500, headers: getRateLimitHeaders(clientIp) }
+    )
   }
 }
 

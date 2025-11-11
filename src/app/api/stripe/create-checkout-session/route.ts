@@ -4,6 +4,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb'
 import { getOrCreateStripeCustomer } from '@/lib/stripe-helpers'
 import { config } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
+import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 
 const dynamoClient = new DynamoDBClient({
   region: config.aws.region,
@@ -29,14 +31,30 @@ async function getEntitlementRecord(cognitoSub: string) {
     )
     return result.Item || null
   } catch (error) {
-    console.error('Failed to read entitlement record:', error)
+    logger.error({ error, cognitoSub }, 'Failed to read entitlement record')
     return null
   }
 }
 
 export async function POST(request: NextRequest) {
+  const clientIp =
+    (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    request.ip ||
+    'anonymous'
+
+  if (!checkRateLimit(clientIp)) {
+    logger.warn({ ip: clientIp }, 'Stripe checkout rate limit exceeded')
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: getRateLimitHeaders(clientIp) }
+    )
+  }
+
+  let payload: { priceId?: string; userId?: string; userEmail?: string; promoCode?: string } = {}
   try {
-    const { priceId, userId, userEmail, promoCode } = await request.json()
+    payload = await request.json()
+    const { priceId, userId, userEmail, promoCode } = payload
 
     const stripe = new Stripe(config.stripe.secretKey, {
       apiVersion: '2023-10-16',
@@ -47,7 +65,7 @@ export async function POST(request: NextRequest) {
     
     // Fallback: if cookie extraction fails, try using userId from request body
     if (!customer && userId) {
-      console.log('Cookie extraction failed, using userId from request:', userId)
+      logger.warn({ userId }, 'Cookie extraction failed; falling back to userId for Stripe customer lookup')
       // Search for existing customer by Cognito user ID
       const existingCustomers = await stripe.customers.search({
         query: `metadata['cognito_user_id']:'${userId}'`,
@@ -69,10 +87,14 @@ export async function POST(request: NextRequest) {
     }
     
     if (!customer) {
-      return NextResponse.json({ 
-        error: 'User authentication required. Please sign in and try again.',
-        debug: 'No customer found and no userId provided'
-      }, { status: 401 })
+      logger.warn({ userId, priceId }, 'Stripe checkout requested without authenticated customer')
+      return NextResponse.json(
+        {
+          error: 'User authentication required. Please sign in and try again.',
+          debug: 'No customer found and no userId provided',
+        },
+        { status: 401, headers: getRateLimitHeaders(clientIp) }
+      )
     }
 
     // Check if customer already has an active subscription
@@ -88,18 +110,26 @@ export async function POST(request: NextRequest) {
       
       // If trying to subscribe to the same plan, return error
       if (currentPriceId === priceId) {
-        return NextResponse.json({ 
-          error: 'You already have an active subscription to this plan. Use "Manage Subscription" to modify it.',
-          hasActiveSubscription: true
-        }, { status: 400 })
+        logger.info({ customerId: customer.id, priceId }, 'User attempted to subscribe to existing plan')
+        return NextResponse.json(
+          {
+            error: 'You already have an active subscription to this plan. Use "Manage Subscription" to modify it.',
+            hasActiveSubscription: true,
+          },
+          { status: 400, headers: getRateLimitHeaders(clientIp) }
+        )
       }
       
       // If different plan, allow upgrade/downgrade through customer portal
       // For now, we'll prevent duplicate subscriptions entirely
-      return NextResponse.json({ 
-        error: 'You already have an active subscription. Please cancel your current subscription first or use "Manage Subscription" to switch plans.',
-        hasActiveSubscription: true
-      }, { status: 400 })
+      logger.info({ customerId: customer.id, priceId, currentPriceId }, 'User already has active subscription; blocking duplicate checkout')
+      return NextResponse.json(
+        {
+          error: 'You already have an active subscription. Please cancel your current subscription first or use "Manage Subscription" to switch plans.',
+          hasActiveSubscription: true,
+        },
+        { status: 400, headers: getRateLimitHeaders(clientIp) }
+      )
     }
 
     const cognitoUserId =
@@ -176,13 +206,13 @@ export async function POST(request: NextRequest) {
           if (matchingCoupon) {
             sessionConfig.discounts = [{ coupon: matchingCoupon.id }]
           } else {
-            console.warn(`Promo code "${promoCode}" not found, proceeding without discount`)
+            logger.warn({ promoCode }, 'Promo code not found; allowing customer-entered promo codes')
             // If promo code not found, allow customers to enter codes on Stripe's checkout page
             sessionConfig.allow_promotion_codes = true
           }
         }
       } catch (promoError) {
-        console.error('Error applying promo code:', promoError)
+        logger.error({ promoCode, error: promoError }, 'Error applying promo code')
         // Continue without the promo code, allow customers to enter codes on Stripe's checkout page
         sessionConfig.allow_promotion_codes = true
       }
@@ -192,11 +222,24 @@ export async function POST(request: NextRequest) {
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig)
+    logger.info(
+      {
+        customerId: customer.id,
+        sessionId: session.id,
+        priceId,
+        promoCode: promoCode || undefined,
+        hasTrial: Boolean(trialEndTimestamp),
+      },
+      'Stripe checkout session created'
+    )
 
-    return NextResponse.json({ sessionId: session.id })
+    return NextResponse.json({ sessionId: session.id }, { headers: getRateLimitHeaders(clientIp) })
   } catch (error: any) {
-    console.error('Error creating checkout session:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    logger.error({ error, priceId: payload.priceId, userId: payload.userId }, 'Error creating checkout session')
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500, headers: getRateLimitHeaders(clientIp) }
+    )
   }
 }
 

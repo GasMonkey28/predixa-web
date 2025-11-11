@@ -2,11 +2,27 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getOrCreateStripeCustomer } from '@/lib/stripe-helpers'
 import { config } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
+import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 
 // Force dynamic rendering since we use searchParams
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
+  const clientIp =
+    (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    request.ip ||
+    'anonymous'
+
+  if (!checkRateLimit(clientIp)) {
+    logger.warn({ ip: clientIp }, 'Stripe subscription rate limit exceeded')
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: getRateLimitHeaders(clientIp) }
+    )
+  }
+
   try {
     const stripe = new Stripe(config.stripe.secretKey, {
       apiVersion: '2023-10-16',
@@ -20,7 +36,7 @@ export async function GET(request: NextRequest) {
     
     // Fallback: if cookie extraction fails, try using userId from query params
     if (!customer && userId) {
-      console.log('Cookie extraction failed, using userId from query:', userId)
+      logger.warn({ userId }, 'Cookie extraction failed; falling back to userId for subscription lookup')
       // Search for existing customer by Cognito user ID
       const existingCustomers = await stripe.customers.search({
         query: `metadata['cognito_user_id']:'${userId}'`,
@@ -33,8 +49,8 @@ export async function GET(request: NextRequest) {
     }
     
     if (!customer) {
-      console.log('No customer found for subscription fetch')
-      return NextResponse.json(null)
+      logger.warn({ userId }, 'No customer found when fetching subscription')
+      return NextResponse.json(null, { headers: getRateLimitHeaders(clientIp) })
     }
 
     // Get the customer's subscriptions - get most recent first
@@ -46,20 +62,20 @@ export async function GET(request: NextRequest) {
     })
 
     if (subscriptions.data.length === 0) {
-      console.log('No subscriptions found for customer:', customer.id)
-      return NextResponse.json(null)
+      logger.info({ customerId: customer.id }, 'No Stripe subscriptions found for customer')
+      return NextResponse.json(null, { headers: getRateLimitHeaders(clientIp) })
     }
 
     // Sort by created date (most recent first) and get the first one
     const sortedSubscriptions = subscriptions.data.sort((a, b) => b.created - a.created)
     const subscription = sortedSubscriptions[0]
     
-    console.log('Found subscription:', {
-      id: subscription.id,
+    logger.debug({
+      subscriptionId: subscription.id,
       status: subscription.status,
-      customer: customer.id,
-      created: new Date(subscription.created * 1000).toISOString()
-    })
+      customerId: customer.id,
+      created: new Date(subscription.created * 1000).toISOString(),
+    }, 'Stripe subscription retrieved')
     const subscriptionItem = subscription.items.data[0]
     
     if (!subscriptionItem) {
@@ -80,7 +96,7 @@ export async function GET(request: NextRequest) {
           productName = product.name || 'Pro Plan'
         }
       } catch (productError) {
-        console.error('Error fetching product:', productError)
+        logger.error({ error: productError, productId: price.product }, 'Error fetching Stripe product details')
         // Continue with default name
       }
     }
@@ -98,12 +114,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(subscriptionData)
+    logger.info({ customerId: customer.id, subscriptionId: subscription.id, status: subscription.status }, 'Returning current subscription details')
+    return NextResponse.json(subscriptionData, { headers: getRateLimitHeaders(clientIp) })
   } catch (error: any) {
-    console.error('Error fetching subscription:', error)
+    logger.error({ error }, 'Error fetching Stripe subscription')
     // Return null instead of error to avoid breaking the UI
     // The UI already handles null subscriptions gracefully
-    return NextResponse.json(null)
+    return NextResponse.json(null, { headers: getRateLimitHeaders(clientIp) })
   }
 }
 
