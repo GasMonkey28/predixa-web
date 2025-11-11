@@ -23,6 +23,8 @@ const optionalButRecommended = [
   'SENTRY_DSN',
   'SENTRY_ENVIRONMENT',
   'SENTRY_TRACES_SAMPLE_RATE',
+  'RATE_LIMIT_REQUESTS_PER_WINDOW',
+  'RATE_LIMIT_WINDOW_MS',
 ]
 
 function checkVars(names, { required }) {

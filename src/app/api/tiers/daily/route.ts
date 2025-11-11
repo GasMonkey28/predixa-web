@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import axios from 'axios'
 
 import { config } from '@/lib/server/config'
+import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 
 // Force dynamic rendering - prevents Next.js from caching this route
 export const dynamic = 'force-dynamic'
@@ -18,8 +19,26 @@ const cleanText = (text: string) => {
     .trim()
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const clientIp =
+      (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      'anonymous'
+
+    if (!checkRateLimit(clientIp)) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Too many requests. Please slow down.' }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getRateLimitHeaders(clientIp),
+          },
+        }
+      )
+    }
+
     // Get today's date in YYYY-MM-DD format using ET timezone (market timezone)
     // This ensures consistent date calculation regardless of server timezone
     const etTimeZone = 'America/New_York'
@@ -149,20 +168,26 @@ export async function GET() {
       }
 
       return NextResponse.json(fallback, {
+        status: 200,
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0',
           'Surrogate-Control': 'no-store',
+          ...getRateLimitHeaders(clientIp),
         },
-        status: 200,
       })
     }
   } catch (error) {
     console.error('Error fetching daily tiers:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch daily tier data' },
-      { status: 500 }
-    )
+    const clientIp =
+      (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      'anonymous'
+
+    return NextResponse.json({ error: 'Failed to fetch daily tier data' }, {
+      status: 500,
+      headers: getRateLimitHeaders(clientIp),
+    })
   }
 }

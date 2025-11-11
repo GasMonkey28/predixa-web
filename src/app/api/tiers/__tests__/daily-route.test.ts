@@ -34,7 +34,7 @@ describe('/api/tiers/daily', () => {
       })
 
     const { GET } = await import('../daily/route')
-    const response = (await GET()) as NextResponse
+    const response = (await GET(new Request('https://example.com/api/tiers/daily'))) as NextResponse
     const payload = (await response.json()) as any
 
     expect(response.status).toBe(200)
@@ -42,13 +42,14 @@ describe('/api/tiers/daily', () => {
     expect(payload.short_tier).toBe('B')
     expect(payload.summary).toContain('Strong upside momentum')
     expect(payload.fallback).toBeUndefined()
+    expect(response.headers.get('X-RateLimit-Limit')).toBe('100')
   })
 
   it('returns graceful fallback when S3 fetch fails', async () => {
     mockedAxiosGet.mockRejectedValue(new Error('Missing summary_json file'))
 
     const { GET } = await import('../daily/route')
-    const response = (await GET()) as NextResponse
+    const response = (await GET(new Request('https://example.com/api/tiers/daily'))) as NextResponse
     const payload = (await response.json()) as any
 
     expect(response.status).toBe(200)
@@ -56,6 +57,8 @@ describe('/api/tiers/daily', () => {
     expect(payload.long_tier).toBe('N/A')
     expect(payload.short_tier).toBe('N/A')
     expect(payload.summary).toContain('temporarily unavailable')
+    expect(response.headers.get('X-RateLimit-Limit')).toBe('100')
   })
 })
+
 

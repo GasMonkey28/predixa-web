@@ -81,7 +81,11 @@ The `backend/auth_billing` tree contains zipped Lambda packages (`entitlements_a
 | --- | --- | --- |
 | Vercel Next.js | Vercel dashboard, Web analytics, Sentry (`SENTRY_DSN`) | Track slow endpoint logs; raise Sentry alerts on uncaught errors. |
 | Stripe | Dashboard → Developers → Logs | Verify webhook deliveries, subscription events, portal sessions. |
-| AWS Lambda (entitlements/webhooks) | CloudWatch Logs | Set alarms on errors/timeouts. |
+| AWS Lambda (entitlements/webhooks) | CloudWatch Logs | Set alarms on errors/timeouts; include request IDs in logs. |
+### Rate Limiting & Abuse Protection
+- API routes support a lightweight token-bucket limiter (default 100 req / 60s). Tune via `RATE_LIMIT_REQUESTS_PER_WINDOW` and `RATE_LIMIT_WINDOW_MS`.
+- Sensitive routes (`/api/stripe/*`, `/api/entitlements`) should emit structured logs with trace IDs and avoid logging PII.
+- Consider upgrading to Redis/Edge KV if abuse is observed or traffic scales.
 | DynamoDB Entitlements | CloudWatch metrics | Alert on throttled writes/reads; ensure TTL cleanup. |
 | S3 Market Data | S3 Inventory / scheduled Lambda check | Alert when latest files are older than trading day. |
 
