@@ -3,6 +3,7 @@ import axios from 'axios'
 
 import { config } from '@/lib/server/config'
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
+import { logger } from '@/lib/server/logger'
 
 // Force dynamic rendering - prevents Next.js from caching this route
 export const dynamic = 'force-dynamic'
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
       'anonymous'
 
     if (!checkRateLimit(clientIp)) {
+      logger.warn({ ip: clientIp }, 'Rate limit exceeded for tiers endpoint')
       return new NextResponse(
         JSON.stringify({ error: 'Too many requests. Please slow down.' }),
         {
@@ -64,9 +66,9 @@ export async function GET(request: Request) {
             'Pragma': 'no-cache'
           }
         })
-        console.log(`Successfully fetched data for ${today}`)
+        logger.debug({ sourceDate: today }, 'Fetched tiers data for today')
       } catch (todayError) {
-        console.log(`Today's data not available (${today}), trying yesterday: ${yesterdayStr}`)
+        logger.warn({ today, fallbackDate: yesterdayStr }, 'Today tier data missing; falling back to yesterday')
         url = `https://${BUCKET}.s3.amazonaws.com/summary_json/${yesterdayStr}.json`
         actualDate = yesterdayStr
         response = await axios.get(url, {
@@ -75,7 +77,7 @@ export async function GET(request: Request) {
             'Pragma': 'no-cache'
           }
         })
-        console.log(`Successfully fetched data for ${yesterdayStr}`)
+        logger.debug({ sourceDate: yesterdayStr }, 'Fetched tiers data for fallback date')
       }
       
       // Transform today's (or actual) data
@@ -103,7 +105,7 @@ export async function GET(request: Request) {
         prevShort = prevData.short_signal || prevData.short_tier || prevData.shortTier || 'N/A'
       } catch (prevErr) {
         // If previous day isn't available, leave as null
-        console.log(`Previous day data not available for ${prevDateStr}`)
+        logger.debug({ prevDate: prevDateStr }, 'Previous day tier data not available')
       }
 
       const transformedData = {
@@ -139,9 +141,7 @@ export async function GET(request: Request) {
     } catch (s3Error) {
       const message =
         s3Error instanceof Error ? s3Error.message : typeof s3Error === 'string' ? s3Error : 'Unknown error'
-      console.error(`S3 data not available for ${today}`)
-      console.error('S3 Error details:', message)
-      console.error('BUCKET:', BUCKET)
+      logger.error({ today, bucket: BUCKET, error: message }, 'S3 tier summary unavailable; returning fallback')
 
       const fallback = {
         date: today,
@@ -179,7 +179,7 @@ export async function GET(request: Request) {
       })
     }
   } catch (error) {
-    console.error('Error fetching daily tiers:', error)
+    logger.error({ error, message: (error as Error)?.message }, 'Unhandled error in tiers API')
     const clientIp =
       (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
       request.headers.get('x-real-ip') ||

@@ -9,6 +9,9 @@ jest.mock('axios', () => {
 })
 
 const mockedAxiosGet = (require('axios').default.get as jest.Mock)
+jest.mock('@/lib/server/logger', () => ({
+  logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}))
 
 describe('/api/tiers/daily', () => {
   beforeEach(() => {
