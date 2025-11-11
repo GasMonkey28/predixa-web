@@ -50,7 +50,7 @@ export default function HomePage() {
       )}
       
       <div className={isLoading ? 'pointer-events-none opacity-50' : ''}>
-        <div className="text-center mb-8">
+        <div className="text-center mb-10">
           <div className="flex justify-center mb-4">
             <img 
               src="/logo.jpg" 
@@ -59,8 +59,11 @@ export default function HomePage() {
             />
           </div>
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Predixa</h1>
-          <p className="mt-2 text-lg text-gray-600 dark:text-gray-300">
-            Professional trading analytics and market insights
+          <p className="mt-3 text-lg text-gray-600 dark:text-gray-300">
+            Intraday levels, curated commentary, and economic context—built for active traders.
+          </p>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            Join to unlock the daily tier dashboard, weekly outlook, and instant billing controls.
           </p>
         </div>
 

@@ -6,41 +6,8 @@ export const metadata: Metadata = {
   description: 'Get help with Predixa, explore our knowledge resources, or contact the team directly.',
 }
 
-const supportChannels = [
-  {
-    title: 'Knowledge base',
-    description: 'Browse best practices, walkthroughs, and trading playbooks as we roll out new content.',
-    actionLabel: 'View articles (coming soon)',
-    href: '#',
-    disabled: true,
-  },
-  {
-    title: 'Feature roadmap',
-    description: 'See what the team is building next and submit your own requests for upcoming releases.',
-    actionLabel: 'Check roadmap (coming soon)',
-    href: '#',
-    disabled: true,
-  },
-]
-
-const quickLinks = [
-  {
-    label: 'Account & Billing',
-    description: 'Manage subscriptions, invoices, and payment methods.',
-    href: '/account',
-    disabled: false,
-  },
-  {
-    label: 'Platform Status',
-    description: 'View real-time system status and scheduled maintenance notices.',
-    disabled: true,
-  },
-  {
-    label: 'Release Notes',
-    description: 'Catch up on the latest features, fixes, and performance improvements.',
-    disabled: true,
-  },
-]
+const supportChannels: never[] = []
+const quickLinks: never[] = []
 
 export default function SupportPage() {
   return (
@@ -85,60 +52,7 @@ export default function SupportPage() {
         </div>
       </section>
 
-      <section className="space-y-6">
-        <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Self-service resources</h2>
-        <div className="grid gap-6 sm:grid-cols-2">
-          {supportChannels.map((channel) => (
-            <div
-              key={channel.title}
-              className={`rounded-xl border p-6 ${
-                channel.disabled
-                  ? 'border-dashed border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40'
-                  : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
-              }`}
-            >
-              <p className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                {channel.disabled ? 'Coming soon' : 'Available now'}
-              </p>
-              <h3 className="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{channel.title}</h3>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">{channel.description}</p>
-              {channel.disabled ? (
-                <span className="mt-4 inline-block text-sm font-medium text-gray-400">{channel.actionLabel}</span>
-              ) : (
-                <Link
-                  href={channel.href}
-                  className="mt-4 inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                >
-                  {channel.actionLabel}
-                </Link>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-6">
-        <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Quick links</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {quickLinks.map((link) => (
-            <div key={link.label} className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
-              <p className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Resource</p>
-              <h3 className="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{link.label}</h3>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">{link.description}</p>
-              {link.disabled ? (
-                <span className="mt-4 inline-flex items-center text-sm font-medium text-gray-400">Coming soon</span>
-              ) : (
-                <Link
-                  href={link.href ?? '#'}
-                  className="mt-4 inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                >
-                  Go to page
-                </Link>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* Self-service resources and quick links will return once the public KB and status page launch */}
 
     </main>
   )

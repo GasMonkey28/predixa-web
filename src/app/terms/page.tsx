@@ -31,15 +31,18 @@ export default function TermsPage() {
 
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">2. Description of Service</h2>
-        <p>Predixa provides financial market analytics through its web-based Platform, including:</p>
+        <p>Predixa provides financial market analytics and workflow tools through its web-based Platform, including:</p>
         <ul className="ml-6 list-disc space-y-2">
-          <li>Daily OHLC charts and market data</li>
-          <li>Weekly forecasts and predictions</li>
-          <li>Daily tier rankings</li>
-          <li>Options flow analysis</li>
-          <li>Economic calendar</li>
-          <li>Real-time market updates</li>
+          <li>Daily market commentary, tiers, and pricing levels derived from S3-hosted market data</li>
+          <li>Weekly outlooks and curated insights surfaced in the web application</li>
+          <li>Economic calendar events sourced from Investing.com and FRED feeds</li>
+          <li>Account management, billing portal access, and subscription status handling</li>
+          <li>Customer support via email and in-product notifications</li>
         </ul>
+        <p>
+          Experimental or roadmap features may be introduced progressively. We clearly label beta functionality and it may be
+          withdrawn without notice.
+        </p>
       </section>
 
       <section className="space-y-4">
