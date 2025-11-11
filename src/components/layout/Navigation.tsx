@@ -27,6 +27,13 @@ const navigationItems = [
     icon: '👤'
   }
 ]
+const SOCIAL_LINKS = [
+  {
+    name: 'Follow us on X',
+    href: 'https://twitter.com/Predixa28',
+    label: 'Predixa on X',
+  },
+]
 
 export default function Navigation() {
   const pathname = usePathname()
@@ -76,8 +83,20 @@ export default function Navigation() {
           )}
 
           {/* User Menu */}
-          <div className="flex items-center">
-            {/* Reserved for future user menu items */}
+          <div className="flex items-center space-x-3">
+            {SOCIAL_LINKS.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={item.label}
+                className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800"
+              >
+                <span className="text-base leading-none">𝕏</span>
+                {item.name}
+              </a>
+            ))}
           </div>
         </div>
       </div>
