@@ -12,12 +12,11 @@
     "test": "jest"
   },
   "dependencies": {
-    "@sentry/nextjs": "^8.21.0",
-    "pino": "^8.19.0",
     "@aws-amplify/ui-react": "^6.0.7",
     "@aws-sdk/client-cognito-identity-provider": "^3.470.0",
     "@aws-sdk/client-dynamodb": "^3.917.0",
     "@aws-sdk/lib-dynamodb": "^3.917.0",
+    "@sentry/nextjs": "^8.21.0",
     "@stripe/stripe-js": "^2.4.0",
     "aws-amplify": "^6.0.7",
     "axios": "^1.7.4",
@@ -29,6 +28,7 @@
     "lucide-react": "^0.548.0",
     "motion": "^12.23.24",
     "next": "^14.2.33",
+    "pino": "^8.19.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
@@ -38,10 +38,10 @@
   },
   "devDependencies": {
     "@types/cheerio": "^0.22.35",
+    "@types/jest": "^29.5.12",
     "@types/node": "^20.14.12",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
-    "@types/jest": "^29.5.12",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.5",
@@ -52,6 +52,7 @@
     "prettier-plugin-tailwindcss": "^0.6.6",
     "tailwindcss": "^3.4.13",
     "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.6.2"
   }
 }
