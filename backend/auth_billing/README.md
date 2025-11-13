@@ -7,6 +7,7 @@ Production-ready DynamoDB-based user management layer that tracks authentication
 - **Post-Confirmation Lambda**: Creates Stripe customer + DynamoDB user row on signup
 - **Stripe Webhook Lambda**: Updates DynamoDB entitlements table from Stripe events
 - **Entitlements API Lambda**: Returns subscription status for authenticated users
+- **Delete User API Lambda**: Allows users to delete their account across all systems (Cognito, DynamoDB, Stripe)
 
 ## Table Design
 
@@ -78,7 +79,8 @@ Your Lambda execution role needs:
       "Action": [
         "dynamodb:GetItem",
         "dynamodb:PutItem",
-        "dynamodb:UpdateItem"
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem"
       ],
       "Resource": [
         "arn:aws:dynamodb:us-east-1:*:table/UserProfiles",
@@ -93,6 +95,13 @@ Your Lambda execution role needs:
         "logs:PutLogEvents"
       ],
       "Resource": "arn:aws:logs:*:*:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:AdminDeleteUser"
+      ],
+      "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/*"
     }
   ]
 }
@@ -128,6 +137,21 @@ Your Lambda execution role needs:
 5. Set environment variables
 6. Set timeout: 10 seconds
 7. Set memory: 128 MB
+
+#### Delete User API Lambda
+1. Create Lambda function (Python 3.11)
+2. Set handler: `delete_user_lambda.lambda_handler`
+3. Create API Gateway endpoint: `DELETE /me/account`
+4. **Configure Cognito Authorizer** in API Gateway:
+   - Type: Cognito User Pool
+   - User Pool: Your Cognito User Pool ID
+   - Token Source: Authorization
+5. Set environment variables (including `COGNITO_USER_POOL_ID`)
+6. Set timeout: 30 seconds (deleting from multiple systems)
+7. Set memory: 256 MB
+8. **Ensure IAM role has permissions**:
+   - `dynamodb:DeleteItem` (for both tables)
+   - `cognito-idp:AdminDeleteUser`
 
 ## Deployment
 
@@ -176,6 +200,9 @@ python stripe_webhook_lambda.py test
 
 # Test Entitlements API
 python entitlements_api_lambda.py test
+
+# Test Delete User API (WARNING: This will delete a user!)
+python delete_user_lambda.py test
 ```
 
 ### Integration Testing
@@ -194,6 +221,11 @@ python entitlements_api_lambda.py test
    - With valid JWT → Returns subscription status
    - With invalid JWT → Returns 401
    - New user (no entitlements) → Returns `status="none"`
+
+4. **Delete User API**: Call API Gateway endpoint:
+   - With valid JWT → Deletes user from all systems, returns success
+   - With invalid JWT → Returns 401
+   - Verify deletion in Cognito, DynamoDB, and Stripe
 
 ## Flow Diagram
 
@@ -224,6 +256,18 @@ API Gateway (Cognito Authorizer validates JWT)
     ↓
 Entitlements API Lambda
     └─→ Return status from DynamoDB
+    
+User Deletes Account
+    ↓
+Frontend/iOS calls DELETE /me/account
+    ↓
+API Gateway (Cognito Authorizer validates JWT)
+    ↓
+Delete User API Lambda
+    ├─→ Delete from DynamoDB UserProfiles
+    ├─→ Delete from DynamoDB predixa_entitlements
+    ├─→ Delete from Stripe
+    └─→ Delete from Cognito
 ```
 
 ## Error Handling

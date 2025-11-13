@@ -28,7 +28,12 @@ zip -r stripe_webhook.zip . \
 
 zip -r entitlements_api.zip . \
   -x "*.pyc" "__pycache__/*" "*.git*" "*.md" "*.txt" \
-  -x "post_confirmation_lambda.py" "stripe_webhook_lambda.py"
+  -x "post_confirmation_lambda.py" "stripe_webhook_lambda.py" "delete_user_lambda.py"
+
+zip -r delete_user_api.zip . \
+  -x "*.pyc" "__pycache__/*" "*.git*" "*.md" "*.txt" \
+  -x "post_confirmation_lambda.py" "stripe_webhook_lambda.py" "entitlements_api_lambda.py" \
+  -x "delete_user.py" "find_duplicate_users.py"
 ```
 
 ### 2. Create IAM Role
@@ -62,12 +67,28 @@ aws iam put-role-policy \
       "Action": [
         "dynamodb:GetItem",
         "dynamodb:PutItem",
-        "dynamodb:UpdateItem"
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem"
       ],
       "Resource": [
         "arn:aws:dynamodb:us-east-1:*:table/UserProfiles",
         "arn:aws:dynamodb:us-east-1:*:table/predixa_entitlements"
       ]
+    }]
+  }'
+
+# Add Cognito permissions for delete user function
+aws iam put-role-policy \
+  --role-name predixa-lambda-execution-role \
+  --policy-name CognitoDeleteUserAccess \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:AdminDeleteUser"
+      ],
+      "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/*"
     }]
   }'
 ```
@@ -134,7 +155,28 @@ aws lambda create-function \
 #   - Token Source: Authorization
 ```
 
-### 6. Configure Stripe Webhook
+### 6. Deploy Delete User API Lambda
+
+```bash
+# Create function
+aws lambda create-function \
+  --function-name predixa-delete-user-api \
+  --runtime python3.11 \
+  --role arn:aws:iam::ACCOUNT_ID:role/predixa-lambda-execution-role \
+  --handler delete_user_lambda.lambda_handler \
+  --zip-file fileb://delete_user_api.zip \
+  --timeout 30 \
+  --memory-size 256 \
+  --environment Variables="{AWS_REGION=us-east-1,USERS_TABLE=UserProfiles,ENTITLEMENTS_TABLE=predixa_entitlements,STRIPE_API_KEY=sk_live_xxx,COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX}"
+
+# Create API Gateway endpoint DELETE /me/account
+# Configure Cognito Authorizer:
+#   - Type: Cognito User Pool
+#   - User Pool: Your Cognito User Pool ID
+#   - Token Source: Authorization
+```
+
+### 7. Configure Stripe Webhook
 
 1. Go to Stripe Dashboard → Developers → Webhooks
 2. Add endpoint: `https://YOUR_API_GATEWAY_URL/stripe/webhook`
@@ -158,6 +200,10 @@ aws lambda create-function \
 
 # Test Entitlements API:
 curl -X GET https://YOUR_API_GATEWAY_URL/me/entitlements \
+  -H "Authorization: Bearer YOUR_COGNITO_JWT"
+
+# Test Delete User API:
+curl -X DELETE https://YOUR_API_GATEWAY_URL/me/account \
   -H "Authorization: Bearer YOUR_COGNITO_JWT"
 ```
 

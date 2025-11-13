@@ -1,0 +1,17 @@
+{
+  "requestContext": {
+    "authorizer": {
+      "claims": {
+        "sub": "google_100578348725685118649",
+        "cognito:username": "google_100578348725685118649",
+        "email": "kerendeyouxiang02@gmail.com"
+      }
+    }
+  },
+  "headers": {
+    "Authorization": "Bearer eyJraWQiOiJ..."
+  },
+  "httpMethod": "DELETE",
+  "path": "/me/account"
+}
+
