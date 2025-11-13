@@ -485,7 +485,7 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                   ))}
                 </div>
               
-              <div className={`${longConfig.text} text-xs mt-2 font-medium`}>
+              <div className={`text-green-200 text-xs mt-2 font-medium`}>
                 {longConfig.description}
               </div>
             </div>
