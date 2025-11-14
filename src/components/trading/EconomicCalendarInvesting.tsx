@@ -278,7 +278,7 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
           <div
             key={i}
             className={`w-3 h-3 rounded-full ${
-              i < impact ? getImpactBgColor(impact) : 'bg-gray-300 dark:bg-gray-600'
+              i < impact ? getImpactBgColor(impact) : 'bg-gray-600'
             }`}
           />
         ))}
@@ -297,11 +297,11 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
       if (isNaN(actualNum) || isNaN(forecastNum)) return null
       
       if (actualNum > forecastNum) {
-        return { color: 'text-green-600', symbol: '▲' }
+        return { color: 'text-green-400', symbol: '▲' }
       } else if (actualNum < forecastNum) {
-        return { color: 'text-red-600', symbol: '▼' }
+        return { color: 'text-red-400', symbol: '▼' }
       }
-      return { color: 'text-gray-600', symbol: '=' }
+      return { color: 'text-blue-400', symbol: '=' }
     } catch {
       return null
     }
@@ -311,12 +311,12 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-gray-700 rounded w-1/3 mb-4"></div>
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              <div key={i} className="h-16 bg-gray-700 rounded"></div>
             ))}
           </div>
         </div>
@@ -326,9 +326,9 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
 
   if (error) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <div className="text-center">
-          <div className="text-red-600 dark:text-red-400 mb-4">
+          <div className="text-red-400 mb-4">
             <div className="text-lg font-semibold mb-2">⚠️ Investing.com Economic Calendar Error</div>
             <div className="text-sm">{error}</div>
           </div>
@@ -339,7 +339,7 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
           >
             {loading ? 'Retrying...' : 'Retry'}
           </button>
-          <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+          <div className="mt-4 text-sm text-gray-400">
             Showing sample data below
           </div>
         </div>
@@ -352,9 +352,9 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Economic Calendar</h2>
+          <h2 className="text-lg font-semibold text-white mb-1">Economic Calendar</h2>
           {lastUpdated && (
-            <p className="text-xs text-gray-500 dark:text-gray-500">
+            <p className="text-xs text-gray-400">
               Last updated: {lastUpdated.toLocaleTimeString()}
             </p>
           )}
@@ -363,11 +363,11 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
         <div className="flex items-center gap-3">
           {/* Impact Filter */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Impact:</span>
+            <span className="text-sm text-gray-300">Impact:</span>
             <select
               value={selectedImpact}
               onChange={(e) => setSelectedImpact(Number(e.target.value))}
-              className="text-sm border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1"
+              className="text-sm border border-gray-600 bg-gray-800 text-white rounded px-2 py-1"
             >
               <option value={0}>All Events</option>
               <option value={1}>Low+ (1+)</option>
@@ -380,7 +380,7 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
 
       {/* Events List */}
       {filteredEvents.length === 0 ? (
-        <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+        <div className="text-center text-gray-400 py-8">
           No events {selectedImpact > 0 ? `with impact ≥ ${selectedImpact}` : ''} today
         </div>
       ) : (
@@ -389,17 +389,17 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
             const comparison = getValueComparison(event.actual, event.forecast)
             
             return (
-              <div key={event.id} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <div key={event.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-mono text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                    <span className="text-sm font-mono text-gray-300 bg-gray-800 px-2 py-1 rounded">
                       {event.time}
                     </span>
                     {getImpactDots(event.impact)}
                   </div>
                 </div>
 
-                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+                <h3 className="text-sm font-medium text-white mb-3">
                   {event.event}
                 </h3>
 
@@ -407,15 +407,15 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   {event.actual !== null && event.actual !== undefined && event.actual !== '' && (
                     <div>
-                      <div className="text-gray-600 dark:text-gray-400 text-xs mb-1">Actual</div>
-                      <div className={`font-mono flex items-center gap-1 ${comparison?.color || 'text-emerald-400'}`}>
+                      <div className="text-gray-400 text-xs mb-1">Actual</div>
+                      <div className={`font-mono flex items-center gap-1 font-semibold ${comparison?.color || 'text-blue-400'}`}>
                         {event.actual}
                         {comparison ? (
                           <span className={comparison.color}>
                             {comparison.symbol}
                           </span>
                         ) : (
-                          <span className="text-emerald-400">▲</span>
+                          <span className="text-blue-400">▲</span>
                         )}
                       </div>
                     </div>
@@ -423,8 +423,8 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
                   
                   {event.forecast !== null && event.forecast !== undefined && event.forecast !== '' && (
                     <div>
-                      <div className="text-gray-600 dark:text-gray-400 text-xs mb-1">Forecast</div>
-                      <div className="font-mono text-gray-900 dark:text-gray-100">
+                      <div className="text-gray-400 text-xs mb-1">Forecast</div>
+                      <div className="font-mono text-gray-200 font-medium">
                         {event.forecast}
                       </div>
                     </div>
@@ -432,8 +432,8 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
                   
                   {event.previous !== null && event.previous !== undefined && event.previous !== '' && (
                     <div>
-                      <div className="text-gray-600 dark:text-gray-400 text-xs mb-1">Previous</div>
-                      <div className="font-mono text-gray-900 dark:text-gray-100">
+                      <div className="text-gray-400 text-xs mb-1">Previous</div>
+                      <div className="font-mono text-gray-200 font-medium">
                         {event.previous}
                       </div>
                     </div>
