@@ -90,43 +90,54 @@ function DailyPageContent() {
     })
     .sort((a: any, b: any) => a.date.getTime() - b.date.getTime())
 
-  // Get current bar (last one in regular hours)
+  // Get current bar (last one in regular hours) - this is today's 4:00 PM close after market closes
   const currentBar = regularHoursBars[regularHoursBars.length - 1]
   const currentPrice = currentBar?.c || 0
   
-  // Get the current bar's trading day start (ET timezone)
+  // Calculate previous trading day's close
+  // We need to find the last bar from regular hours of the previous trading day
   let previousClose = 0
-  if (currentBar) {
-    // Get the latest bar from all bars to determine the current trading day
-    // This ensures we use the most recent data point, not just the filtered regular hours
-    const latestBar = allBars[allBars.length - 1]
-    const latestBarDate = new Date(latestBar.t)
-    const latestDateET = new Date(latestBarDate.toLocaleString('en-US', { timeZone: nyTZ }))
-    const currentDateStr = latestDateET.toISOString().split('T')[0] // YYYY-MM-DD
+  if (currentBar && regularHoursBars.length > 0) {
+    // Get the current trading day date (ET timezone)
+    const currentBarDate = new Date(currentBar.t)
+    const currentBarDateET = new Date(currentBarDate.toLocaleString('en-US', { timeZone: nyTZ }))
+    const currentDateStr = currentBarDateET.toISOString().split('T')[0] // YYYY-MM-DD
     
-    // Find the previous trading day's 4:00 PM ET close price
-    // Look for the bar with timestamp T15:45:00 (3:45-4:00 PM bar, closes at 4:00 PM) from previous trading day
-    const previousDayBars = allBars.filter((bar: any) => {
+    // Filter bars to only regular market hours, then group by date
+    // This ensures we get the 4:00 PM close from the previous trading day
+    const barsByDate = new Map<string, any[]>()
+    
+    regularHoursBars.forEach((bar: any) => {
       const barDate = new Date(bar.t)
       const barDateET = new Date(barDate.toLocaleString('en-US', { timeZone: nyTZ }))
       const barDateStr = barDateET.toISOString().split('T')[0] // YYYY-MM-DD
-      return barDateStr < currentDateStr
+      
+      if (!barsByDate.has(barDateStr)) {
+        barsByDate.set(barDateStr, [])
+      }
+      barsByDate.get(barDateStr)!.push(bar)
     })
     
-    // Find the specific 4:00 PM close bar (T15:45:00) from the previous trading day
-    // This is the 15-minute bar from 3:45 PM to 4:00 PM, which closes at 4:00 PM
-    // Find all T15:45:00 bars from previous days and take the last one (most recent previous trading day)
-    const previousCloseBars = previousDayBars.filter((bar: any) => {
-      // Check if the timestamp contains T15:45:00 (the 4:00 PM close bar)
-      return bar.t && bar.t.includes('T15:45:00')
-    })
+    // Get all unique dates and sort them
+    const sortedDates = Array.from(barsByDate.keys()).sort()
     
-    // Use the last T15:45:00 bar (most recent previous trading day's 4 PM close)
-    // If no T15:45:00 bar found, fall back to the last bar from previous day
-    const previousCloseBar = previousCloseBars.length > 0 
-      ? previousCloseBars[previousCloseBars.length - 1]
-      : previousDayBars[previousDayBars.length - 1]
-    previousClose = previousCloseBar?.c || 0
+    // Find the previous trading day (the date before today)
+    const currentDateIndex = sortedDates.indexOf(currentDateStr)
+    if (currentDateIndex > 0) {
+      // Get the previous trading day's date
+      const previousDateStr = sortedDates[currentDateIndex - 1]
+      const previousDayBars = barsByDate.get(previousDateStr) || []
+      
+      // Get the last bar from the previous trading day (the 4:00 PM close)
+      if (previousDayBars.length > 0) {
+        // Sort by time to ensure we get the last bar of the day
+        const sortedPreviousBars = previousDayBars.sort((a: any, b: any) => 
+          new Date(a.t).getTime() - new Date(b.t).getTime()
+        )
+        const previousCloseBar = sortedPreviousBars[sortedPreviousBars.length - 1]
+        previousClose = previousCloseBar?.c || 0
+      }
+    }
   }
   
   // Calculate change vs previous trading day's close
@@ -149,7 +160,7 @@ function DailyPageContent() {
           <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
             AI-Powered Market Forecast
           </h1>
-          <p className="text-gray-300 text-lg">Machine learning predictions calculated at market open • Your competitive edge awaits</p>
+          <p className="text-gray-300 text-lg">Signals publish near the opening bell, stay fixed all session, and are built for today—with an occasional carry into tomorrow.</p>
         </motion.div>
 
         {/* Main Layout: Left Column (Trading Signals + Chart) and Right Column (Economic Calendar) */}
