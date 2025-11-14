@@ -71,12 +71,22 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
           }
           
           // Helper to normalize value - handle empty strings, null, undefined
+          // IMPORTANT: Do NOT fill missing actual/forecast with previous values
           const normalizeValue = (val: any): string | null => {
             if (val === null || val === undefined) return null
             const str = String(val).trim()
-            if (str === '' || str === '-' || str === 'TBD' || str === 'N/A') return null
+            if (str === '' || str === '-' || str === 'TBD' || str === 'N/A' || str === 'null' || str === 'undefined') return null
             return str
           }
+          
+          // Extract values separately - do NOT use fallback to previous
+          const actual = normalizeValue(event.actual || event.actual_value)
+          const forecast = normalizeValue(event.forecast || event.forecast_value)
+          const previous = normalizeValue(event.previous || event.previous_value)
+          
+          // Additional validation: ensure actual and forecast are not accidentally set to previous
+          // If actual/forecast equals previous and they shouldn't be the same, it might be a data issue
+          // But we'll still allow it if it's a legitimate match (e.g., rate stays the same)
           
           return {
             id: event.id || event.event_id || `investing-event-${index}`,
@@ -84,9 +94,9 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
             event: event.event || event.title || event.name || event.description || 'Unknown Event',
             impact: impact,
             country: event.country || 'US',
-            actual: normalizeValue(event.actual || event.actual_value),
-            forecast: normalizeValue(event.forecast || event.forecast_value),
-            previous: normalizeValue(event.previous || event.previous_value)
+            actual: actual, // Only set if actual value exists, never fallback to previous
+            forecast: forecast, // Only set if forecast value exists, never fallback to previous
+            previous: previous
           }
         })
         
@@ -216,12 +226,18 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
         }
         
         // Helper to normalize value - handle empty strings, null, undefined
+        // IMPORTANT: Do NOT fill missing actual/forecast with previous values
         const normalizeValue = (val: any): string | null => {
           if (val === null || val === undefined) return null
           const str = String(val).trim()
-          if (str === '' || str === '-' || str === 'TBD' || str === 'N/A') return null
+          if (str === '' || str === '-' || str === 'TBD' || str === 'N/A' || str === 'null' || str === 'undefined') return null
           return str
         }
+        
+        // Extract values separately - do NOT use fallback to previous
+        const actual = normalizeValue(event.actual || event.actual_value)
+        const forecast = normalizeValue(event.forecast || event.forecast_value)
+        const previous = normalizeValue(event.previous || event.previous_value)
         
         return {
           id: event.id || event.event_id || `investing-event-${index}`,
@@ -229,9 +245,9 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
           event: event.event || event.title || event.name || event.description || 'Unknown Event',
           impact: impact,
           country: event.country || 'US',
-          actual: normalizeValue(event.actual || event.actual_value),
-          forecast: normalizeValue(event.forecast || event.forecast_value),
-          previous: normalizeValue(event.previous || event.previous_value)
+          actual: actual, // Only set if actual value exists, never fallback to previous
+          forecast: forecast, // Only set if forecast value exists, never fallback to previous
+          previous: previous
         }
       })
       
@@ -286,25 +302,50 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
     )
   }
 
-  const getValueComparison = (actual?: string | null, forecast?: string | null) => {
-    if (!actual || !forecast) return null
+  const getValueComparison = (actual?: string | null, forecast?: string | null, previous?: string | null) => {
+    if (!actual) return null
     
-    // Simple comparison logic (you'd want more sophisticated parsing)
-    try {
-      const actualNum = parseFloat(actual.replace('%', '').replace('K', '').replace('M', ''))
-      const forecastNum = parseFloat(forecast.replace('%', '').replace('K', '').replace('M', ''))
-      
-      if (isNaN(actualNum) || isNaN(forecastNum)) return null
-      
-      if (actualNum > forecastNum) {
-        return { color: 'text-green-400', symbol: '▲' }
-      } else if (actualNum < forecastNum) {
-        return { color: 'text-red-400', symbol: '▼' }
+    // Helper to parse numeric value from string
+    const parseValue = (val: string): number | null => {
+      try {
+        return parseFloat(val.replace('%', '').replace('K', '').replace('M', '').replace(',', ''))
+      } catch {
+        return null
       }
-      return { color: 'text-blue-400', symbol: '=' }
-    } catch {
-      return null
     }
+    
+    // Priority 1: Compare actual vs forecast if forecast exists
+    if (forecast) {
+      const actualNum = parseValue(actual)
+      const forecastNum = parseValue(forecast)
+      
+      if (actualNum !== null && forecastNum !== null && !isNaN(actualNum) && !isNaN(forecastNum)) {
+        if (actualNum > forecastNum) {
+          return { color: 'text-green-400', symbol: '▲' }
+        } else if (actualNum < forecastNum) {
+          return { color: 'text-red-400', symbol: '▼' }
+        }
+        return { color: 'text-blue-400', symbol: '=' }
+      }
+    }
+    
+    // Priority 2: If no forecast, compare actual vs previous
+    if (previous) {
+      const actualNum = parseValue(actual)
+      const previousNum = parseValue(previous)
+      
+      if (actualNum !== null && previousNum !== null && !isNaN(actualNum) && !isNaN(previousNum)) {
+        if (actualNum > previousNum) {
+          return { color: 'text-green-400', symbol: '▲' }
+        } else if (actualNum < previousNum) {
+          return { color: 'text-red-400', symbol: '▼' }
+        }
+        return { color: 'text-blue-400', symbol: '=' }
+      }
+    }
+    
+    // If no comparison possible, return null (will default to blue)
+    return null
   }
 
   const filteredEvents = events.filter(event => event.impact >= selectedImpact)
@@ -386,7 +427,7 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
       ) : (
         <div className="space-y-3">
           {filteredEvents.map((event) => {
-            const comparison = getValueComparison(event.actual, event.forecast)
+            const comparison = getValueComparison(event.actual, event.forecast, event.previous)
             
             return (
               <div key={event.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
@@ -403,42 +444,53 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
                   {event.event}
                 </h3>
 
-                {/* Event Data */}
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  {event.actual !== null && event.actual !== undefined && event.actual !== '' && (
+                {/* Event Data - Always show 3-column layout for alignment, but only show values if they exist */}
+                {(event.previous || event.actual || event.forecast) && (
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    {/* Actual - Always show label, only show value if it exists */}
                     <div>
                       <div className="text-gray-400 text-xs mb-1">Actual</div>
-                      <div className={`font-mono flex items-center gap-1 font-semibold ${comparison?.color || 'text-blue-400'}`}>
-                        {event.actual}
-                        {comparison ? (
-                          <span className={comparison.color}>
-                            {comparison.symbol}
-                          </span>
-                        ) : (
-                          <span className="text-blue-400">▲</span>
-                        )}
-                      </div>
+                      {event.actual ? (
+                        <div className={`font-mono flex items-center gap-1 font-semibold ${comparison?.color || 'text-blue-400'}`}>
+                          {event.actual}
+                          {comparison ? (
+                            <span className={comparison.color}>
+                              {comparison.symbol}
+                            </span>
+                          ) : (
+                            <span className="text-blue-400">▲</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="font-mono text-gray-500 text-sm">-</div>
+                      )}
                     </div>
-                  )}
-                  
-                  {event.forecast !== null && event.forecast !== undefined && event.forecast !== '' && (
+                    
+                    {/* Forecast - Always show label, only show value if it exists (no fake data) */}
                     <div>
                       <div className="text-gray-400 text-xs mb-1">Forecast</div>
-                      <div className="font-mono text-gray-200 font-medium">
-                        {event.forecast}
-                      </div>
+                      {event.forecast ? (
+                        <div className="font-mono text-gray-200 font-medium">
+                          {event.forecast}
+                        </div>
+                      ) : (
+                        <div className="font-mono text-gray-500 text-sm">-</div>
+                      )}
                     </div>
-                  )}
-                  
-                  {event.previous !== null && event.previous !== undefined && event.previous !== '' && (
+                    
+                    {/* Previous - Always show label, only show value if it exists */}
                     <div>
                       <div className="text-gray-400 text-xs mb-1">Previous</div>
-                      <div className="font-mono text-gray-200 font-medium">
-                        {event.previous}
-                      </div>
+                      {event.previous ? (
+                        <div className="font-mono text-gray-200 font-medium">
+                          {event.previous}
+                        </div>
+                      ) : (
+                        <div className="font-mono text-gray-500 text-sm">-</div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             )
           })}

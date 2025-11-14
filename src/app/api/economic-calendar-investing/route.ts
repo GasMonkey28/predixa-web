@@ -162,15 +162,23 @@ export async function GET(request: Request) {
             console.log('Found JavaScript-embedded calendar data:', jsonData.length, 'events')
             jsDataFound = true
             jsonData.forEach((event: any, index: number) => {
+              // Normalize values - ensure missing actual/forecast stay null (don't use previous as fallback)
+              const normalizeApiValue = (val: any): string | null => {
+                if (val === null || val === undefined) return null
+                const str = String(val).trim()
+                if (str === '' || str === '-' || str === 'TBD' || str === 'N/A' || str === 'null' || str === 'undefined') return null
+                return str
+              }
+              
               events.push({
                 id: `investing-js-${index}-${Date.now()}`,
                 time: event.time || event.release_time || '08:30',
                 event: event.event || event.title || event.name || event.description || 'Economic Event',
                 impact: event.impact || (event.importance === 'high' ? 3 : event.importance === 'medium' ? 2 : 1),
                 country: event.country || event.currency === 'USD' ? 'US' : 'US',
-                actual: event.actual || event.actual_value || null,
-                forecast: event.forecast || event.forecast_value || null,
-                previous: event.previous || event.previous_value || null
+                actual: normalizeApiValue(event.actual || event.actual_value), // Never fallback to previous
+                forecast: normalizeApiValue(event.forecast || event.forecast_value), // Never fallback to previous
+                previous: normalizeApiValue(event.previous || event.previous_value)
               })
             })
           }
@@ -409,9 +417,39 @@ export async function GET(request: Request) {
             }
             
             // Clean up the values - convert empty strings to null, but preserve valid values
-            if (actual === '' || actual === '-' || actual === 'TBD' || actual === 'N/A') actual = null
-            if (forecast === '' || forecast === '-' || forecast === 'TBD' || forecast === 'N/A') forecast = null
-            if (previous === '' || previous === '-' || previous === 'TBD' || previous === 'N/A') previous = null
+            // IMPORTANT: Do NOT fill missing actual/forecast with previous values
+            if (actual === '' || actual === '-' || actual === 'TBD' || actual === 'N/A' || actual === null) actual = null
+            if (forecast === '' || forecast === '-' || forecast === 'TBD' || forecast === 'N/A' || forecast === null) forecast = null
+            if (previous === '' || previous === '-' || previous === 'TBD' || previous === 'N/A' || previous === null) previous = null
+            
+            // Final safeguard: If forecast equals previous exactly, it's almost certainly incorrectly assigned
+            // Forecast and previous are rarely identical, so matching values likely mean forecast is missing
+            // Only keep forecast if we have a clear data attribute proving it's from the forecast column
+            if (forecast && previous && forecast.trim() === previous.trim()) {
+              // Check if forecast has a clear data attribute indicating it's really from forecast column
+              const hasForecastDataAttr = $row.attr('data-forecast') || $row.find('[data-forecast]').attr('data-forecast')
+              
+              // If no clear forecast data attribute, null it out - it's likely incorrectly assigned
+              // This prevents showing previous data as forecast when forecast is actually missing
+              if (!hasForecastDataAttr) {
+                console.log(`[ECONOMIC CALENDAR] Removing suspicious forecast value "${forecast}" that matches previous for event: ${eventName}`)
+                forecast = null
+              }
+            }
+            
+            // Similar check for actual - if it equals previous and we're not confident, be cautious
+            if (actual && previous && actual === previous) {
+              const actualCell = $row.find('.actual, [class*="actual"], [id*="actual"]').first()
+              const hasActualDataAttr = $row.attr('data-actual') || $row.find('[data-actual]').attr('data-actual')
+              
+              // If actual equals previous and doesn't have clear actual-specific identifier,
+              // it might be incorrectly assigned, but actual can legitimately equal previous
+              // So we're less strict here - only null it if we're very uncertain
+              if (!hasActualDataAttr && actualCell.length === 0 && !actual.includes('%') && !actual.includes('K') && !actual.includes('M')) {
+                // For simple numeric values that match previous without clear indicators, be cautious
+                // But this is less common than forecast issues, so we'll keep it for now
+              }
+            }
             
             // Extract country - try multiple methods to identify US events
             let country = $row.find('.flagCur').text().trim() || 
