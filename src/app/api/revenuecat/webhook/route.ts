@@ -1,8 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { CognitoIdentityProviderClient, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider'
 
 import { config } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
 
+// Initialize DynamoDB client
+const dynamoClient = new DynamoDBClient({
+  region: config.aws.region,
+  credentials:
+    config.aws.accessKeyId && config.aws.secretAccessKey
+      ? {
+          accessKeyId: config.aws.accessKeyId,
+          secretAccessKey: config.aws.secretAccessKey,
+        }
+      : undefined,
+})
+
+const docClient = DynamoDBDocumentClient.from(dynamoClient)
+const ENTITLEMENTS_TABLE = config.entitlements.tableName
+
+// Initialize Cognito client (for user lookup if needed)
 const cognitoClient = new CognitoIdentityProviderClient({
   region: config.aws.region,
   credentials:
@@ -24,91 +43,219 @@ export async function POST(request: NextRequest) {
     //   return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     // }
 
+    // RevenueCat webhook structure: { event: { ... } }
     const { event } = body
-    const { app_user_id, product_id, type, environment } = event
+    
+    if (!event) {
+      logger.warn('RevenueCat webhook received without event object')
+      return NextResponse.json({ error: 'Missing event object' }, { status: 400 })
+    }
 
-    // Map RevenueCat events to subscription status
+    const {
+      app_user_id, // This should be the Cognito sub (based on iOS code)
+      product_id,
+      type, // INITIAL_PURCHASE, RENEWAL, CANCELLATION, etc.
+      environment, // SANDBOX or PRODUCTION
+      expiration_at_ms,
+      purchased_at_ms,
+      period_type, // NORMAL, TRIAL, INTRO
+      entitlements, // Object with entitlement info
+    } = event
+
+    // Map RevenueCat events to DynamoDB subscription status
     let subscriptionStatus = 'inactive'
     switch (type) {
       case 'INITIAL_PURCHASE':
       case 'RENEWAL':
-      case 'TEST': // Handle test events
+      case 'UNCANCELLATION':
         subscriptionStatus = 'active'
         break
       case 'CANCELLATION':
+        subscriptionStatus = 'canceled'
+        break
       case 'EXPIRATION':
         subscriptionStatus = 'canceled'
         break
       case 'BILLING_ISSUE':
         subscriptionStatus = 'past_due'
         break
+      case 'TEST':
+        // Test events - just acknowledge
+        logger.info('RevenueCat test webhook received')
+        return NextResponse.json({ 
+          success: true, 
+          message: 'Test webhook received successfully',
+          eventType: 'TEST'
+        })
+      default:
+        logger.warn({ type }, 'Unknown RevenueCat event type')
+        subscriptionStatus = 'inactive'
     }
 
-    console.log('RevenueCat webhook received:', {
+    // Calculate expiration timestamp (convert ms to seconds)
+    const currentPeriodEnd = expiration_at_ms 
+      ? Math.floor(expiration_at_ms / 1000)
+      : null
+
+    // Extract plan/product identifier
+    // RevenueCat product_id might be like "monthly_pro" or "yearly_pro"
+    // Map to your plan format if needed
+    let planId = product_id || null
+
+    // Check entitlements to see if user has active "pro" entitlement
+    let hasActiveEntitlement = false
+    if (entitlements && typeof entitlements === 'object') {
+      const entitlementKeys = Object.keys(entitlements)
+      hasActiveEntitlement = entitlementKeys.some(
+        key => entitlements[key]?.is_active === true
+      )
+      
+      // If we have active entitlements but status is inactive, fix it
+      if (hasActiveEntitlement && subscriptionStatus === 'inactive' && type !== 'CANCELLATION' && type !== 'EXPIRATION') {
+        subscriptionStatus = 'active'
+      }
+    }
+
+    logger.info('RevenueCat webhook received', {
       eventType: type,
       app_user_id,
       product_id,
       environment,
-      subscriptionStatus
+      subscriptionStatus,
+      hasActiveEntitlement,
+      currentPeriodEnd
     })
 
-    // Handle test events differently
-    if (type === 'TEST') {
-      console.log('Test event received - webhook is working correctly')
+    // app_user_id should be the Cognito sub (based on your iOS code)
+    const cognitoSub = app_user_id
+
+    if (!cognitoSub) {
+      logger.error('No app_user_id in RevenueCat event')
       return NextResponse.json({ 
-        success: true, 
-        message: 'Test webhook received successfully',
-        eventType: 'TEST'
-      })
+        error: 'Missing app_user_id' 
+      }, { status: 400 })
     }
 
-    // For real events, try to find the Cognito user
+    // Update DynamoDB entitlements table
     try {
-      const getUserCommand = new AdminGetUserCommand({
-        UserPoolId: config.cognito.userPoolId,
-        Username: app_user_id,
-      })
+      const now = new Date().toISOString()
       
-      const cognitoUser = await cognitoClient.send(getUserCommand)
+      // Check if record exists
+      const existing = await docClient.send(
+        new GetCommand({
+          TableName: ENTITLEMENTS_TABLE,
+          Key: { cognito_sub: cognitoSub },
+        })
+      )
+
+      if (existing.Item) {
+        // Update existing record
+        const updateExpr: string[] = [
+          '#status = :status',
+          'updatedAt = :ua'
+        ]
+        const exprNames: Record<string, string> = { '#status': 'status' }
+        const exprValues: Record<string, any> = {
+          ':status': subscriptionStatus,
+          ':ua': now
+        }
+
+        if (planId) {
+          updateExpr.push('#plan = :plan')
+          exprNames['#plan'] = 'plan'
+          exprValues[':plan'] = planId
+        }
+
+        if (currentPeriodEnd !== null) {
+          updateExpr.push('current_period_end = :cpe')
+          exprValues[':cpe'] = currentPeriodEnd
+        }
+
+        // Add RevenueCat metadata
+        if (product_id) {
+          updateExpr.push('revenuecat_product_id = :rpid')
+          exprValues[':rpid'] = product_id
+        }
+
+        updateExpr.push('platform = :platform')
+        exprValues[':platform'] = 'revenuecat'
+
+        if (environment) {
+          updateExpr.push('revenuecat_environment = :env')
+          exprValues[':env'] = environment
+        }
+
+        await docClient.send(
+          new UpdateCommand({
+            TableName: ENTITLEMENTS_TABLE,
+            Key: { cognito_sub: cognitoSub },
+            UpdateExpression: `SET ${updateExpr.join(', ')}`,
+            ExpressionAttributeNames: exprNames,
+            ExpressionAttributeValues: exprValues,
+          })
+        )
+
+        logger.info({ cognitoSub, status: subscriptionStatus }, '✅ Updated DynamoDB entitlements')
+      } else {
+        // Create new record
+        const item: Record<string, any> = {
+          cognito_sub: cognitoSub,
+          status: subscriptionStatus,
+          platform: 'revenuecat',
+          createdAt: now,
+          updatedAt: now,
+        }
+
+        if (planId) {
+          item.plan = planId
+        }
+
+        if (currentPeriodEnd !== null) {
+          item.current_period_end = currentPeriodEnd
+        }
+
+        if (product_id) {
+          item.revenuecat_product_id = product_id
+        }
+
+        if (environment) {
+          item.revenuecat_environment = environment
+        }
+
+        await docClient.send(
+          new PutCommand({
+            TableName: ENTITLEMENTS_TABLE,
+            Item: item,
+          })
+        )
+
+        logger.info({ cognitoSub, status: subscriptionStatus }, '✅ Created DynamoDB entitlement record')
+      }
       
-      console.log('Cognito user found:', {
-        username: cognitoUser.Username,
-        subscriptionStatus
-      })
-
-      // Here you would typically:
-      // 1. Store subscription data in a database
-      // 2. Update Cognito user attributes
-      // 3. Sync with Stripe if needed
-      // 4. Send notifications to user
-
       return NextResponse.json({ 
         success: true,
-        message: 'Webhook processed successfully',
-        cognitoUser: cognitoUser.Username
+        message: 'Webhook processed and DynamoDB updated',
+        cognito_sub: cognitoSub,
+        status: subscriptionStatus,
+        plan: planId
       })
-    } catch (cognitoError) {
-      // If user doesn't exist in Cognito, log it but don't fail
-      console.log('User not found in Cognito (this is normal for test events):', {
-        app_user_id,
-        error: cognitoError instanceof Error ? cognitoError.message : 'Unknown error'
-      })
-
+    } catch (dbError: any) {
+      logger.error({ error: dbError, cognitoSub }, '❌ Error updating DynamoDB')
       return NextResponse.json({ 
-        success: true,
-        message: 'Webhook received but user not found in Cognito',
-        note: 'This is normal for test events or if user signed up via mobile only'
-      })
+        error: 'Failed to update DynamoDB',
+        details: dbError.message 
+      }, { status: 500 })
     }
   } catch (error: any) {
-    console.error('Error processing RevenueCat webhook:', error)
+    logger.error({ error }, 'Error processing RevenueCat webhook')
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
 // Function to verify RevenueCat webhook signature
 function verifyWebhookSignature(payload: any, signature: string | null): boolean {
-  // Implement signature verification based on RevenueCat documentation
-  // This is a placeholder - you need to implement actual verification
+  // TODO: Implement signature verification based on RevenueCat documentation
+  // This is a placeholder - you should implement actual verification
+  // See: https://docs.revenuecat.com/docs/webhooks#webhook-signing
   return true
 }
