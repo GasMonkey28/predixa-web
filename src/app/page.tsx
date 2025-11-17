@@ -65,18 +65,6 @@ export default function HomePage() {
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
             Join to unlock the daily tier dashboard, weekly outlook, and instant billing controls.
           </p>
-          <div className="mt-4 flex justify-center">
-            <a
-              href="https://twitter.com/predixaweb"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800"
-              aria-label="Follow Predixa on X"
-            >
-              <span className="text-lg">𝕏</span>
-              Follow us on X
-            </a>
-          </div>
         </div>
 
         <div className="max-w-md mx-auto">

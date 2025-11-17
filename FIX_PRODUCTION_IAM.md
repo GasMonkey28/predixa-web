@@ -62,3 +62,13 @@ Gives the IAM user full DynamoDB access so Vercel can read/write to the `UserPro
 
 
 
+
+
+
+
+
+
+
+
+
+

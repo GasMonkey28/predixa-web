@@ -26,7 +26,10 @@ COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID = os.getenv("COGNITO_CLIENT_ID", "")
 
 
-def validate_config() -> dict:
+def validate_config(
+    require_stripe: bool = True,
+    require_webhook: bool = True
+) -> dict:
     """
     Validate required configuration and return any missing keys.
     
@@ -35,10 +38,10 @@ def validate_config() -> dict:
     """
     missing = []
     
-    if not STRIPE_API_KEY:
+    if require_stripe and not STRIPE_API_KEY:
         missing.append("STRIPE_API_KEY or STRIPE_SECRET_KEY")
     
-    if not STRIPE_WEBHOOK_SECRET:
+    if require_webhook and not STRIPE_WEBHOOK_SECRET:
         missing.append("STRIPE_WEBHOOK_SECRET (required for webhook handler)")
     
     if not USERS_TABLE:

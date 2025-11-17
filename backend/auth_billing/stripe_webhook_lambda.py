@@ -22,7 +22,7 @@ import hmac
 import hashlib
 from typing import Dict, Any, Optional
 from config import STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET, validate_config
-from ddb import update_entitlement, get_user
+from ddb import update_entitlement, get_user, ENT_TABLE_OBJ
 from utils import map_stripe_status, create_response
 
 
@@ -68,18 +68,33 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     # API Gateway lowercases header names
     sig_header = headers.get("stripe-signature") or headers.get("Stripe-Signature", "")
     
-    if not sig_header:
-        print("❌ No Stripe-Signature header found")
-        return create_response(400, {"error": "Missing Stripe-Signature header"})
-    
-    # Verify webhook signature
-    try:
-        stripe_event = verify_webhook_signature(body, sig_header)
-        if not stripe_event:
-            return create_response(401, {"error": "Invalid webhook signature"})
-    except Exception as e:
-        print(f"❌ Signature verification error: {e}")
-        return create_response(401, {"error": f"Signature verification failed: {str(e)}"})
+    # If STRIPE_WEBHOOK_SECRET is not set, allow testing without signature (for Lambda console testing)
+    # In production, always require the signature header
+    if not STRIPE_WEBHOOK_SECRET:
+        print("⚠️ STRIPE_WEBHOOK_SECRET not set - allowing test mode (no signature verification)")
+        # For testing, try to parse the body as JSON directly
+        try:
+            if isinstance(body, str):
+                stripe_event = json.loads(body)
+            else:
+                stripe_event = body
+        except Exception as e:
+            print(f"❌ Could not parse body as JSON: {e}")
+            return create_response(400, {"error": "Invalid JSON payload"})
+    else:
+        # Production mode: require signature header
+        if not sig_header:
+            print("❌ No Stripe-Signature header found")
+            return create_response(400, {"error": "Missing Stripe-Signature header"})
+        
+        # Verify webhook signature
+        try:
+            stripe_event = verify_webhook_signature(body, sig_header)
+            if not stripe_event:
+                return create_response(401, {"error": "Invalid webhook signature"})
+        except Exception as e:
+            print(f"❌ Signature verification error: {e}")
+            return create_response(401, {"error": f"Signature verification failed: {str(e)}"})
     
     event_type = stripe_event.get("type")
     event_data = stripe_event.get("data", {}).get("object", {})
@@ -181,17 +196,32 @@ def handle_subscription_created(subscription: Dict[str, Any]) -> None:
     status = map_stripe_status(subscription.get("status", "none"))
     plan_id = subscription.get("items", {}).get("data", [{}])[0].get("price", {}).get("id", "")
     current_period_end = subscription.get("current_period_end")
-    trial_end = subscription.get("trial_end")
     
     print(f"📝 Creating subscription for {cognito_sub}: status={status}, plan={plan_id}")
+    print(f"🔄 Cancelling free trial - subscription starts immediately")
     
+    # When subscription is created, cancel the free trial immediately
+    # We need to explicitly remove trial fields - use update_entitlement with trial_days_remaining=0
+    # and then manually remove trial_expires_at using a separate update
+    
+    # First update with status and clear trial_days_remaining
     update_entitlement(
         cognito_sub=cognito_sub,
         status=status,
         plan=plan_id,
         current_period_end=current_period_end,
-        trial_expires_at=trial_end
+        trial_days_remaining=0  # Clear trial days
     )
+    
+    # Then remove trial_expires_at explicitly
+    try:
+        ENT_TABLE_OBJ.update_item(
+            Key={"cognito_sub": cognito_sub},
+            UpdateExpression="REMOVE trial_expires_at",
+        )
+        print(f"✅ Removed trial_expires_at for {cognito_sub}")
+    except Exception as e:
+        print(f"⚠️ Could not remove trial_expires_at: {e}")
 
 
 def handle_subscription_updated(subscription: Dict[str, Any]) -> None:
@@ -209,17 +239,40 @@ def handle_subscription_updated(subscription: Dict[str, Any]) -> None:
     status = map_stripe_status(subscription.get("status", "none"))
     plan_id = subscription.get("items", {}).get("data", [{}])[0].get("price", {}).get("id", "")
     current_period_end = subscription.get("current_period_end")
-    trial_end = subscription.get("trial_end")
     
     print(f"📝 Updating subscription for {cognito_sub}: status={status}, plan={plan_id}")
     
-    update_entitlement(
-        cognito_sub=cognito_sub,
-        status=status,
-        plan=plan_id,
-        current_period_end=current_period_end,
-        trial_expires_at=trial_end
-    )
+    # If subscription is active, ensure trial is cancelled
+    # Only preserve trial_end if subscription is still in trial status
+    
+    if status == "trialing":
+        # Still in trial, preserve trial_end
+        trial_end = subscription.get("trial_end")
+        update_entitlement(
+            cognito_sub=cognito_sub,
+            status=status,
+            plan=plan_id,
+            current_period_end=current_period_end,
+            trial_expires_at=trial_end
+        )
+    else:
+        # For active subscriptions, cancel any remaining trial
+        update_entitlement(
+            cognito_sub=cognito_sub,
+            status=status,
+            plan=plan_id,
+            current_period_end=current_period_end,
+            trial_days_remaining=0  # Clear trial days
+        )
+        # Remove trial_expires_at explicitly
+        try:
+            ENT_TABLE_OBJ.update_item(
+                Key={"cognito_sub": cognito_sub},
+                UpdateExpression="REMOVE trial_expires_at",
+            )
+            print(f"✅ Removed trial_expires_at for {cognito_sub} (subscription updated)")
+        except Exception as e:
+            print(f"⚠️ Could not remove trial_expires_at: {e}")
 
 
 def handle_subscription_deleted(subscription: Dict[str, Any]) -> None:

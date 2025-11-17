@@ -9,10 +9,13 @@ API Gateway setup:
 - User info available in event.requestContext.authorizer.claims
 """
 import json
-from typing import Dict, Any, Optional
+import math
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional, Union
+from decimal import Decimal
 from config import validate_config
-from ddb import get_entitlement
-from utils import extract_cognito_sub_from_event, create_response
+from ddb import get_entitlement, update_entitlement
+from utils import extract_cognito_sub_from_event, create_response, iso_now
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -31,7 +34,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     print(f"📥 Entitlements API request: {json.dumps(event, default=str)[:500]}...")
     
     # Validate config
-    config_check = validate_config()
+    config_check = validate_config(require_stripe=False, require_webhook=False)
     if not config_check["valid"]:
         missing = ", ".join(config_check["missing"])
         return create_response(
@@ -56,27 +59,139 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     entitlement = get_entitlement(cognito_sub)
     
     if not entitlement:
-        # Missing record is not an error - user just hasn't subscribed yet
-        print(f"ℹ️ No entitlement record found for {cognito_sub}, returning default")
+        print(f"ℹ️ No entitlement record found for {cognito_sub}, returning default trial state")
         return create_response(
             200,
             {
                 "status": "none",
                 "plan": None,
                 "current_period_end": None,
-                "trial_expires_at": None
+                "trial_expires_at": None,
+                "trial_started_at": None,
+                "trial_days_remaining": 0,
+                "trial_active": False,
+                "access_granted": False,
+                "access_reason": "no_entitlement"
             }
         )
     
-    # Return entitlement data
+    status = entitlement.get("status", "none")
+    plan = entitlement.get("plan")
+
+    def _to_int(value: Optional[Union[int, float, Decimal, str]]) -> Optional[int]:
+        if isinstance(value, Decimal):
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return None
+        return None
+
+    current_period_end = _to_int(entitlement.get("current_period_end"))
+    trial_expires_at = _to_int(entitlement.get("trial_expires_at"))
+    trial_started_at = entitlement.get("trial_started_at")
+    
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    trial_active = False
+    trial_days_remaining = 0
+    
+    if trial_expires_at is not None:
+        seconds_remaining = trial_expires_at - now_ts
+        if seconds_remaining > 0:
+            trial_active = True
+            trial_days_remaining = max(1, math.ceil(seconds_remaining / 86400))
+        else:
+            # Trial expired - flip status if still marked as trialing
+            if status == "trialing":
+                print(f"⌛ Trial expired for {cognito_sub}, updating entitlement status")
+                update_success = update_entitlement(
+                    cognito_sub=cognito_sub,
+                    status="trial_expired",
+                    plan=plan,
+                    current_period_end=current_period_end,
+                    trial_expires_at=int(trial_expires_at),
+                    trial_started_at=trial_started_at,
+                    email=entitlement.get("email"),
+                    trial_days_remaining=0,
+                    additional_attributes={
+                        "trial_expired_at": iso_now()
+                    }
+                )
+                if update_success:
+                    status = "trial_expired"
+                    entitlement["status"] = "trial_expired"
+                else:
+                    print(f"⚠️ Failed to update entitlement status for {cognito_sub}")
+    
+    access_granted = False
+    access_reason = "none"
+    
+    if status == "active":
+        access_granted = True
+        access_reason = "active_subscription"
+    elif status == "trialing" and trial_active:
+        access_granted = True
+        access_reason = "trial"
+    elif status in {"past_due"}:
+        access_granted = False
+        access_reason = "past_due"
+    elif status == "trialing" and not trial_active:
+        access_granted = False
+        access_reason = "trial_expired"
+    elif status == "trial_expired":
+        access_granted = False
+        access_reason = "trial_expired"
+    elif status == "canceled":
+        access_granted = False
+        access_reason = "canceled"
+    else:
+        access_reason = status or "none"
+    
+    target_trial_days: Optional[int] = None
+    if trial_active:
+        target_trial_days = trial_days_remaining
+    elif status in {"trialing", "trial_expired"}:
+        target_trial_days = 0
+
+    existing_trial_days = _to_int(entitlement.get("trial_days_remaining"))
+
+    if (
+        target_trial_days is not None
+        and (existing_trial_days is None or existing_trial_days != target_trial_days)
+    ):
+        update_entitlement(
+            cognito_sub=cognito_sub,
+            status=status,
+            plan=plan,
+            current_period_end=current_period_end,
+            trial_expires_at=trial_expires_at,
+            trial_started_at=trial_started_at,
+            email=entitlement.get("email"),
+            trial_days_remaining=target_trial_days
+        )
     response_data = {
-        "status": entitlement.get("status", "none"),
-        "plan": entitlement.get("plan"),
-        "current_period_end": entitlement.get("current_period_end"),
-        "trial_expires_at": entitlement.get("trial_expires_at")
+        "status": status,
+        "plan": plan,
+        "current_period_end": current_period_end,
+        "trial_expires_at": trial_expires_at,
+        "trial_started_at": trial_started_at,
+        "trial_days_remaining": trial_days_remaining,
+        "trial_active": trial_active,
+        "access_granted": access_granted,
+        "access_reason": access_reason
     }
     
-    print(f"✅ Returning entitlements: status={response_data['status']}")
+    print(
+        f"✅ Returning entitlements: status={response_data['status']}, "
+        f"trial_active={response_data['trial_active']}, "
+        f"access_granted={response_data['access_granted']}"
+    )
     
     return create_response(200, response_data)
 

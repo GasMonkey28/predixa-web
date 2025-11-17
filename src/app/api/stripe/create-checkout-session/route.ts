@@ -137,26 +137,9 @@ export async function POST(request: NextRequest) {
       customer.metadata?.cognito_sub ||
       userId
 
-    let trialEndTimestamp: number | undefined
-
-    const entitlement =
-      cognitoUserId ? await getEntitlementRecord(cognitoUserId) : null
-
-    if (
-      entitlement &&
-      typeof entitlement.trial_expires_at === 'number' &&
-      entitlement.trial_expires_at > Math.floor(Date.now() / 1000)
-    ) {
-      trialEndTimestamp = entitlement.trial_expires_at
-    } else if (
-      customer.metadata?.trial_expires_at &&
-      Number(customer.metadata.trial_expires_at) >
-        Math.floor(Date.now() / 1000)
-    ) {
-      trialEndTimestamp = Number(customer.metadata.trial_expires_at)
-    }
-
     // Build session configuration
+    // Note: We no longer set trial_end - when user subscribes, subscription starts immediately
+    // and the free trial is cancelled via webhook handlers
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: 'subscription',
       customer: customer.id,
@@ -169,15 +152,12 @@ export async function POST(request: NextRequest) {
       ],
       success_url: `${request.nextUrl.origin}/account?success=true`,
       cancel_url: `${request.nextUrl.origin}/account?canceled=true`,
-    }
-
-    if (trialEndTimestamp) {
-      sessionConfig.subscription_data = {
-        trial_end: trialEndTimestamp,
+      subscription_data: {
         metadata: {
           trial_converted_via: 'checkout_session',
+          cancel_trial_on_subscribe: 'true',
         },
-      }
+      },
     }
 
     // If a specific promo code is provided, apply it directly using discounts
@@ -228,9 +208,9 @@ export async function POST(request: NextRequest) {
         sessionId: session.id,
         priceId,
         promoCode: promoCode || undefined,
-        hasTrial: Boolean(trialEndTimestamp),
+        cognitoUserId: cognitoUserId || undefined,
       },
-      'Stripe checkout session created'
+      'Stripe checkout session created (trial will be cancelled on subscription)'
     )
 
     return NextResponse.json({ sessionId: session.id }, { headers: getRateLimitHeaders(clientIp) })

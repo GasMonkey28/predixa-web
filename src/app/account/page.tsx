@@ -250,13 +250,7 @@ function AccountPageContentInner() {
                   </p>
                   {trialExpiresAt && (
                     <p className="mt-1 text-xs text-blue-800 dark:text-blue-300">
-                      Subscribe any time — we&apos;ll honor your free access through{' '}
-                      {new Date(trialExpiresAt * 1000).toLocaleDateString(undefined, {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                      . Your paid plan starts the day after.
+                      Subscribe now to start your paid plan immediately. Your free trial will end when you subscribe.
                     </p>
                   )}
                 </div>

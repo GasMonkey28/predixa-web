@@ -26,8 +26,9 @@ import json
 import os
 import stripe
 from typing import Dict, Any, Optional
-from config import STRIPE_API_KEY, validate_config
+from config import STRIPE_API_KEY, TRIAL_DAYS, validate_config
 from ddb import put_user, init_entitlement
+from utils import calculate_trial_end, iso_now
 
 
 # Initialize Stripe
@@ -59,7 +60,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         # Extract user info from Cognito event
         user_attrs = event.get("request", {}).get("userAttributes", {})
-        cognito_sub = event.get("userName") or user_attrs.get("sub")
+        cognito_username = event.get("userName")
+        cognito_sub = user_attrs.get("sub") or cognito_username
+
+        if cognito_username and cognito_sub and cognito_username != cognito_sub:
+            print(
+                "ℹ️ Cognito username differs from sub; "
+                f"using sub for persistence. username={cognito_username}, sub={cognito_sub}"
+            )
         email = user_attrs.get("email")
         
         if not cognito_sub:
@@ -72,18 +80,24 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         print(f"👤 Processing user: {cognito_sub} ({email})")
         
-        # Step 1: Create Stripe customer (with retry)
+        # Step 1: Determine trial window
+        trial_started_at = iso_now()
+        trial_expires_at = calculate_trial_end()
+        
+        # Step 2: Create Stripe customer (with retry)
         stripe_customer_id = None
         if STRIPE_API_KEY:
             stripe_customer_id = create_stripe_customer_with_retry(
                 email=email,
                 cognito_sub=cognito_sub,
+                trial_started_at=trial_started_at,
+                trial_expires_at=trial_expires_at,
                 max_retries=3
             )
         else:
             print("⚠️ STRIPE_API_KEY not set, skipping Stripe customer creation")
         
-        # Step 2: Write to UserProfiles table
+        # Step 3: Write to UserProfiles table
         # Extract additional fields if present
         extra_fields = {}
         if user_attrs.get("given_name"):
@@ -104,9 +118,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             print(f"⚠️ Failed to write user to DynamoDB for {cognito_sub}")
             # Don't fail the trigger - user can be created later
         
-        # Step 3: Initialize entitlements record (status="none")
-        # Don't set trial here - let Stripe webhooks handle it
-        entitle_success = init_entitlement(cognito_sub=cognito_sub)
+        # Step 4: Initialize entitlements record with free trial
+        entitle_success = init_entitlement(
+            cognito_sub=cognito_sub,
+            email=email,
+            trial_started_at=trial_started_at,
+            trial_expires_at=trial_expires_at
+        )
         
         if not entitle_success:
             print(f"⚠️ Failed to initialize entitlements for {cognito_sub}")
@@ -130,6 +148,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 def create_stripe_customer_with_retry(
     email: str,
     cognito_sub: str,
+    trial_started_at: str,
+    trial_expires_at: int,
     max_retries: int = 3
 ) -> Optional[str]:
     """
@@ -152,8 +172,12 @@ def create_stripe_customer_with_retry(
                 email=email,
                 metadata={
                     "cognito_sub": cognito_sub,
+                    "cognito_user_id": cognito_sub,
                     "platform": "web",
-                    "created_via": "post_confirmation_trigger"
+                    "created_via": "post_confirmation_trigger",
+                    "trial_started_at": trial_started_at,
+                    "trial_expires_at": str(trial_expires_at),
+                    "trial_days": str(TRIAL_DAYS),
                 }
             )
             print(f"✅ Created Stripe customer: {customer.id} (attempt {attempt})")

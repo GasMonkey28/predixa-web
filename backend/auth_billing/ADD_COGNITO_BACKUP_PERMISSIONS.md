@@ -151,3 +151,4 @@ After adding, test the Lambda function:
 
 **After adding these permissions, your Lambda function can backup Cognito users!** ✅
 
+

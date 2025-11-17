@@ -164,3 +164,4 @@ cognito.admin_delete_user(Username=cognito_sub)
 2. **For Admin/Manual Deletion**: Use the CLI script `delete_user.py` or create a separate admin endpoint
 3. **For Automatic Cleanup**: Create a Cognito Pre-Delete trigger Lambda (separate function)
 
+

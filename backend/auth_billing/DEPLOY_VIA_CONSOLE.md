@@ -132,7 +132,7 @@
    - Select `/me` resource
    - Click **"Actions"** → **"Create Resource"**
    - Resource Name: `account`
-   - Resource Path: `/account`
+   - Resource Path: `/account`image.png
    - Click **"Create Resource"**
 5. Create DELETE method:
    - Select `/me/account` resource

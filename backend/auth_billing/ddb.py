@@ -9,8 +9,10 @@ import os
 import boto3
 from typing import Optional, Dict, Any
 from datetime import datetime
+import math
 from botocore.exceptions import ClientError
-from config import USERS_TABLE, ENTITLEMENTS_TABLE, AWS_REGION
+from config import USERS_TABLE, ENTITLEMENTS_TABLE, AWS_REGION, TRIAL_DAYS
+from utils import calculate_trial_end
 
 # Initialize DynamoDB resource
 dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
@@ -124,7 +126,11 @@ def update_entitlement(
     status: str,
     plan: Optional[str] = None,
     current_period_end: Optional[int] = None,
-    trial_expires_at: Optional[int] = None
+    trial_expires_at: Optional[int] = None,
+    trial_started_at: Optional[str] = None,
+    email: Optional[str] = None,
+    trial_days_remaining: Optional[int] = None,
+    additional_attributes: Optional[Dict[str, Any]] = None
 ) -> bool:
     """
     Update or create entitlement record in predixa_entitlements table.
@@ -163,6 +169,26 @@ def update_entitlement(
             update_expr += ", trial_expires_at = :tea"
             expr_attrs[":tea"] = trial_expires_at
         
+        if trial_started_at is not None:
+            update_expr += ", trial_started_at = :tsa"
+            expr_attrs[":tsa"] = trial_started_at
+        
+        if email is not None:
+            update_expr += ", email = :email_attr"
+            expr_attrs[":email_attr"] = email
+        
+        if trial_days_remaining is not None:
+            update_expr += ", trial_days_remaining = :tdr"
+            expr_attrs[":tdr"] = trial_days_remaining
+        
+        if additional_attributes:
+            for key, value in additional_attributes.items():
+                placeholder = f"#{key}"
+                value_placeholder = f":{key}"
+                expr_names[placeholder] = key
+                update_expr += f", {placeholder} = {value_placeholder}"
+                expr_attrs[value_placeholder] = value
+        
         # Check if record exists
         try:
             existing = ENT_TABLE_OBJ.get_item(Key={"cognito_sub": cognito_sub})
@@ -192,6 +218,12 @@ def update_entitlement(
                 item["current_period_end"] = current_period_end
             if trial_expires_at is not None:
                 item["trial_expires_at"] = trial_expires_at
+            if trial_started_at is not None:
+                item["trial_started_at"] = trial_started_at
+            if email is not None:
+                item["email"] = email
+            if trial_days_remaining is not None:
+                item["trial_days_remaining"] = trial_days_remaining
             
             ENT_TABLE_OBJ.put_item(Item=item)
         
@@ -222,7 +254,12 @@ def get_entitlement(cognito_sub: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def init_entitlement(cognito_sub: str) -> bool:
+def init_entitlement(
+    cognito_sub: str,
+    email: Optional[str] = None,
+    trial_started_at: Optional[str] = None,
+    trial_expires_at: Optional[int] = None
+) -> bool:
     """
     Initialize entitlement record with status="none".
     Called during user registration before any subscription exists.
@@ -233,11 +270,47 @@ def init_entitlement(cognito_sub: str) -> bool:
     Returns:
         True if successful, False otherwise
     """
-    return update_entitlement(
-        cognito_sub=cognito_sub,
-        status="none",
-        plan=None,
-        current_period_end=None,
-        trial_expires_at=None
-    )
+    try:
+        existing = get_entitlement(cognito_sub)
+        if existing:
+            return True
+        
+        now_iso = trial_started_at or iso_now()
+        trial_end_ts = trial_expires_at if trial_expires_at is not None else calculate_trial_end()
+
+        current_ts = int(datetime.utcnow().timestamp())
+        seconds_remaining = max(0, trial_end_ts - current_ts)
+        remaining_days = (
+            max(1, math.ceil(seconds_remaining / 86400))
+            if seconds_remaining > 0
+            else 0
+        )
+        print(
+            f"🆕 init_entitlement: cognito_sub={cognito_sub}, "
+            f"trial_end_ts={trial_end_ts}, current_ts={current_ts}, "
+            f"seconds_remaining={seconds_remaining}, remaining_days={remaining_days}"
+        )
+        
+        item = {
+            "cognito_sub": cognito_sub,
+            "status": "trialing",
+            "plan": None,
+            "current_period_end": None,
+            "trial_started_at": now_iso,
+            "trial_expires_at": trial_end_ts,
+            "trial_days_remaining": remaining_days,
+            "updatedAt": now_iso,
+        }
+        
+        if email is not None:
+            item["email"] = email
+        
+        ENT_TABLE_OBJ.put_item(Item=item)
+        return True
+    except ClientError as e:
+        print(f"❌ Error initializing entitlement in DynamoDB: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error in init_entitlement: {e}")
+        return False
 

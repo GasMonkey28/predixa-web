@@ -116,6 +116,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // When subscription is created/activated, cancel the free trial immediately
+    const shouldCancelTrial = (type === 'INITIAL_PURCHASE' || type === 'RENEWAL') && subscriptionStatus === 'active'
+
     logger.info('RevenueCat webhook received', {
       eventType: type,
       app_user_id,
@@ -171,6 +174,14 @@ export async function POST(request: NextRequest) {
           exprValues[':cpe'] = currentPeriodEnd
         }
 
+        // Cancel free trial when subscription is activated
+        if (shouldCancelTrial) {
+          updateExpr.push('trial_expires_at = :tea')
+          exprValues[':tea'] = null
+          updateExpr.push('trial_days_remaining = :tdr')
+          exprValues[':tdr'] = 0
+        }
+
         // Add RevenueCat metadata
         if (product_id) {
           updateExpr.push('revenuecat_product_id = :rpid')
@@ -212,6 +223,12 @@ export async function POST(request: NextRequest) {
 
         if (currentPeriodEnd !== null) {
           item.current_period_end = currentPeriodEnd
+        }
+
+        // Cancel free trial when subscription is activated
+        if (shouldCancelTrial) {
+          item.trial_expires_at = null
+          item.trial_days_remaining = 0
         }
 
         if (product_id) {
