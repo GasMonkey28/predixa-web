@@ -302,6 +302,36 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
     )
   }
 
+  // Helper function to check if an event has been released (time has passed)
+  const isEventReleased = (eventTime: string): boolean => {
+    try {
+      // Parse the event time (format: "HH:MM" or "HH:MM:SS")
+      const [hours, minutes] = eventTime.split(':').map(Number)
+      if (isNaN(hours) || isNaN(minutes)) return false
+      
+      // Get current time in ET (Eastern Time) since economic events are typically in ET
+      const now = new Date()
+      const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
+      const currentHours = etTime.getHours()
+      const currentMinutes = etTime.getMinutes()
+      
+      // Compare times
+      if (currentHours > hours) return true
+      if (currentHours === hours && currentMinutes >= minutes) return true
+      return false
+    } catch {
+      // If parsing fails, assume not released to be safe
+      return false
+    }
+  }
+
+  // Helper function to check if actual value is likely mock data (same as forecast or previous)
+  const isActualMockData = (actual: string | null, forecast?: string | null, previous?: string | null): boolean => {
+    if (!actual) return false
+    // If actual equals forecast or previous, it's likely mock data
+    return actual === forecast || actual === previous
+  }
+
   const getValueComparison = (actual?: string | null, forecast?: string | null, previous?: string | null) => {
     if (!actual) return null
     
@@ -427,7 +457,17 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
       ) : (
         <div className="space-y-3">
           {filteredEvents.map((event) => {
-            const comparison = getValueComparison(event.actual, event.forecast, event.previous)
+            // Check if event has been released
+            const eventReleased = isEventReleased(event.time)
+            
+            // If event hasn't been released yet, check if actual is likely mock data (same as forecast/previous)
+            // If event has been released, show actual even if it matches forecast/previous (could be legitimate)
+            const actualIsMock = !eventReleased && isActualMockData(event.actual ?? null, event.forecast ?? null, event.previous ?? null)
+            
+            // Only show actual if event has been released AND actual is not mock data
+            const shouldShowActual = eventReleased && event.actual && !actualIsMock
+            
+            const comparison = shouldShowActual ? getValueComparison(event.actual, event.forecast, event.previous) : null
             
             return (
               <div key={event.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
@@ -447,10 +487,10 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
                 {/* Event Data - Always show 3-column layout for alignment, but only show values if they exist */}
                 {(event.previous || event.actual || event.forecast) && (
                   <div className="grid grid-cols-3 gap-4 text-sm">
-                    {/* Actual - Always show label, only show value if it exists */}
+                    {/* Actual - Always show label, only show value if event has been released and actual is real */}
                     <div>
                       <div className="text-gray-400 text-xs mb-1">Actual</div>
-                      {event.actual ? (
+                      {shouldShowActual ? (
                         <div className={`font-mono flex items-center gap-1 font-semibold ${comparison?.color || 'text-blue-400'}`}>
                           {event.actual}
                           {comparison ? (
