@@ -4,6 +4,14 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { TrendingUp, TrendingDown, Zap, Sparkles, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react'
 
+interface OpposingStrengthWarning {
+  has_warning: boolean
+  weaker_side?: string
+  weaker_tier?: string
+  weaker_strength?: number
+  warning_message?: string
+}
+
 interface DailyTierData {
   date: string
   long_tier: string
@@ -17,6 +25,7 @@ interface DailyTierData {
   outlook: string
   disclaimer: string
   compensation_explanation?: string
+  opposing_strength_warning?: OpposingStrengthWarning | null
   prev_date?: string | null
   prev_long_tier?: string | null
   prev_short_tier?: string | null
@@ -305,33 +314,71 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
       </AnimatePresence>
 
       {/* Market Context */}
-      {tiersData.compensation_explanation && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="relative overflow-hidden rounded-xl bg-gradient-to-br from-indigo-900/40 via-purple-900/30 to-indigo-900/40 border border-indigo-500/30 p-4 mb-6"
-        >
-          <motion.div
-            className="absolute inset-0 bg-indigo-500 opacity-10 blur-2xl"
-            animate={{
-              scale: [1, 1.1, 1],
-              opacity: [0.1, 0.15, 0.1]
-            }}
-            transition={{
-              duration: 3,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-          />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 text-indigo-400 mb-2">
-              <Info className="w-5 h-5" />
-              <span className="text-xs font-semibold">Market Context</span>
-            </div>
-            <div className="text-indigo-200 text-sm leading-relaxed">{tiersData.compensation_explanation}</div>
-          </div>
-        </motion.div>
+      {(tiersData.compensation_explanation || (tiersData.opposing_strength_warning?.has_warning)) && (
+        <div className="space-y-4 mb-6">
+          {tiersData.compensation_explanation && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="relative overflow-hidden rounded-xl bg-gradient-to-br from-indigo-900/40 via-purple-900/30 to-indigo-900/40 border border-indigo-500/30 p-4"
+            >
+              <motion.div
+                className="absolute inset-0 bg-indigo-500 opacity-10 blur-2xl"
+                animate={{
+                  scale: [1, 1.1, 1],
+                  opacity: [0.1, 0.15, 0.1]
+                }}
+                transition={{
+                  duration: 3,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+              />
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 text-indigo-400 mb-2">
+                  <Info className="w-5 h-5" />
+                  <span className="text-xs font-semibold">Market Context</span>
+                </div>
+                <div className="text-indigo-200 text-sm leading-relaxed">{tiersData.compensation_explanation}</div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Opposing Strength Warning */}
+          {tiersData.opposing_strength_warning?.has_warning && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-900/50 via-orange-900/40 to-amber-900/50 border-2 border-amber-500/50 p-4"
+            >
+              <motion.div
+                className="absolute inset-0 bg-amber-500 opacity-15 blur-2xl"
+                animate={{
+                  scale: [1, 1.1, 1],
+                  opacity: [0.15, 0.2, 0.15]
+                }}
+                transition={{
+                  duration: 3,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+              />
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 text-amber-400 mb-2">
+                  <AlertCircle className="w-5 h-5" />
+                  <span className="text-xs font-semibold">Opposing Strength Warning</span>
+                </div>
+                {tiersData.opposing_strength_warning.warning_message && (
+                  <div className="text-amber-200 text-base leading-relaxed font-bold">
+                    {tiersData.opposing_strength_warning.warning_message}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </div>
       )}
 
       {/* Tier Cards with Enhanced Visuals */}

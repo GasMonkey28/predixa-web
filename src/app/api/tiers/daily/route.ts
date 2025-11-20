@@ -125,6 +125,7 @@ export async function GET(request: Request) {
         outlook: cleanText(s3Data.outlook || s3Data.OUTLOOK || 'No outlook available'),
         disclaimer: cleanText(s3Data.disclaimer || s3Data.DISCLAIMER || 'Data provided for informational purposes only.'),
         compensation_explanation: cleanText(s3Data.compensation_explanation || s3Data.compensationExplanation || ''),
+        opposing_strength_warning: s3Data.opposing_strength_warning || null,
         prev_date: prevDateStr,
         prev_long_tier: prevLong ?? 'N/A',
         prev_short_tier: prevShort ?? 'N/A'
@@ -160,6 +161,7 @@ export async function GET(request: Request) {
         disclaimer:
           'Live tier data is temporarily unavailable. This fallback preserves access while the data pipeline recovers.',
         compensation_explanation: '',
+        opposing_strength_warning: null,
         prev_date: null,
         prev_long_tier: 'N/A',
         prev_short_tier: 'N/A',
