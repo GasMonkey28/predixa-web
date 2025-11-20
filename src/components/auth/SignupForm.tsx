@@ -398,6 +398,20 @@ export default function SignupForm() {
 
   return (
     <div className="max-w-md mx-auto mt-8 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md">
+      {/* Free Trial Banner */}
+      <div className="mb-6 -mt-2 -mx-6 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 rounded-t-lg p-4 text-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 opacity-50 animate-pulse"></div>
+        <div className="relative z-10">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 className="text-white font-bold text-xl">Start Your 14-Day Free Trial</h3>
+          </div>
+          <p className="text-white/90 text-sm mt-1">No credit card required • Cancel anytime</p>
+        </div>
+      </div>
+      
       <h2 className="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-white">Sign Up</h2>
       
       {/* Social Sign In Buttons */}
@@ -406,7 +420,7 @@ export default function SignupForm() {
           type="button"
           onClick={handleGoogleSignIn}
           disabled={isLoading || !acceptedPolicies}
-          className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          className="w-full relative flex items-center justify-center px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -421,7 +435,7 @@ export default function SignupForm() {
           type="button"
           onClick={handleAppleSignIn}
           disabled={isLoading || !acceptedPolicies}
-          className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-black text-sm font-medium text-white hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
+          className="w-full relative flex items-center justify-center px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-black text-sm font-medium text-white hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="white">
             <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zm-3.03-16.84c.27-.32.48-.72.62-1.16 0-.01 0-.01 0 0-.56.04-1.22.42-1.61.9-.35.35-.65.9-.57 1.43.04.01.08.01.11.01.57-.02 1.15-.23 1.52-.58.34-.32.58-.82.52-1.3-.01 0-.01 0-.01.01v-.01.01c0-.01 0-.01.01-.01l.01-.01c0 .01 0 .01-.01.01.01-.01.01-.01.01-.01-.01.01-.01.01-.01.01.01-.01.01-.01.01-.01-.01.01-.01.01-.01.01.01 0 .01-.01.01-.01 0 0 0 .01-.01 0-.01 0-.01-.01-.01-.01 0 0-.01 0-.01.01.01 0 .01-.01.01-.01 0 0 0 .01 0 .01.01 0 .01 0 .01-.01-.01.01-.01.01-.01.01.02.02.01 0 .01-.01z"/>
@@ -526,9 +540,18 @@ export default function SignupForm() {
         <button
           type="submit"
           disabled={isLoading || !acceptedPolicies}
-          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          className="w-full relative flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-md shadow-lg text-base font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all duration-200 transform hover:scale-[1.02]"
         >
-          {isLoading ? 'Creating Account...' : 'Sign Up'}
+          {isLoading ? (
+            'Creating Account...'
+          ) : (
+            <>
+              <span>Start Free Trial</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </>
+          )}
         </button>
       </form>
     </div>
