@@ -7,7 +7,7 @@ Handles:
 """
 import os
 import boto3
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import math
 from botocore.exceptions import ClientError
@@ -252,6 +252,34 @@ def get_entitlement(cognito_sub: str) -> Optional[Dict[str, Any]]:
     except ClientError as e:
         print(f"❌ Error reading entitlement from DynamoDB: {e}")
         return None
+
+
+def scan_all_entitlements() -> List[Dict[str, Any]]:
+    """
+    Scan all entitlement records from predixa_entitlements table.
+    Handles pagination automatically.
+    
+    Returns:
+        List of all entitlement items
+    """
+    entitlements = []
+    
+    try:
+        response = ENT_TABLE_OBJ.scan()
+        entitlements.extend(response.get('Items', []))
+        
+        # Handle pagination
+        while 'LastEvaluatedKey' in response:
+            response = ENT_TABLE_OBJ.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+            entitlements.extend(response.get('Items', []))
+        
+        return entitlements
+    except ClientError as e:
+        print(f"❌ Error scanning entitlements from DynamoDB: {e}")
+        return []
+    except Exception as e:
+        print(f"❌ Unexpected error in scan_all_entitlements: {e}")
+        return []
 
 
 def init_entitlement(

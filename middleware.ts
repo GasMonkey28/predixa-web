@@ -46,8 +46,16 @@ async function checkSubscriptionStatus(idToken: string): Promise<boolean> {
     const entitlements = await response.json()
     const status = entitlements.status || 'none'
     
-    // Allow access for 'active' or 'trialing' status
-    return status === 'active' || status === 'trialing'
+    // Check access_granted first (this is the authoritative field)
+    // It correctly handles expired trials (status="trialing" but trial_active=false)
+    if (entitlements.access_granted === true) {
+      return true
+    }
+    
+    // Fallback: Allow access for 'active' status or active trialing
+    // Note: status="trialing" alone is not enough - must also have trial_active=true
+    const isActiveTrialing = status === 'trialing' && entitlements.trial_active === true
+    return status === 'active' || isActiveTrialing
   } catch (error) {
     console.error('Error checking subscription status:', error)
     // On error, deny access (fail secure)
