@@ -10,6 +10,7 @@ interface OpposingStrengthWarning {
   weaker_tier?: string
   weaker_strength?: number
   warning_message?: string
+  compensation_potential_message?: string
 }
 
 interface DailyTierData {
@@ -373,6 +374,11 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                 {tiersData.opposing_strength_warning.warning_message && (
                   <div className="text-amber-200 text-base leading-relaxed font-bold">
                     {tiersData.opposing_strength_warning.warning_message}
+                  </div>
+                )}
+                {tiersData.opposing_strength_warning.compensation_potential_message && (
+                  <div className="mt-2 text-amber-300/80 text-sm leading-relaxed">
+                    {tiersData.opposing_strength_warning.compensation_potential_message}
                   </div>
                 )}
               </div>
