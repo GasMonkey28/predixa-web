@@ -8,15 +8,22 @@ import { config } from '@/lib/server/config'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+// Helper function to add CORS headers
+function addCorsHeaders(headers: HeadersInit = {}) {
+  return {
+    ...headers,
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, Pragma',
+    'Access-Control-Max-Age': '86400'
+  }
+}
+
 // Handle OPTIONS requests for CORS preflight
 export async function OPTIONS() {
-  return new NextResponse.json({}, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, Pragma',
-      'Access-Control-Max-Age': '86400'
-    }
+  return new NextResponse(null, {
+    status: 204,
+    headers: addCorsHeaders()
   })
 }
 
@@ -606,10 +613,7 @@ export async function GET(request: Request) {
           'Pragma': 'no-cache',
           'Expires': '0',
           'Surrogate-Control': 'no-store',
-          // CORS headers for iOS app and other clients
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, Pragma'
+          ...addCorsHeaders()
         }
       })
       
@@ -679,10 +683,7 @@ export async function GET(request: Request) {
           'Pragma': 'no-cache',
           'Expires': '0',
           'Surrogate-Control': 'no-store',
-          // CORS headers for iOS app and other clients
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, Pragma'
+          ...addCorsHeaders()
         }
       })
     }
@@ -704,12 +705,7 @@ export async function GET(request: Request) {
       },
       { 
         status: 500,
-        headers: {
-          // CORS headers for iOS app and other clients
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, Pragma'
-        }
+        headers: addCorsHeaders()
       }
     )
   }
