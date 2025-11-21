@@ -118,64 +118,8 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
       } catch (err) {
         console.error('Failed to fetch Investing.com economic calendar:', err)
         setError(`Failed to load Investing.com economic calendar: ${err instanceof Error ? err.message : 'Unknown error'}`)
-        
-        // Fallback to mock data if API fails
-        console.log('Using fallback mock data for Investing.com calendar')
-        const today = new Date()
-        
-        const mockEvents: EconomicEvent[] = [
-          {
-            id: 'investing-1',
-            time: '08:30',
-            event: 'Consumer Price Index (CPI)',
-            impact: 3,
-            country: 'US',
-            actual: null,
-            forecast: '3.1%',
-            previous: '3.0%'
-          },
-          {
-            id: 'investing-2',
-            time: '10:00',
-            event: 'Nonfarm Payrolls (NFP)',
-            impact: 3,
-            country: 'US',
-            actual: null,
-            forecast: '180K',
-            previous: '175K'
-          },
-          {
-            id: 'investing-3',
-            time: '14:00',
-            event: 'Federal Reserve Interest Rate Decision',
-            impact: 3,
-            country: 'US',
-            actual: null,
-            forecast: '5.25%',
-            previous: '5.25%'
-          },
-          {
-            id: 'investing-4',
-            time: '08:30',
-            event: 'Retail Sales',
-            impact: 2,
-            country: 'US',
-            actual: null,
-            forecast: '0.5%',
-            previous: '0.3%'
-          },
-          {
-            id: 'investing-5',
-            time: '09:15',
-            event: 'Industrial Production',
-            impact: 2,
-            country: 'US',
-            actual: null,
-            forecast: '0.3%',
-            previous: '0.1%'
-          }
-        ]
-        setEvents(mockEvents)
+        // Don't show mock data - let the API's fallback data be shown instead
+        setEvents([])
         setLastUpdated(new Date())
       } finally {
         setLoading(false)
