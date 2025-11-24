@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
 declare global {
   interface Window {
@@ -17,7 +18,7 @@ declare global {
   }
 }
 
-export function GAPageView() {
+function GAPageViewInner() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const gaId = process.env.NEXT_PUBLIC_GA_ID
@@ -38,5 +39,13 @@ export function GAPageView() {
   }, [pathname, searchParams, gaId])
 
   return null
+}
+
+export function GAPageView() {
+  return (
+    <Suspense fallback={null}>
+      <GAPageViewInner />
+    </Suspense>
+  )
 }
 
