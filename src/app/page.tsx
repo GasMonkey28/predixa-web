@@ -85,6 +85,60 @@ export default function HomePage() {
           </p>
         </div>
 
+        {/* CTA Section - Moved to Top */}
+        <div className="max-w-md mx-auto mb-12">
+          {showLogin ? (
+            <div>
+              <LoginForm />
+              <p className="text-center mt-4 text-gray-600 dark:text-gray-300">
+                Don&apos;t have an account?{' '}
+                <button
+                  onClick={handleShowSignup}
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Sign up
+                </button>
+              </p>
+            </div>
+          ) : showSignup ? (
+            <div>
+              <SignupForm />
+              <p className="text-center mt-4 text-gray-600 dark:text-gray-300">
+                Already have an account?{' '}
+                <button
+                  onClick={handleShowLogin}
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Sign in
+                </button>
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <button
+                onClick={handleShowSignup}
+                className="w-full relative py-4 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] font-semibold text-lg"
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <span>Start Your Free Trial</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
+                <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full shadow-md">
+                  14 Days Free
+                </div>
+              </button>
+              <button
+                onClick={handleShowLogin}
+                className="w-full py-3 px-4 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              >
+                Sign In
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* SPY Features Section */}
         <div className="max-w-5xl mx-auto mb-12 space-y-8">
           <section className="space-y-4">
@@ -151,60 +205,6 @@ export default function HomePage() {
               Learn About Options Flow →
             </Link>
           </section>
-        </div>
-
-        {/* CTA Section */}
-        <div className="max-w-md mx-auto mb-8">
-          {showLogin ? (
-            <div>
-              <LoginForm />
-              <p className="text-center mt-4 text-gray-600 dark:text-gray-300">
-                Don&apos;t have an account?{' '}
-                <button
-                  onClick={handleShowSignup}
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  Sign up
-                </button>
-              </p>
-            </div>
-          ) : showSignup ? (
-            <div>
-              <SignupForm />
-              <p className="text-center mt-4 text-gray-600 dark:text-gray-300">
-                Already have an account?{' '}
-                <button
-                  onClick={handleShowLogin}
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  Sign in
-                </button>
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <button
-                onClick={handleShowSignup}
-                className="w-full relative py-4 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] font-semibold text-lg"
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <span>Start Your Free Trial</span>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </div>
-                <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full shadow-md">
-                  14 Days Free
-                </div>
-              </button>
-              <button
-                onClick={handleShowLogin}
-                className="w-full py-3 px-4 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-              >
-                Sign In
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Trust Indicators */}
