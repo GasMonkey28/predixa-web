@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
+import { createMetadata } from '@/lib/seo'
 
-export const metadata: Metadata = {
-  title: 'Terms of Service | Predixa',
+export const metadata: Metadata = createMetadata({
+  title: 'Terms of Service',
   description:
     'Read the Predixa Terms of Service. These terms govern how you access and use Predixa products and services.',
-}
+  path: '/terms',
+})
 
 export default function TermsPage() {
   return (

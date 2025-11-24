@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { createMetadata } from '@/lib/seo'
 
-export const metadata: Metadata = {
-  title: 'Support | Predixa',
+export const metadata: Metadata = createMetadata({
+  title: 'Support',
   description: 'Get help with Predixa, explore our knowledge resources, or contact the team directly.',
-}
+  path: '/support',
+})
 
 const supportChannels: never[] = []
 const quickLinks: never[] = []

@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import { createMetadata } from '@/lib/seo'
 
-export const metadata: Metadata = {
-  title: 'Privacy Policy | Predixa',
+export const metadata: Metadata = createMetadata({
+  title: 'Privacy Policy',
   description: 'Understand how Predixa collects, uses, and safeguards your information across our products and services.',
-}
+  path: '/privacy',
+})
 
 const dataTypes = [
   {

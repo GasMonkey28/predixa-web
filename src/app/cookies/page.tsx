@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import { createMetadata } from '@/lib/seo'
 
-export const metadata: Metadata = {
-  title: 'Cookie Policy | Predixa',
+export const metadata: Metadata = createMetadata({
+  title: 'Cookie Policy',
   description: 'Learn how Predixa uses cookies and similar technologies to deliver a secure and reliable experience.',
-}
+  path: '/cookies',
+})
 
 const cookieTypes = [
   {

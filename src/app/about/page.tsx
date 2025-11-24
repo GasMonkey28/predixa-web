@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { createMetadata } from '@/lib/seo'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = createMetadata({
   title: 'About Predixa',
-  description: 'Learn more about Predixa, our mission, and the policies that guide our products.',
-}
+  description: 'Learn more about Predixa, our mission, and the policies that guide our products. Professional analytics for disciplined market participants.',
+  path: '/about',
+})
 
 const highlights = [
   {

@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import { createMetadata } from '@/lib/seo'
 
-export const metadata: Metadata = {
-  title: 'Disclaimer | Predixa',
+export const metadata: Metadata = createMetadata({
+  title: 'Disclaimer',
   description: 'Read the Predixa disclaimer covering educational use, risk, and responsibility for trading decisions.',
-}
+  path: '/disclaimer',
+})
 
 export default function DisclaimerPage() {
   return (

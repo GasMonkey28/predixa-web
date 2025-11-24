@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import { createMetadata } from '@/lib/seo'
 
-export const metadata: Metadata = {
-  title: 'Refund Policy | Predixa',
+export const metadata: Metadata = createMetadata({
+  title: 'Refund Policy',
   description: 'Understand how refunds, cancellations, and billing disputes are handled for Predixa subscriptions.',
-}
+  path: '/refund',
+})
 
 export default function RefundPolicyPage() {
   return (

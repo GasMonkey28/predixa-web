@@ -165,6 +165,12 @@ export default function SPYForecastPage() {
           </h2>
           <nav className="flex flex-wrap gap-4">
             <Link
+              href="/"
+              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
+            >
+              Home
+            </Link>
+            <Link
               href="/spy-forecast"
               className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
             >
@@ -175,6 +181,12 @@ export default function SPYForecastPage() {
               className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
             >
               SPY Signals
+            </Link>
+            <Link
+              href="/spy-today"
+              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
+            >
+              Why SPY Is Up/Down Today
             </Link>
             <Link
               href="/ai-tiers"
@@ -193,12 +205,6 @@ export default function SPYForecastPage() {
               className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
             >
               Range Forecast
-            </Link>
-            <Link
-              href="/pricing"
-              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
-            >
-              Pricing
             </Link>
             <Link
               href="/about"

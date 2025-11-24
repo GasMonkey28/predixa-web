@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth-store'
 import LoginForm from '@/components/auth/LoginForm'
 import SignupForm from '@/components/auth/SignupForm'
@@ -50,7 +51,8 @@ export default function HomePage() {
       )}
       
       <div className={isLoading ? 'pointer-events-none opacity-50' : ''}>
-        <div className="text-center mb-10">
+        {/* Hero Section */}
+        <div className="text-center mb-12">
           <div className="flex justify-center mb-4">
             <img 
               src="/logo.jpg" 
@@ -58,7 +60,9 @@ export default function HomePage() {
               className="h-16 w-16 rounded-2xl"
             />
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Predixa</h1>
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+            SPY Forecast & AI Signals for Active Traders
+          </h1>
           
           {/* Free Trial Badge */}
           <div className="mt-4 mb-4 inline-block">
@@ -76,31 +80,81 @@ export default function HomePage() {
             </div>
           </div>
           
-          <p className="mt-3 text-lg text-gray-600 dark:text-gray-300">
-            Intraday levels, curated commentary, and economic context—built for active traders.
+          <p className="mt-3 text-lg text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
+            Get daily <strong>SPY Forecast</strong> and <strong>SPY Signals</strong> with direction probability, tier rankings, range forecasts, and options flow analysis. Professional trading analytics built for disciplined market participants.
           </p>
-          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            Join to unlock the daily tier dashboard, weekly outlook, and instant billing controls.
-          </p>
-          
-          {/* Trust Indicators */}
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-            <div className="flex items-center gap-1">
-              <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>No credit card required</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>Cancel anytime</span>
-            </div>
-          </div>
         </div>
 
-        <div className="max-w-md mx-auto">
+        {/* SPY Features Section */}
+        <div className="max-w-5xl mx-auto mb-12 space-y-8">
+          <section className="space-y-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">What Is the SPY Forecast?</h2>
+            <p className="text-gray-700 dark:text-gray-300">
+              The SPY forecast provides a probabilistic assessment of potential price movement for the SPDR S&P 500 ETF based on technical analysis, market structure, and signal aggregation. Each forecast includes direction probability, key support and resistance levels, and the factors driving potential movement. Predixa generates daily SPY forecasts by analyzing multiple data sources including price action, volume patterns, options flow, and market sentiment indicators.
+            </p>
+            <Link
+              href="/spy-forecast"
+              className="inline-flex items-center text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+            >
+              View SPY Forecast →
+            </Link>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">What Are SPY Signals?</h2>
+            <p className="text-gray-700 dark:text-gray-300">
+              SPY signals are data-driven indicators that suggest potential price movement for the SPDR S&P 500 ETF. These signals aggregate information from multiple sources including technical indicators, price action, volume patterns, options activity, and market structure. Signal strength is calculated using machine learning models that analyze historical patterns and current market data, expressed as probability percentages to help traders assess risk and position size appropriately.
+            </p>
+            <Link
+              href="/spy-signals"
+              className="inline-flex items-center text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+            >
+              Learn About SPY Signals →
+            </Link>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">What Is the Tier System (SS–D)?</h2>
+            <p className="text-gray-700 dark:text-gray-300">
+              The SPY tier system classifies price levels by their historical significance and probability of acting as support or resistance. Tiers range from SS (highest significance) to D (lowest significance), creating a hierarchy that helps traders identify which price levels are most likely to influence SPY movement. SS and S tiers represent the most important levels—those that have consistently shown strong support or resistance behavior. The system updates daily to reflect new price action and changing market conditions.
+            </p>
+            <Link
+              href="/ai-tiers"
+              className="inline-flex items-center text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+            >
+              Understand Tier System →
+            </Link>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">What Are SPY Range Forecasts?</h2>
+            <p className="text-gray-700 dark:text-gray-300">
+              SPY range forecasts provide expected high and low price levels for a given time period, typically daily or weekly. The model estimates probable trading ranges based on historical volatility, current market conditions, technical levels, and statistical analysis. Range forecasts include probability bands that indicate the likelihood of price reaching different levels, helping traders understand potential price boundaries and plan accordingly.
+            </p>
+            <Link
+              href="/range-forecast"
+              className="inline-flex items-center text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+            >
+              Explore Range Forecasts →
+            </Link>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">What Does SPY Options Flow Mean?</h2>
+            <p className="text-gray-700 dark:text-gray-300">
+              SPY options flow refers to the buying and selling activity in options markets, tracking which contracts are being traded, at what prices, and in what volumes. Options flow analysis examines trading activity in SPY call and put options to understand market sentiment and potential price movement. Flow data includes information such as trade size, strike prices, expiration dates, and whether activity is concentrated in calls or puts, providing insights into how traders are positioning themselves.
+            </p>
+            <Link
+              href="/options-flow"
+              className="inline-flex items-center text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+            >
+              Learn About Options Flow →
+            </Link>
+          </section>
+        </div>
+
+        {/* CTA Section */}
+        <div className="max-w-md mx-auto mb-8">
           {showLogin ? (
             <div>
               <LoginForm />
@@ -151,6 +205,22 @@ export default function HomePage() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Trust Indicators */}
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex items-center gap-1">
+            <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span>No credit card required</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span>Cancel anytime</span>
+          </div>
         </div>
       </div>
     </main>
