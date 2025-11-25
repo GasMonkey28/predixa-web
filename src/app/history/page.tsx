@@ -228,7 +228,26 @@ function HistoryPageContent() {
                   <th className="text-left py-3 px-4 text-zinc-300 font-semibold">Date</th>
                   <th className="text-left py-3 px-4 text-zinc-300 font-semibold">Long Tier</th>
                   <th className="text-left py-3 px-4 text-zinc-300 font-semibold">Short Tier</th>
-                  <th className="text-left py-3 px-4 text-zinc-300 font-semibold">Prediction</th>
+                  <th className="text-left py-3 px-4 text-zinc-300 font-semibold">
+                    <div className="flex items-center gap-2">
+                      <span>Prediction</span>
+                      <div className="relative group">
+                        <HelpCircle className="w-4 h-4 text-zinc-400 hover:text-zinc-300 cursor-help" />
+                        <div className="absolute left-0 top-full mt-2 w-72 p-3 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                          <p className="text-xs text-zinc-200 leading-relaxed">
+                            Shows if the prediction was correct based on tier rankings and actual price movement:
+                            <br /><br />
+                            <strong className="text-green-400">✓ Checkmark:</strong> Prediction was correct (long tier stronger and price went up, or short tier stronger and price went down).
+                            <br /><br />
+                            <strong className="text-red-400">✗ X Mark:</strong> Prediction was incorrect (opposite direction occurred).
+                            <br /><br />
+                            <strong className="text-zinc-400">− Dash:</strong> Neutral signal (long and short tiers are the same or one level apart - no clear prediction).
+                          </p>
+                          <div className="absolute left-4 top-0 transform -translate-y-full w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-zinc-800"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </th>
                   <th className="text-left py-3 px-4 text-zinc-300 font-semibold">
                     <div className="flex items-center gap-2">
                       <span>Compensation</span>
@@ -239,8 +258,6 @@ function HistoryPageContent() {
                             Shows if an incorrect prediction was later compensated by price movement:
                             <br /><br />
                             <strong className="text-green-400">✓ Checkmark:</strong> Predicted up but went down (or vice versa), then later days moved in the predicted direction.
-                            <br /><br />
-                            <strong className="text-zinc-400">− Dash:</strong> Prediction was correct, neutral, or incorrect with no later compensation.
                           </p>
                           <div className="absolute left-4 top-0 transform -translate-y-full w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-zinc-800"></div>
                         </div>
