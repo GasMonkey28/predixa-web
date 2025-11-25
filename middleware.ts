@@ -5,10 +5,10 @@ import { config } from '@/lib/server/config'
 import { verifyCognitoToken } from '@/lib/server/cognito-token'
 
 // Define protected routes that require authentication
-const protectedRoutes = ['/daily', '/weekly', '/future', '/account']
+const protectedRoutes = ['/daily', '/weekly', '/future', '/history', '/account']
 
 // Define routes that require active subscription (not just authentication)
-const subscriptionRequiredRoutes = ['/daily', '/weekly', '/future']
+const subscriptionRequiredRoutes = ['/daily', '/weekly', '/future', '/history']
 
 // Account page is accessible to authenticated users (for subscription management)
 const accountRoute = '/account'

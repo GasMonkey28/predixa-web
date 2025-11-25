@@ -22,6 +22,11 @@ const navigationItems = [
     icon: '🎯'
   },
   {
+    name: 'History',
+    href: '/history',
+    icon: '📜'
+  },
+  {
     name: 'Account',
     href: '/account',
     icon: '👤'

@@ -9,6 +9,10 @@ interface CandlestickData {
   low: number
   close: number
   volume?: number
+  long_tier?: string
+  short_tier?: string
+  predictionStatus?: 'correct' | 'incorrect' | 'neutral'
+  isCompensated?: boolean
 }
 
 interface CandlestickChartProps {
@@ -34,9 +38,10 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
   }, [])
 
   const chartDimensions = useMemo(() => {
-    if (!data.length) return { width: 0, height: 0, margin: { top: 20, right: 30, left: 50, bottom: 40 } }
+    if (!data.length) return { width: 0, height: 0, margin: { top: 20, right: 30, left: 50, bottom: 85 } }
     
-    const margin = { top: 20, right: 30, left: 50, bottom: 40 }
+    // Increase bottom margin to accommodate tier labels, prediction indicators, and compensation checkmarks
+    const margin = { top: 20, right: 30, left: 50, bottom: 85 }
     const chartWidth = containerWidth - margin.left - margin.right
     const chartHeight = height - margin.top - margin.bottom
     
@@ -136,6 +141,106 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
     )
   }
 
+  const renderTierLabels = () => {
+    const { width, height, margin } = chartDimensions
+    const { xScale } = scales
+    
+    const labels = []
+    
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i]
+      if (!item.long_tier && !item.short_tier) continue
+      
+      const x = margin.left + i * xScale + xScale / 2
+      const tierLabel = item.long_tier && item.short_tier 
+        ? `${item.long_tier}/${item.short_tier}`
+        : item.long_tier || item.short_tier || ''
+      
+      // Position tier label below the date labels
+      const tierLabelY = margin.top + height + 30
+      
+      // Position prediction indicator below tier label
+      const predictionY = tierLabelY + 15
+      
+      // Add checkmark, X mark, or gray dash based on prediction status
+      const status = item.predictionStatus
+      
+      labels.push(
+        <g key={`tier-label-${i}`}>
+          <text
+            x={x}
+            y={tierLabelY}
+            textAnchor="middle"
+            fontSize="11"
+            fill="currentColor"
+            className="text-zinc-300 font-semibold"
+          >
+            {tierLabel}
+          </text>
+          {status && (
+            <g>
+              {status === 'correct' ? (
+                <circle
+                  cx={x}
+                  cy={predictionY}
+                  r="7"
+                  fill="#10b981"
+                />
+              ) : status === 'incorrect' ? (
+                <circle
+                  cx={x}
+                  cy={predictionY}
+                  r="7"
+                  fill="#ef4444"
+                />
+              ) : (
+                <circle
+                  cx={x}
+                  cy={predictionY}
+                  r="7"
+                  fill="#6b7280"
+                />
+              )}
+              <text
+                x={x}
+                y={predictionY + 3}
+                textAnchor="middle"
+                fontSize="10"
+                fill="white"
+                fontWeight="bold"
+              >
+                {status === 'correct' ? '✓' : status === 'incorrect' ? '✗' : '−'}
+              </text>
+              {/* Compensation checkmark below X mark */}
+              {status === 'incorrect' && item.isCompensated && (
+                <g>
+                  <circle
+                    cx={x}
+                    cy={predictionY + 20}
+                    r="6"
+                    fill="#10b981"
+                  />
+                  <text
+                    x={x}
+                    y={predictionY + 23}
+                    textAnchor="middle"
+                    fontSize="9"
+                    fill="white"
+                    fontWeight="bold"
+                  >
+                    ✓
+                  </text>
+                </g>
+              )}
+            </g>
+          )}
+        </g>
+      )
+    }
+    
+    return labels
+  }
+
   const renderGrid = () => {
     const { width, height, margin } = chartDimensions
     const { minPrice, maxPrice } = scales
@@ -189,6 +294,12 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
     // Show about 5-6 time labels
     const step = Math.max(1, Math.floor(data.length / 6))
     
+    // Check if we have tier data - if so, position date labels higher
+    const hasTierData = data.some(d => d.long_tier || d.short_tier)
+    const dateLabelY = hasTierData 
+      ? margin.top + height + 10  // Higher position when tiers are shown
+      : margin.top + height + margin.bottom - 5  // Normal position
+    
     for (let i = 0; i < data.length; i += step) {
       const x = margin.left + i * xScale + xScale / 2
       const label = data[i].time
@@ -197,7 +308,7 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
         <text
           key={`x-label-${i}`}
           x={x}
-          y={margin.top + height + margin.bottom - 5}
+          y={dateLabelY}
           textAnchor="middle"
           fontSize="12"
           fill="currentColor"
@@ -307,6 +418,9 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
         
         {/* X-axis labels - positioned UNDER the x-axis line */}
         {renderXAxisLabels()}
+        
+        {/* Tier labels - positioned below x-axis labels */}
+        {renderTierLabels()}
         
         {/* Y-axis */}
         <line
