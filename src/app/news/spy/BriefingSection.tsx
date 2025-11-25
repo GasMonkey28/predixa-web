@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo, useMemo } from 'react'
 import BriefingControls from './BriefingControls'
 import type { PredixaBriefing, BriefingMode, Sentiment } from './types'
 
@@ -10,7 +10,7 @@ interface BriefingSectionProps {
   articlesCount: number
 }
 
-function getSentimentColor(sentiment: Sentiment): string {
+const getSentimentColor = (sentiment: Sentiment): string => {
   switch (sentiment) {
     case 'bullish':
       return 'bg-green-500/20 text-green-400 border-green-500/50'
@@ -24,7 +24,7 @@ function getSentimentColor(sentiment: Sentiment): string {
   }
 }
 
-export default function BriefingSection({
+function BriefingSection({
   initialBriefing,
   initialMode = 'pro',
   articlesCount,
@@ -150,4 +150,7 @@ export default function BriefingSection({
     </div>
   )
 }
+
+// Memoize component to prevent unnecessary re-renders
+export default memo(BriefingSection)
 

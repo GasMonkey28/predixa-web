@@ -15,6 +15,7 @@
  */
 
 import { Metadata } from 'next'
+import { Suspense } from 'react'
 import { fetchSpyNews } from './newsClient'
 import { generatePredixaBriefing } from './briefingClient'
 import BriefingSection from './BriefingSection'
@@ -126,12 +127,12 @@ function formatRelativeTime(dateString: string): string {
 
 export default async function SpyNewsPage() {
   let articles: Awaited<ReturnType<typeof fetchSpyNews>> = []
-  let briefing: Awaited<ReturnType<typeof generatePredixaBriefing>> | null =
-    null
+  let briefing: Awaited<ReturnType<typeof generatePredixaBriefing>> | null = null
   let newsError: string | null = null
   let briefingError: string | null = null
 
-  // Fetch news articles
+  // Fetch news articles first (non-blocking for briefing)
+  // This allows the page to render immediately with news articles
   try {
     articles = await fetchSpyNews()
   } catch (error) {
@@ -140,16 +141,19 @@ export default async function SpyNewsPage() {
     console.error('Error fetching news:', error)
   }
 
-  // Generate briefing if we have articles
+  // Try to get briefing, but don't block page render if it fails
+  // BriefingSection will handle async loading if initial briefing is null
   if (articles.length > 0) {
     try {
-      briefing = await generatePredixaBriefing(articles)
+      // Attempt to get briefing, but catch errors gracefully
+      briefing = await generatePredixaBriefing(articles, 'pro').catch(() => null)
     } catch (error) {
+      // Briefing will load async in BriefingSection - don't block page render
       briefingError =
         error instanceof Error
           ? error.message
           : 'Failed to generate briefing'
-      console.error('Error generating briefing:', error)
+      console.error('Error generating briefing (non-blocking):', error)
     }
   }
 
@@ -315,21 +319,34 @@ export default async function SpyNewsPage() {
             </div>
           )}
 
-          {/* Predixa Briefing Section */}
-          {briefingError ? (
-            <div className="mb-8 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4 text-yellow-400">
-              <p className="font-semibold">Briefing temporarily unavailable</p>
-              <p className="text-sm">
-                {briefingError}. Raw headlines are shown below.
-              </p>
-            </div>
-          ) : (
-            <BriefingSection
-              initialBriefing={briefing}
-              initialMode="pro"
-              articlesCount={articles.length}
-            />
-          )}
+          {/* Predixa Briefing Section - Load async with Suspense */}
+          <Suspense
+            fallback={
+              <div className="mb-8 rounded-2xl border border-zinc-800/50 bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 p-6 backdrop-blur-sm">
+                <div className="mb-4 h-8 w-64 animate-pulse rounded bg-zinc-800"></div>
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-4 w-full animate-pulse rounded bg-zinc-800"></div>
+                  ))}
+                </div>
+              </div>
+            }
+          >
+            {briefingError ? (
+              <div className="mb-8 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4 text-yellow-400">
+                <p className="font-semibold">Briefing temporarily unavailable</p>
+                <p className="text-sm">
+                  {briefingError}. Raw headlines are shown below.
+                </p>
+              </div>
+            ) : (
+              <BriefingSection
+                initialBriefing={briefing}
+                initialMode="pro"
+                articlesCount={articles.length}
+              />
+            )}
+          </Suspense>
 
           {/* Latest SPY Headlines Section */}
           <div className="rounded-2xl border border-zinc-800/50 bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 p-6 backdrop-blur-sm">

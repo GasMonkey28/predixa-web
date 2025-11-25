@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '@/lib/auth-store'
 
@@ -68,7 +69,16 @@ const SOCIAL_LINKS = [
 
 export default function Navigation() {
   const pathname = usePathname()
+  const router = useRouter()
   const { isAuthenticated } = useAuthStore()
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
+
+  // Handle navigation state
+  useEffect(() => {
+    setIsNavigating(false)
+    setNavigatingTo(null)
+  }, [pathname])
 
   return (
     <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
@@ -93,20 +103,32 @@ export default function Navigation() {
             <div className="flex items-center justify-center flex-1 gap-1">
               {navigationItems.map((item) => {
                 const isActive = pathname === item.href || (item.href !== '/news/spy' && pathname?.startsWith(item.href))
+                const isNavigatingToThis = navigatingTo === item.href
                 
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
+                    prefetch={true}
+                    onClick={(e) => {
+                      if (pathname !== item.href) {
+                        setIsNavigating(true)
+                        setNavigatingTo(item.href)
+                      }
+                    }}
                     className={clsx(
-                      'flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 whitespace-nowrap',
+                      'flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 whitespace-nowrap relative',
                       isActive
                         ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700'
-                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
+                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700',
+                      isNavigatingToThis && 'opacity-70'
                     )}
                   >
                     <span className="text-base leading-none">{item.icon}</span>
                     <span>{item.name}</span>
+                    {isNavigatingToThis && (
+                      <span className="ml-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    )}
                   </Link>
                 )
               })}
