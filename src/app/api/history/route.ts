@@ -109,11 +109,20 @@ export async function GET() {
       logger.warn({ error: yahooError.message }, 'Error fetching OHLC data from Yahoo Finance')
     }
 
-    // Fetch tier data from S3
-    const tradingDays = getLast10TradingDays()
+    // Fetch tier data from S3 using OHLC dates as source of truth
+    // This ensures we always fetch tier data for the exact same dates as OHLC data,
+    // preventing timezone-related date mismatches
     const tierDataMap = new Map<string, any>()
 
-    for (const dateStr of tradingDays) {
+    // Use OHLC dates to fetch tier data (ensures perfect date matching)
+    for (const ohlc of ohlcData) {
+      const dateStr = ohlc.date
+      
+      // Skip if we already fetched this date
+      if (tierDataMap.has(dateStr)) {
+        continue
+      }
+      
       try {
         const url = `https://s3.amazonaws.com/${BUCKET}/summary_json/${dateStr}.json`
         
@@ -136,8 +145,20 @@ export async function GET() {
         // Skip days where tier data doesn't exist
         if (error.response?.status === 404) {
           logger.debug({ date: dateStr }, 'Tier data not found for date')
+          // Set N/A for missing tier data
+          tierDataMap.set(dateStr, {
+            date: dateStr,
+            long_tier: 'N/A',
+            short_tier: 'N/A'
+          })
         } else {
           logger.warn({ date: dateStr, error: error.message }, 'Error fetching tier data for date')
+          // Set N/A on error
+          tierDataMap.set(dateStr, {
+            date: dateStr,
+            long_tier: 'N/A',
+            short_tier: 'N/A'
+          })
         }
       }
     }
