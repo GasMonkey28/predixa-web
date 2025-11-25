@@ -4,6 +4,8 @@
 
 export type Sentiment = 'bullish' | 'bearish' | 'mixed' | 'neutral'
 
+export type BriefingMode = 'pro' | 'simple' | 'wsb'
+
 /**
  * News item from Massive.com API
  */

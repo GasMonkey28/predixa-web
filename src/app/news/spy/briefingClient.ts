@@ -8,15 +8,22 @@
  */
 
 import OpenAI from 'openai'
-import type { MassiveNewsItem, PredixaBriefing, Sentiment } from './types'
+import type {
+  MassiveNewsItem,
+  PredixaBriefing,
+  Sentiment,
+  BriefingMode,
+} from './types'
 
 /**
  * Generates a Predixa Briefing from news articles using OpenAI
  * @param articles Array of news articles to summarize
+ * @param mode Briefing mode: 'pro' (default), 'simple' (ELI5), or 'wsb' (meme style)
  * @returns AI-generated briefing with daily summary, themes, sentiment, and top articles
  */
 export async function generatePredixaBriefing(
-  articles: MassiveNewsItem[]
+  articles: MassiveNewsItem[],
+  mode: BriefingMode = 'pro'
 ): Promise<PredixaBriefing> {
   const apiKey = process.env.OPENAI_API_KEY
 
@@ -42,7 +49,69 @@ export async function generatePredixaBriefing(
     })
     .join('\n')
 
-  const prompt = `You are generating a daily SPY (S&P 500 ETF) market news briefing for Predixa, a trading analytics platform.
+  // Mode-specific prompt instructions
+  const getModeInstructions = (mode: BriefingMode): string => {
+    switch (mode) {
+      case 'simple':
+        return `You are generating a daily SPY (S&P 500 ETF) market news briefing for Predixa, written in VERY SIMPLE language - explain like the reader is 5 years old.
+
+STYLE REQUIREMENTS:
+- Use simple, everyday words (avoid financial jargon like "ETF", "volatility", "liquidity")
+- Explain complex concepts in plain language
+- Keep sentences short and easy to understand
+- Use analogies when helpful (e.g., "like a piggy bank for many companies")
+- Be friendly and approachable
+
+Here are today's top SPY news articles:
+
+${articlesText}
+
+Please generate a simple daily briefing that:
+- Summarizes the key market-moving news in 3-6 short, simple bullet points (use plain language)
+- Identifies 2-6 main themes using simple words (e.g., "prices going up", "jobs", "taxes")
+- Assesses overall market sentiment (bullish, bearish, mixed, or neutral) based on the articles
+- Selects up to 5 most important articles
+
+IMPORTANT:
+- Use VERY SIMPLE language that anyone can understand
+- Avoid financial jargon - explain everything in plain terms
+- Do NOT provide explicit trading advice
+- Only use information from the articles provided
+- Output only valid JSON matching the required schema`
+
+      case 'wsb':
+        return `You are generating a daily SPY (S&P 500 ETF) market news briefing for Predixa in a fun, engaging WallStreetBets-inspired style.
+
+STYLE REQUIREMENTS:
+- Use fun, energetic language with meme references and emojis (sparingly)
+- Make it entertaining and engaging
+- Use terms like "stocks go brrr", "diamond hands", "tendies", "stonks" (playfully)
+- Add excitement and personality
+- NO profanity or inappropriate language
+- NO explicit financial advice
+- Keep it fun but informative
+
+Here are today's top SPY news articles:
+
+${articlesText}
+
+Please generate a fun daily briefing that:
+- Summarizes the key market-moving news in 3-6 short, energetic bullet points (with personality and occasional emojis)
+- Identifies 2-6 main themes using fun tags (e.g., "inflation 📈", "jobs 💼", "tariffs 🚫")
+- Assesses overall market sentiment (bullish, bearish, mixed, or neutral) based on the articles
+- Selects up to 5 most important articles
+
+IMPORTANT:
+- Make it fun and engaging with meme culture references
+- Use emojis sparingly (1-2 per bullet max)
+- NO profanity or inappropriate content
+- NO explicit trading advice
+- Only use information from the articles provided
+- Output only valid JSON matching the required schema`
+
+      case 'pro':
+      default:
+        return `You are generating a daily SPY (S&P 500 ETF) market news briefing for Predixa, a trading analytics platform.
 
 Here are today's top SPY news articles:
 
@@ -65,6 +134,10 @@ Return a JSON object with:
 - themes: array of 2-6 one or two-word theme tags
 - sentiment: one of "bullish", "bearish", "mixed", or "neutral"
 - top_articles: array of up to 5 articles with title, publisher, published_utc, and url fields`
+    }
+  }
+
+  const prompt = getModeInstructions(mode)
 
   try {
     const openai = new OpenAI({
@@ -80,7 +153,11 @@ Return a JSON object with:
           {
             role: 'system',
             content:
-              'You are a financial news analyst creating concise market briefings. Always output valid JSON matching this exact structure: {"daily_brief": ["bullet 1", "bullet 2"], "themes": ["theme1", "theme2"], "sentiment": "bullish|bearish|mixed|neutral", "top_articles": [{"title": "...", "publisher": "...", "published_utc": "...", "url": "..."}]}',
+              mode === 'simple'
+                ? 'You are a friendly financial educator who explains market news in very simple terms that anyone can understand. Always output valid JSON matching this exact structure: {"daily_brief": ["bullet 1", "bullet 2"], "themes": ["theme1", "theme2"], "sentiment": "bullish|bearish|mixed|neutral", "top_articles": [{"title": "...", "publisher": "...", "published_utc": "...", "url": "..."}]}'
+                : mode === 'wsb'
+                  ? 'You are a fun, energetic market commentator who makes financial news entertaining with meme culture references and personality. NO profanity. Always output valid JSON matching this exact structure: {"daily_brief": ["bullet 1", "bullet 2"], "themes": ["theme1", "theme2"], "sentiment": "bullish|bearish|mixed|neutral", "top_articles": [{"title": "...", "publisher": "...", "published_utc": "...", "url": "..."}]}'
+                  : 'You are a financial news analyst creating concise market briefings. Always output valid JSON matching this exact structure: {"daily_brief": ["bullet 1", "bullet 2"], "themes": ["theme1", "theme2"], "sentiment": "bullish|bearish|mixed|neutral", "top_articles": [{"title": "...", "publisher": "...", "published_utc": "...", "url": "..."}]}',
           },
           {
             role: 'user',
