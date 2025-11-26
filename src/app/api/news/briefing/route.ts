@@ -6,6 +6,7 @@ import {
   setCachedBriefing,
   generateArticleHash,
 } from '@/app/news/spy/briefingCache'
+import { getFreshBriefingFromS3, isBriefingFresh } from '@/lib/s3-briefing-client'
 import type { BriefingMode } from '@/app/news/spy/types'
 
 export const dynamic = 'force-dynamic'
@@ -25,7 +26,40 @@ export async function GET(request: Request) {
       )
     }
 
-    // Fetch news articles
+    // Try to read from S3 first (unless force refresh)
+    if (!forceRefresh) {
+      try {
+        const s3Briefing = await getFreshBriefingFromS3(mode, 4 * 60 * 60 * 1000) // 4 hours
+        
+        if (s3Briefing && s3Briefing.briefing) {
+          const isFresh = isBriefingFresh(s3Briefing, 4 * 60 * 60 * 1000)
+          
+          return NextResponse.json(
+            {
+              briefing: s3Briefing.briefing,
+              mode,
+              articlesCount: s3Briefing.articlesCount,
+              cached: true,
+              source: 's3',
+              generatedAt: s3Briefing.generatedAt,
+              isFresh,
+            },
+            {
+              headers: {
+                'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+                'X-Cache': 'S3-HIT',
+                'X-Source': 's3',
+              },
+            }
+          )
+        }
+      } catch (s3Error) {
+        // S3 read failed, fall through to generation
+        console.log('S3 briefing read failed, falling back to generation:', s3Error)
+      }
+    }
+
+    // S3 unavailable or force refresh - fetch news and generate
     const articles = await fetchSpyNews()
 
     if (articles.length === 0) {
@@ -38,7 +72,7 @@ export async function GET(request: Request) {
     // Generate article hash to detect changes
     const articleHash = generateArticleHash(articles)
 
-    // Check cache first (unless force refresh)
+    // Check in-memory cache (unless force refresh)
     if (!forceRefresh) {
       const cachedBriefing = getCachedBriefing(mode, articleHash)
       if (cachedBriefing) {
@@ -48,11 +82,13 @@ export async function GET(request: Request) {
             mode,
             articlesCount: articles.length,
             cached: true,
+            source: 'memory',
           },
           {
             headers: {
               'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-              'X-Cache': 'HIT',
+              'X-Cache': 'MEMORY-HIT',
+              'X-Source': 'memory',
             },
           }
         )
@@ -62,7 +98,7 @@ export async function GET(request: Request) {
     // Cache miss or force refresh - generate new briefing
     const briefing = await generatePredixaBriefing(articles, mode)
 
-    // Store in cache
+    // Store in in-memory cache
     setCachedBriefing(mode, briefing, articleHash)
 
     return NextResponse.json(
@@ -71,11 +107,13 @@ export async function GET(request: Request) {
         mode,
         articlesCount: articles.length,
         cached: false,
+        source: 'generated',
       },
       {
         headers: {
           'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
           'X-Cache': 'MISS',
+          'X-Source': 'generated',
         },
       }
     )

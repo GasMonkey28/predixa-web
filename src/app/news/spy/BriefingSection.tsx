@@ -100,8 +100,6 @@ function BriefingSection({
       <BriefingControls
         currentMode={mode}
         onModeChange={handleModeChange}
-        onRefresh={(force) => handleRefresh(undefined, force)}
-        isRefreshing={isRefreshing}
       />
 
       {/* Error Message */}
