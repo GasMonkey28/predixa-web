@@ -111,7 +111,7 @@ export default function LoginForm() {
         <div className="mb-4 -mt-2 -mx-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-b border-blue-200 dark:border-blue-800 rounded-t-lg p-3 text-center">
           <p className="text-sm text-gray-700 dark:text-gray-300">
             <span className="font-semibold text-blue-600 dark:text-blue-400">New to Predixa?</span>{' '}
-            Start your <span className="font-bold text-purple-600 dark:text-purple-400">14-day free trial</span> - No credit card required
+            Start your <span className="font-bold text-purple-600 dark:text-purple-400">7-day free trial</span> - No credit card required
           </p>
         </div>
       )}

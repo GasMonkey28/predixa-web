@@ -61,7 +61,7 @@ USERS_TABLE=UserProfiles
 ENTITLEMENTS_TABLE=predixa_entitlements
 STRIPE_API_KEY=sk_live_xxx  # or sk_test_xxx for testing
 STRIPE_WEBHOOK_SECRET=whsec_xxx  # from Stripe Dashboard
-TRIAL_DAYS=14  # Optional, for reference
+TRIAL_DAYS=7  # Optional, for reference
 COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX  # Optional, for JWT verification
 COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxx  # Optional
 ```

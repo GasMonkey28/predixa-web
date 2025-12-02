@@ -80,7 +80,7 @@ This roadmap outlines the steps needed to launch your application with productio
   
   if (!hasPreviousSubscription) {
     sessionConfig.subscription_data = {
-      trial_period_days: 14, // 2-week free trial
+      trial_period_days: 7, // 1-week free trial
     }
   }
   ```

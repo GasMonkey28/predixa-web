@@ -406,7 +406,7 @@ export default function SignupForm() {
             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <h3 className="text-white font-bold text-xl">Start Your 14-Day Free Trial</h3>
+            <h3 className="text-white font-bold text-xl">Start Your 7-Day Free Trial</h3>
           </div>
           <p className="text-white/90 text-sm mt-1">No credit card required • Cancel anytime</p>
         </div>

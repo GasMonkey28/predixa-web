@@ -19,7 +19,7 @@ STRIPE_API_KEY = os.getenv("STRIPE_API_KEY", os.getenv("STRIPE_SECRET_KEY", ""))
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
 # Trial Configuration (optional, for reference - actual trials managed by Stripe)
-TRIAL_DAYS = int(os.getenv("TRIAL_DAYS", "14"))
+TRIAL_DAYS = int(os.getenv("TRIAL_DAYS", "7"))
 
 # Cognito Configuration (for JWT verification if needed)
 COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID", "")
