@@ -1,6 +1,9 @@
 /**
  * SPY News & Predixa AI Briefing Page
  * 
+ * NOTE: This page is PUBLICLY ACCESSIBLE - no authentication or subscription required.
+ * News is always free for everyone on both website and mobile app.
+ * 
  * Server-side rendered page that:
  * - Fetches SPY news from Massive.com API
  * - Generates AI-powered briefing using OpenAI

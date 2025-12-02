@@ -9,6 +9,13 @@ import {
 import { getFreshBriefingFromS3, isBriefingFresh } from '@/lib/s3-briefing-client'
 import type { BriefingMode } from '@/app/news/spy/types'
 
+/**
+ * News Briefing API Route
+ * 
+ * NOTE: This endpoint is PUBLICLY ACCESSIBLE - no authentication or subscription required.
+ * News is always free for everyone on both website and mobile app.
+ */
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
