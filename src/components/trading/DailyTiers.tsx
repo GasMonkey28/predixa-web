@@ -185,10 +185,17 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
   const longConfig = getTierConfig(tiersData.long_tier)
   const shortConfig = getTierConfig(tiersData.short_tier)
   
+  // Get tier strength levels using the tierStrengths mapping
+  const longTierLevel = tierStrengths[tiersData.long_tier] ?? 0
+  const shortTierLevel = tierStrengths[tiersData.short_tier] ?? 0
+  
   // Determine which signal is stronger for visual emphasis
   const longStrength = longConfig.strength
   const shortStrength = shortConfig.strength
   const dominantSignal = longStrength === shortStrength ? 'NEUTRAL' : (longStrength > shortStrength ? 'LONG' : 'SHORT')
+  
+  // Calculate level difference for dominant signal display
+  const levelDifference = Math.abs(longTierLevel - shortTierLevel)
 
   return (
     <div className="space-y-6">
@@ -290,8 +297,8 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
                   {dominantSignal === 'NEUTRAL'
                     ? 'Long and short signals are balanced'
                     : dominantSignal === 'LONG'
-                      ? `Long signal is ${((longStrength / shortStrength * 100) - 100).toFixed(0)}% more stronger`
-                      : `Short signal is ${((shortStrength / longStrength * 100) - 100).toFixed(0)}% more stronger`}
+                      ? `Long signal is ${levelDifference} level${levelDifference !== 1 ? 's' : ''} more stronger`
+                      : `Short signal is ${levelDifference} level${levelDifference !== 1 ? 's' : ''} more stronger`}
                 </div>
               </div>
             </div>
