@@ -189,13 +189,14 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
   const longTierLevel = tierStrengths[tiersData.long_tier] ?? 0
   const shortTierLevel = tierStrengths[tiersData.short_tier] ?? 0
   
+  // Calculate level difference for dominant signal display
+  const levelDifference = Math.abs(longTierLevel - shortTierLevel)
+  
   // Determine which signal is stronger for visual emphasis
   const longStrength = longConfig.strength
   const shortStrength = shortConfig.strength
-  const dominantSignal = longStrength === shortStrength ? 'NEUTRAL' : (longStrength > shortStrength ? 'LONG' : 'SHORT')
-  
-  // Calculate level difference for dominant signal display
-  const levelDifference = Math.abs(longTierLevel - shortTierLevel)
+  // If level difference is 1 or less, treat as NEUTRAL (no clear trend)
+  const dominantSignal = levelDifference <= 1 ? 'NEUTRAL' : (longStrength === shortStrength ? 'NEUTRAL' : (longStrength > shortStrength ? 'LONG' : 'SHORT'))
 
   return (
     <div className="space-y-6">
