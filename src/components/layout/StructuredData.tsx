@@ -1,6 +1,6 @@
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.predixaweb.com'
 const siteName = 'Predixa'
-const defaultDescription = 'Professional Trading Analytics Platform - Intraday levels, curated commentary, and economic context built for active traders.'
+const defaultDescription = 'Professional Trading Analytics Platform for SPY trading, swing trading, and stock market analysis. Predict SPY movement with AI-powered signals, forecasts, and trading analytics for active traders.'
 
 const organizationSchema = {
   '@context': 'https://schema.org',

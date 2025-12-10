@@ -13,7 +13,7 @@ export default function Footer() {
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Predixa</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Professional Trading Analytics Platform
+              Professional Trading Analytics Platform for SPY trading, swing trading, and stock market analysis. Predict SPY movement with AI-powered signals and forecasts.
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
               Educational content only - NOT financial advice. Trading involves risk.

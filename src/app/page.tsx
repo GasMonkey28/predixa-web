@@ -81,7 +81,7 @@ export default function HomePage() {
           </div>
           
           <p className="mt-3 text-lg text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-            Get daily <strong>SPY Forecast</strong> and <strong>SPY Signals</strong> with direction probability, tier rankings, range forecasts, and options flow analysis. Professional trading analytics built for disciplined market participants.
+            Get daily <strong>SPY Forecast</strong> and <strong>SPY Signals</strong> with direction probability, tier rankings, range forecasts, and options flow analysis. Professional trading analytics built for disciplined market participants. Predict SPY movement for swing trading and stock market analysis.
           </p>
         </div>
 
@@ -204,6 +204,32 @@ export default function HomePage() {
             >
               Learn About Options Flow →
             </Link>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">SPY Trading & Swing Trading Strategies</h2>
+            <p className="text-gray-700 dark:text-gray-300">
+              SPY trading involves buying and selling the SPDR S&P 500 ETF, one of the most liquid and widely traded securities in the stock market. Swing trading SPY focuses on capturing price movements over several days to weeks, making it ideal for traders who want to participate in market trends without the intensity of day trading. Predixa provides the tools and insights needed to identify swing trading opportunities in SPY by analyzing direction probability, support and resistance levels, and market structure.
+            </p>
+            <p className="text-gray-700 dark:text-gray-300">
+              Our SPY swing trading signals help traders identify entry and exit points based on technical analysis and probability models. The tier system (SS-D) highlights key price levels that often act as support or resistance, which are crucial for swing trading strategies. Range forecasts provide expected high and low levels, helping swing traders plan their positions and manage risk. Whether you're new to SPY swing trading or an experienced trader, Predixa's analytics help you make more informed decisions in the stock market.
+            </p>
+            <p className="text-gray-700 dark:text-gray-300">
+              Successful SPY swing trading requires understanding market context, managing position size, and using stop-loss orders. Our platform helps you predict SPY movement by aggregating multiple signals and providing probability-weighted forecasts. This approach is particularly valuable for swing traders who hold positions for multiple days, as it helps identify when market conditions favor continued trends versus potential reversals.
+            </p>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Stock Market Analysis & Predictions</h2>
+            <p className="text-gray-700 dark:text-gray-300">
+              Stock market analysis involves examining price patterns, volume, technical indicators, and market structure to understand potential future movement. Predixa specializes in SPY analysis, which serves as a proxy for overall stock market direction since SPY tracks the S&P 500 index. Our platform combines multiple analytical approaches to provide comprehensive stock market insights and SPY predictions.
+            </p>
+            <p className="text-gray-700 dark:text-gray-300">
+              Our stock market analysis tools help traders predict SPY movement by examining options flow, market breadth, economic calendar events, and technical patterns. The SPY forecast provides direction probability that reflects the alignment of various market signals. This probabilistic approach helps traders understand not just what might happen, but how likely different outcomes are, which is essential for risk management in stock market trading.
+            </p>
+            <p className="text-gray-700 dark:text-gray-300">
+              Whether you're engaged in SPY trading, swing trading, or broader stock market analysis, Predixa provides the data and insights needed to make more informed decisions. Our platform tracks market conditions, identifies trends, and helps you understand when the stock market may be setting up for significant moves. By combining technical analysis with options flow data and market sentiment indicators, we help traders navigate the complexities of stock market trading with greater confidence.
+            </p>
           </section>
         </div>
 

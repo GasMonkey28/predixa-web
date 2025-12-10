@@ -8,7 +8,7 @@ import { GAPageView } from '@/components/GAPageView'
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.predixaweb.com'
 const siteName = 'Predixa'
-const defaultDescription = 'Daily SPY forecast, direction probability, tier rankings, and SPY options flow analysis. Get SPY signals and understand SPY movement with professional trading analytics.'
+const defaultDescription = 'Daily SPY forecast, direction probability, tier rankings, and SPY options flow analysis. Get SPY signals and understand SPY movement with professional trading analytics. Predict SPY for swing trading and stock market analysis.'
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -28,6 +28,17 @@ export const metadata: Metadata = {
     'economic calendar',
     'trading commentary',
     'financial analytics',
+    'spy trading',
+    'swing trading',
+    'predict spy',
+    'stock market',
+    'spy prediction',
+    'spy swing trading',
+    'spy day trading',
+    'spy etf trading',
+    'spy options trading',
+    'spy forecast',
+    'spy signals',
   ],
   authors: [{ name: siteName }],
   creator: siteName,
