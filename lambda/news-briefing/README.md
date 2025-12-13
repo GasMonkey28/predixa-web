@@ -102,27 +102,37 @@ aws lambda invoke \
 
 ## EventBridge Schedule
 
-Set up a scheduled trigger to run every 2-4 hours:
+The Lambda runs on an optimized schedule based on market hours:
 
-```bash
-# Create EventBridge rule
-aws events put-rule \
-  --name predixa-briefing-schedule \
-  --schedule-expression "rate(3 hours)" \
-  --state ENABLED
+- **Pre-market** (1 hour before): 13:30 UTC (8:30 AM ET)
+- **Market hours** (9:30 AM - 4:00 PM ET): Every 30 minutes from 14:00-20:30 UTC
+- **Market close**: 21:00 UTC (4:00 PM ET)
+- **Post-market** (1 hour after): 22:00 UTC (5:00 PM ET)
+- **Off-hours**: Every 3 hours
 
-# Add Lambda as target
-aws events put-targets \
-  --rule predixa-briefing-schedule \
-  --targets "Id=1,Arn=arn:aws:lambda:REGION:ACCOUNT:function:predixa-news-briefing"
-```
+**Total runs per day:** ~21 runs/day (~630/month)
 
-Or use the setup script:
+### Setup
 
+Use the setup script to configure all schedules automatically:
+
+**Linux/WSL:**
 ```bash
 chmod +x setup-schedule.sh
 ./setup-schedule.sh
 ```
+
+**Windows PowerShell:**
+```powershell
+.\setup-schedule.ps1
+```
+
+The script creates 5 EventBridge rules:
+- `predixa-briefing-pre-market` - Pre-market briefing
+- `predixa-briefing-market-hours` - Every 30 min during market hours
+- `predixa-briefing-market-close` - Market close briefing
+- `predixa-briefing-post-market` - Post-market briefing
+- `predixa-briefing-off-hours` - Off-hours (every 3 hours)
 
 ## S3 Structure
 

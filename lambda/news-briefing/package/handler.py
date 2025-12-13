@@ -133,7 +133,7 @@ Please generate a simple daily briefing that:
 - Summarizes the key market-moving news in 3-6 short, simple bullet points (use plain language)
 - Identifies 2-6 main themes using simple words (e.g., "prices going up", "jobs", "taxes")
 - Assesses overall market sentiment (bullish, bearish, mixed, or neutral) based on the articles
-- Selects up to 5 most important articles
+- Selects EXACTLY 10-15 most important articles (NOT 5). You MUST include at least 10 articles in top_articles array. Prioritize relevance and recency.
 
 IMPORTANT:
 - Use VERY SIMPLE language that anyone can understand
@@ -162,7 +162,7 @@ Please generate a fun daily briefing that:
 - Summarizes the key market-moving news in 3-6 short, energetic bullet points (with personality and occasional emojis)
 - Identifies 2-6 main themes using fun tags (e.g., "inflation 📈", "jobs 💼", "tariffs 🚫")
 - Assesses overall market sentiment (bullish, bearish, mixed, or neutral) based on the articles
-- Selects up to 5 most important articles
+- Selects EXACTLY 10-15 most important articles (NOT 5). You MUST include at least 10 articles in top_articles array. Prioritize relevance and recency.
 
 IMPORTANT:
 - Make it fun and engaging with meme culture references
@@ -183,7 +183,7 @@ Please generate a concise daily briefing that:
 - Summarizes the key market-moving news in 3-6 short bullet points
 - Identifies 2-6 main themes (one or two words each, e.g., "inflation", "labor market", "tariffs")
 - Assesses overall market sentiment (bullish, bearish, mixed, or neutral) based on the articles
-- Selects up to 5 most important articles
+- Selects EXACTLY 10-15 most important articles (NOT 5). You MUST include at least 10 articles in top_articles array. Prioritize relevance and recency.
 
 IMPORTANT:
 - Be concise and factual
@@ -195,12 +195,12 @@ Return a JSON object with:
 - daily_brief: array of 3-6 short bullet point strings
 - themes: array of 2-6 one or two-word theme tags
 - sentiment: one of "bullish", "bearish", "mixed", or "neutral"
-- top_articles: array of up to 5 articles with title, publisher, published_utc, and url fields"""
+- top_articles: array of EXACTLY 10-15 articles (NOT 5) with title, publisher, published_utc, and url fields. You MUST include at least 10 articles, prioritizing most relevant and recent. Do NOT limit to 5 articles."""
 
 
 def get_system_message(mode: str) -> str:
     """Get system message for OpenAI based on mode"""
-    base_schema = '{"daily_brief": ["bullet 1", "bullet 2"], "themes": ["theme1", "theme2"], "sentiment": "bullish|bearish|mixed|neutral", "top_articles": [{"title": "...", "publisher": "...", "published_utc": "...", "url": "..."}]}'
+    base_schema = '{"daily_brief": ["bullet 1", "bullet 2"], "themes": ["theme1", "theme2"], "sentiment": "bullish|bearish|mixed|neutral", "top_articles": [{"title": "...", "publisher": "...", "published_utc": "...", "url": "..."}, ...]}'
     
     if mode == 'simple':
         return f'You are a friendly financial educator who explains market news in very simple terms that anyone can understand. Always output valid JSON matching this exact structure: {base_schema}'
@@ -237,7 +237,7 @@ def generate_briefing(articles: List[Dict[str, Any]], mode: str = 'pro') -> Dict
             ],
             response_format={'type': 'json_object'},
             temperature=0.7,
-            max_tokens=1500,
+            max_tokens=2500,  # Increased for more articles
         )
         
         content = completion.choices[0].message.content

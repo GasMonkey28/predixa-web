@@ -67,20 +67,79 @@ function DailyPageContent() {
   }))
 
   // Calculate price change vs previous trading day's close
+  // Match app logic: filter to regular market hours (9:30 AM - 3:00 PM ET) only
   const allBars = data.bars || []
   const nyTZ = 'America/New_York'
   
-  // Get the most recent bar for current price (this is the latest available price)
-  const currentBar = allBars[allBars.length - 1]
+  // Helper function to get hour and minute in ET timezone
+  // Timestamps are already in ET format (e.g., "2025-11-24T15:45:00" = 3:45 PM ET)
+  // Swift parses them with timezone set to ET, so we extract hour/minute directly
+  const getETTimeComponents = (timestamp: string): { hour: number; minute: number; date: Date } => {
+    // Extract hour and minute directly from timestamp string (they're already in ET)
+    const [, timePart] = timestamp.split('T')
+    const [hour, minute] = timePart.split(':').map(Number)
+    
+    // For date comparisons, we need a Date object
+    // Parse timestamp assuming it's ET, then create Date
+    // Since JS parses as UTC by default, we need to adjust
+    const [datePart] = timestamp.split('T')
+    const [year, month, day] = datePart.split('-').map(Number)
+    
+    // Create date in UTC, but we'll use it for date comparisons only
+    // The actual time components (hour/minute) come from the string
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, 0))
+    
+    return { hour, minute, date }
+  }
+  
+  // Helper function to check if a bar is in regular market hours (9:30 AM - 3:00 PM ET)
+  const isRegularMarketHours = (bar: any): boolean => {
+    const { hour, minute } = getETTimeComponents(bar.t)
+    
+    // Include bars from 9:30 AM (09:30) to 3:00 PM (15:00) ET
+    // Note: hour > 15 means exclude hour 16+, but include hour 15 (3:00 PM to 3:59 PM)
+    if (hour < 9 || hour > 15) return false
+    if (hour === 9 && minute < 30) return false
+    // Include all of hour 15 (3:00 PM to 3:59 PM) for 15-minute bars
+    return true
+  }
+  
+  // Filter all bars to regular market hours only
+  const regularHoursBars = allBars.filter(isRegularMarketHours)
+  
+  if (regularHoursBars.length === 0) {
+    // Fallback: if no regular hours bars, use all bars (shouldn't happen normally)
+    console.warn('No regular market hours bars found, using all bars')
+  }
+  
+  // Sort filtered bars by timestamp
+  const sortedRegularBars = (regularHoursBars.length > 0 ? regularHoursBars : allBars)
+    .sort((a: any, b: any) => new Date(a.t).getTime() - new Date(b.t).getTime())
+  
+  // Get the last regular-hours bar for current price
+  const currentBar = sortedRegularBars[sortedRegularBars.length - 1]
   const currentPrice = currentBar?.c || 0
   
-  // Group all bars by trading day (date in ET timezone)
+  if (!currentBar) {
+    // No data available
+    console.warn('No current bar found for price calculation')
+  }
+  
+  // Get the current bar's trading day (ET timezone)
+  // Since timestamps are in ET format, extract date part directly
+  const getETDateString = (timestamp: string): string => {
+    // Timestamp format: "2025-11-24T15:45:00", date part is already in ET
+    const [datePart] = timestamp.split('T')
+    return datePart // Returns YYYY-MM-DD format
+  }
+  
+  const currentDateStr = currentBar ? getETDateString(currentBar.t) : getETDateString(new Date().toISOString())
+  
+  // Group regular-hours bars by trading day (date in ET timezone)
   const barsByDate = new Map<string, any[]>()
   
-  allBars.forEach((bar: any) => {
-    const barDate = new Date(bar.t)
-    const barDateET = new Date(barDate.toLocaleString('en-US', { timeZone: nyTZ }))
-    const barDateStr = barDateET.toISOString().split('T')[0] // YYYY-MM-DD
+  sortedRegularBars.forEach((bar: any) => {
+    const barDateStr = getETDateString(bar.t)
     
     if (!barsByDate.has(barDateStr)) {
       barsByDate.set(barDateStr, [])
@@ -88,15 +147,10 @@ function DailyPageContent() {
     barsByDate.get(barDateStr)!.push(bar)
   })
   
-  // Get the current trading day date (ET timezone)
-  const currentBarDate = new Date(currentBar.t)
-  const currentBarDateET = new Date(currentBarDate.toLocaleString('en-US', { timeZone: nyTZ }))
-  const currentDateStr = currentBarDateET.toISOString().split('T')[0] // YYYY-MM-DD
-  
   // Get all unique dates and sort them
   const sortedDates = Array.from(barsByDate.keys()).sort()
   
-  // Find the previous trading day's close (4:00 PM ET close)
+  // Find the previous trading day's close (last regular-hours bar from previous day)
   let previousClose = 0
   const currentDateIndex = sortedDates.indexOf(currentDateStr)
   if (currentDateIndex > 0) {
@@ -105,92 +159,34 @@ function DailyPageContent() {
     const previousDayBars = barsByDate.get(previousDateStr) || []
     
     if (previousDayBars.length > 0) {
-      // Try multiple strategies to find the previous day's close
-      let previousCloseBar = null
-      
-      // Strategy 1: Look for bar with timestamp ending in "T16:00:00" (4:00 PM close)
-      // This works if timestamps are in a consistent format
-      previousCloseBar = previousDayBars.find((bar: any) => {
-        const timestamp = String(bar.t)
-        // Check if timestamp ends with T16:00:00 or contains 16:00:00
-        return timestamp.includes('T16:00:00') || timestamp.endsWith('T16:00')
-      })
-      
-      // Strategy 2: Find bar at exactly 4:00 PM ET (16:00:00) by converting to ET
-      if (!previousCloseBar) {
-        previousCloseBar = previousDayBars.find((bar: any) => {
-          const barDate = new Date(bar.t)
-          const etTime = new Date(barDate.toLocaleString('en-US', { timeZone: nyTZ }))
-          const hour = etTime.getHours()
-          const minute = etTime.getMinutes()
-          const second = etTime.getSeconds()
-          // Look for exactly 16:00:00 (4:00 PM ET)
-          return hour === 16 && minute === 0 && second === 0
-        })
-      }
-      
-      // Strategy 3: Find the last bar at hour 16 (4:00 PM) in ET
-      if (!previousCloseBar) {
-        const hour16Bars = previousDayBars
-          .filter((bar: any) => {
-            const barDate = new Date(bar.t)
-            const etTime = new Date(barDate.toLocaleString('en-US', { timeZone: nyTZ }))
-            return etTime.getHours() === 16
-          })
-          .sort((a: any, b: any) => new Date(b.t).getTime() - new Date(a.t).getTime())
-        
-        if (hour16Bars.length > 0) {
-          previousCloseBar = hour16Bars[0]
-        }
-      }
-      
-      // Strategy 4: Use the last bar from regular market hours (9:30 AM - 4:00 PM ET)
-      if (!previousCloseBar) {
-        const previousDayRegularHours = previousDayBars
-          .filter((bar: any) => {
-            const barDate = new Date(bar.t)
-            const etTime = new Date(barDate.toLocaleString('en-US', { timeZone: nyTZ }))
-            const hour = etTime.getHours()
-            const minute = etTime.getMinutes()
-            
-            // Include bars from 9:30 AM (09:30) to 4:00 PM (16:00) ET
-            if (hour < 9 || hour > 16) return false
-            if (hour === 9 && minute < 30) return false
-            if (hour === 16 && minute > 0) return false
-            return true
-          })
-          .sort((a: any, b: any) => new Date(a.t).getTime() - new Date(b.t).getTime())
-        
-        if (previousDayRegularHours.length > 0) {
-          previousCloseBar = previousDayRegularHours[previousDayRegularHours.length - 1]
-        }
-      }
-      
-      // Strategy 5: Final fallback - use the last bar of the day (sorted by timestamp)
-      if (!previousCloseBar) {
-        const sortedPreviousBars = previousDayBars.sort((a: any, b: any) => 
-          new Date(a.t).getTime() - new Date(b.t).getTime()
-        )
-        previousCloseBar = sortedPreviousBars[sortedPreviousBars.length - 1]
-      }
-      
+      // All bars in previousDayBars are already from regular hours
+      // Use the last bar from the previous day as the close
+      const sortedPreviousBars = previousDayBars.sort((a: any, b: any) => 
+        new Date(a.t).getTime() - new Date(b.t).getTime()
+      )
+      const previousCloseBar = sortedPreviousBars[sortedPreviousBars.length - 1]
       previousClose = previousCloseBar?.c || 0
-      
-      // Debug logging
-      console.log('Previous day close calculation:', {
-        previousDate: previousDateStr,
-        previousCloseBar: previousCloseBar ? {
-          timestamp: previousCloseBar.t,
-          close: previousCloseBar.c
-        } : null,
-        previousClose
-      })
     }
   }
   
   // Calculate change vs previous trading day's close
   const priceChange = currentPrice - previousClose
   const priceChangePercent = previousClose ? (priceChange / previousClose) * 100 : 0
+  
+  // Debug logging
+  if (previousClose > 0) {
+    console.log('Price calculation debug:', {
+      currentDate: currentDateStr,
+      currentBar: currentBar ? {
+        timestamp: currentBar.t,
+        close: currentBar.c
+      } : null,
+      currentPrice,
+      previousClose,
+      priceChange,
+      priceChangePercent: priceChangePercent.toFixed(2) + '%'
+    })
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">

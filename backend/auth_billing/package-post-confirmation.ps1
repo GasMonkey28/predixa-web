@@ -43,3 +43,8 @@ Write-Host "   5. Verify handler is: post_confirmation_lambda.lambda_handler" -F
 Write-Host ""
 Write-Host "✨ New signups will now get 7 days free trial!" -ForegroundColor Green
 
+
+
+
+
+

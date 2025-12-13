@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '@/lib/auth-store'
 
@@ -23,9 +23,20 @@ const navigationItems = [
     icon: '🎯'
   },
   {
-    name: 'News',
-    href: '/news/spy',
-    icon: '📰'
+    name: 'Tools',
+    icon: '🔧',
+    items: [
+      {
+        name: 'News',
+        href: '/news/spy',
+        icon: '📰'
+      },
+      {
+        name: 'Risk Calculator',
+        href: '/risk-calculator',
+        icon: '📊'
+      }
+    ]
   },
   {
     name: 'History',
@@ -73,12 +84,28 @@ export default function Navigation() {
   const { isAuthenticated } = useAuthStore()
   const [isNavigating, setIsNavigating] = useState(false)
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Handle navigation state
   useEffect(() => {
     setIsNavigating(false)
     setNavigatingTo(null)
   }, [pathname])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null)
+      }
+    }
+
+    if (openDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [openDropdown])
 
   return (
     <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
@@ -102,18 +129,104 @@ export default function Navigation() {
           {isAuthenticated && (
             <div className="flex items-center justify-center flex-1 gap-1">
               {navigationItems.map((item) => {
-                const isActive = pathname === item.href || (item.href !== '/news/spy' && pathname?.startsWith(item.href))
+                // Check if item has sub-items (dropdown)
+                if ('items' in item && item.items) {
+                  const isOpen = openDropdown === item.name
+                  const isActive = item.items.some(
+                    (subItem) =>
+                      pathname === subItem.href ||
+                      (subItem.href !== '/news/spy' && pathname?.startsWith(subItem.href))
+                  )
+
+                  return (
+                    <div key={item.name} className="relative" ref={dropdownRef}>
+                      <button
+                        onClick={() => setOpenDropdown(isOpen ? null : item.name)}
+                        className={clsx(
+                          'flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 whitespace-nowrap relative',
+                          isActive
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700'
+                            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
+                        )}
+                      >
+                        <span className="text-base leading-none">{item.icon}</span>
+                        <span>{item.name}</span>
+                        <svg
+                          className={clsx(
+                            'ml-1 h-3 w-3 transition-transform',
+                            isOpen && 'rotate-180'
+                          )}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </button>
+
+                      {isOpen && (
+                        <div className="absolute left-0 top-full mt-1 w-48 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg z-50 py-1">
+                          {item.items.map((subItem) => {
+                            const isSubActive =
+                              pathname === subItem.href ||
+                              (subItem.href !== '/news/spy' &&
+                                pathname?.startsWith(subItem.href))
+                            const isNavigatingToSub = navigatingTo === subItem.href
+
+                            return (
+                              <Link
+                                key={subItem.name}
+                                href={subItem.href}
+                                prefetch={true}
+                                onClick={(e) => {
+                                  if (pathname !== subItem.href) {
+                                    setIsNavigating(true)
+                                    setNavigatingTo(subItem.href)
+                                  }
+                                  setOpenDropdown(null)
+                                }}
+                                className={clsx(
+                                  'flex items-center space-x-2 px-4 py-2 text-sm transition-colors',
+                                  isSubActive
+                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700',
+                                  isNavigatingToSub && 'opacity-70'
+                                )}
+                              >
+                                <span className="text-base leading-none">{subItem.icon}</span>
+                                <span>{subItem.name}</span>
+                                {isNavigatingToSub && (
+                                  <span className="ml-auto inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                )}
+                              </Link>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+
+                // Regular navigation item
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== '/news/spy' && item.href && pathname?.startsWith(item.href))
                 const isNavigatingToThis = navigatingTo === item.href
-                
+
                 return (
                   <Link
                     key={item.name}
-                    href={item.href}
+                    href={item.href!}
                     prefetch={true}
                     onClick={(e) => {
                       if (pathname !== item.href) {
                         setIsNavigating(true)
-                        setNavigatingTo(item.href)
+                        setNavigatingTo(item.href!)
                       }
                     }}
                     className={clsx(
