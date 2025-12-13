@@ -409,17 +409,7 @@ export default function RiskCalculatorPage() {
             <h3 className="text-xl font-bold text-white mb-4">Long Position Results</h3>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-gray-300">Total Max Hands (Probability):</span>
-                <span className="text-white font-semibold">{longResults.totalMaxHandsProbability}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Total Max Hands (Safe Threshold):</span>
-                <span className="text-white font-semibold">
-                  {longResults.totalMaxHandsSafeThreshold}
-                </span>
-              </div>
-              <div className="flex justify-between pt-2 border-t border-green-800">
-                <span className="text-white font-bold">Playable Hands:</span>
+                <span className="text-white font-bold">Playable Hands (Safe Threshold):</span>
                 <span
                   className={`font-bold text-lg ${
                     longResults.playableHands >= 0 ? 'text-green-400' : 'text-red-400'
@@ -436,17 +426,7 @@ export default function RiskCalculatorPage() {
             <h3 className="text-xl font-bold text-white mb-4">Short Position Results</h3>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-gray-300">Total Max Hands (Probability):</span>
-                <span className="text-white font-semibold">{shortResults.totalMaxHandsProbability}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Total Max Hands (Safe Threshold):</span>
-                <span className="text-white font-semibold">
-                  {shortResults.totalMaxHandsSafeThreshold}
-                </span>
-              </div>
-              <div className="flex justify-between pt-2 border-t border-red-800">
-                <span className="text-white font-bold">Playable Hands:</span>
+                <span className="text-white font-bold">Playable Hands (Safe Threshold):</span>
                 <span
                   className={`font-bold text-lg ${
                     shortResults.playableHands >= 0 ? 'text-green-400' : 'text-red-400'
