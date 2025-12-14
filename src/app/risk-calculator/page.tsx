@@ -15,23 +15,23 @@ const STORAGE_KEY = 'risk-calculator-settings'
 // Default values from Excel
 const DEFAULT_INPUTS: RiskCalculatorInputs = {
   initialBalance: 200000,
-  overnightMargin: 2000,
+  overnightMargin: 2500,
   buySpyGridSpace: 5,
   spyMarketPrice: 680,
   spyToMesPointsRatio: 10,
   eachPointsMesContract: 5,
-  safeThreshold: 0.4,
+  safeThreshold: 0.5,
   position: 0,
 }
 
 const DEFAULT_LONG_SCENARIOS: Scenario[] = [
-  { id: '1', priceLevel: 670, description: 'Scenario 1', probability: 0.35 },
+  { id: '1', priceLevel: 660, description: 'Scenario 1', probability: 0.35 },
   { id: '2', priceLevel: 652, description: 'Scenario 2', probability: 0.2 },
   { id: '3', priceLevel: 640, description: 'Scenario 3', probability: 0.15 },
-  { id: '4', priceLevel: 622, description: 'Scenario 4', probability: 0.15 },
-  { id: '5', priceLevel: 500, description: 'Scenario 5', probability: 0.075 },
-  { id: '6', priceLevel: 433, description: 'Scenario 6', probability: 0.045 },
-  { id: '7', priceLevel: 340, description: 'Scenario 7', probability: 0.03 },
+  { id: '4', priceLevel: 620, description: 'Scenario 4', probability: 0.15 },
+  { id: '5', priceLevel: 600, description: 'Scenario 5', probability: 0.075 },
+  { id: '6', priceLevel: 570, description: 'Scenario 6', probability: 0.045 },
+  { id: '7', priceLevel: 530, description: 'Scenario 7', probability: 0.03 },
 ]
 
 const DEFAULT_SHORT_SCENARIOS: Scenario[] = [
@@ -95,6 +95,19 @@ function calculateScenario(
   const lossPerContract =
     -priceDifference * inputs.spyToMesPointsRatio * inputs.eachPointsMesContract
 
+  // Calculate Total Loss: (position + 1/2 * assumePosition) * spyToMesRatio * priceDifference * eachPointsMesContract * -1
+  // For long positions, use: (position + 1/2 * assumePosition)
+  // For short positions, use: (1/2 * assumePosition - position)
+  const positionAdjustment = isLong
+    ? inputs.position + 0.5 * assumePosition
+    : 0.5 * assumePosition - inputs.position
+  const totalLoss =
+    positionAdjustment *
+    inputs.spyToMesPointsRatio *
+    priceDifference *
+    inputs.eachPointsMesContract *
+    -1
+
   const maxHands = calculateMaxHands(
     lossPerContract,
     inputs.initialBalance,
@@ -106,8 +119,21 @@ function calculateScenario(
   const maxHandsProbability = roundDown(maxHands * scenario.probability)
   const maxHandsSafeThreshold = roundDown(maxHandsProbability * inputs.safeThreshold)
 
+  // Calculate Adjusted Balance: initialBalance + totalLoss
+  const adjustedBalance = inputs.initialBalance + totalLoss
+
+  // Calculate Holding Cost: (assumePosition + position) * overnightMargin
+  const holdingCost = (assumePosition + inputs.position) * inputs.overnightMargin
+
+  // Calculate Extra Available Money: adjustedBalance - holdingCost
+  const extraAvailableMoney = adjustedBalance - holdingCost
+
   return {
     assumePosition,
+    totalLoss,
+    adjustedBalance,
+    holdingCost,
+    extraAvailableMoney,
     lossPerContract,
     playByGrid,
     maxHands,
@@ -444,7 +470,7 @@ export default function RiskCalculatorPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+          className="grid grid-cols-1 gap-6"
         >
           {/* Long Scenarios */}
           <ScenarioSection
@@ -540,29 +566,61 @@ function ScenarioSection({
           <p className="mb-4">No scenarios defined. Click &quot;+ Add Scenario&quot; to get started.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto -mx-2 px-2">
+          <table className="w-full text-sm min-w-full border-collapse">
             <thead>
               <tr className="border-b border-gray-700">
-                <th className="text-left py-2 px-2 text-gray-300 font-medium">
-                  {isLong ? 'SPY Support' : 'SPY Resistance'}
+                <th className="text-left py-1 px-1.5 text-gray-300 font-medium w-20 whitespace-nowrap" title="SPY Support/Resistance">
+                  Price
                 </th>
-                <th className="text-left py-2 px-2 text-gray-300 font-medium">Scenario</th>
-                <th className="text-right py-2 px-2 text-gray-300 font-medium">Probability</th>
-                <th className="text-right py-2 px-2 text-gray-300 font-medium">Assume Pos</th>
-                <th className="text-right py-2 px-2 text-gray-300 font-medium">Loss/Contract</th>
-                <th className="text-right py-2 px-2 text-gray-300 font-medium">Max Hands</th>
-                <th className="text-right py-2 px-2 text-gray-300 font-medium">Max (Prob)</th>
-                <th className="text-right py-2 px-2 text-gray-300 font-medium">Max (Safe)</th>
-                <th className="text-center py-2 px-2 text-gray-300 font-medium">Actions</th>
+                <th className="text-left py-1 px-1.5 text-gray-300 font-medium w-24 whitespace-nowrap" title="Scenario">
+                  Scen
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-16 whitespace-nowrap" title="Probability">
+                  Prob
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-20 whitespace-nowrap" title="Assume Position">
+                  Asm Pos
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-24 whitespace-nowrap" title="Total Loss">
+                  T Loss
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-20 whitespace-nowrap" title="Loss/Contract">
+                  L/C
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-24 whitespace-nowrap" title="Adjusted Balance">
+                  Adj Bal
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-20 whitespace-nowrap" title="Holding Cost">
+                  Hold $
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-24 whitespace-nowrap" title="Extra Available Money">
+                  Extra $
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-20 whitespace-nowrap" title="Max Hands">
+                  Max
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-20 whitespace-nowrap" title="Max Hands (Probability)">
+                  M(Prob)
+                </th>
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-20 whitespace-nowrap" title="Max Hands (Safe)">
+                  M(Safe)
+                </th>
+                <th className="text-center py-1 px-1.5 text-gray-300 font-medium w-16 whitespace-nowrap">
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody>
               {scenarios.map((scenario) => {
                 const calc = calculateScenario(scenario, inputs, isLong)
                 return (
-                  <tr key={scenario.id} className="border-b border-gray-800/50 hover:bg-black/20">
-                    <td className="py-2 px-2">
+                  <tr
+                    key={scenario.id}
+                    className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors"
+                  >
+                    {/* Price Level */}
+                    <td className="py-1 px-1.5">
                       <input
                         type="number"
                         step="0.01"
@@ -570,20 +628,22 @@ function ScenarioSection({
                         onChange={(e) =>
                           onUpdate(scenario.id, { priceLevel: parseFloat(e.target.value) || 0 })
                         }
-                        className="w-20 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full px-1.5 py-0.5 bg-zinc-800/50 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </td>
-                    <td className="py-2 px-2">
+                    {/* Scenario Description */}
+                    <td className="py-1 px-1.5">
                       <input
                         type="text"
                         value={scenario.description}
                         onChange={(e) => onUpdate(scenario.id, { description: e.target.value })}
-                        className="w-full px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        placeholder="Scenario description"
+                        className="w-full px-1.5 py-0.5 bg-zinc-800/50 border border-zinc-700 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="Scen"
                       />
                     </td>
-                    <td className="py-2 px-2">
-                      <div className="flex items-center gap-1">
+                    {/* Probability */}
+                    <td className="py-1 px-1.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
                         <input
                           type="number"
                           step="0.1"
@@ -593,30 +653,57 @@ function ScenarioSection({
                           onChange={(e) => {
                             const percentValue = parseFloat(e.target.value) || 0
                             const decimalValue = Math.max(0, Math.min(100, percentValue)) / 100
-                            onUpdate(scenario.id, {
-                              probability: decimalValue,
-                            })
+                            onUpdate(scenario.id, { probability: decimalValue })
                           }}
-                          className="w-16 px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-white text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="w-12 px-1.5 py-0.5 bg-zinc-800/50 border border-zinc-700 rounded text-white text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
-                        <span className="text-gray-400 text-xs">%</span>
+                        <span className="text-gray-400 text-sm">%</span>
                       </div>
                     </td>
-                    <td className="py-2 px-2 text-right text-white">{calc.assumePosition}</td>
-                    <td className="py-2 px-2 text-right text-white">
+                    {/* Assume Position */}
+                    <td className="py-1 px-1.5 text-right text-white whitespace-nowrap">
+                      {calc.assumePosition}
+                    </td>
+                    {/* Total Loss */}
+                    <td className="py-1 px-1.5 text-right text-white whitespace-nowrap">
+                      {calc.totalLoss < 0 ? '-' : ''}${Math.abs(calc.totalLoss).toLocaleString()}
+                    </td>
+                    {/* Loss/Contract */}
+                    <td className="py-1 px-1.5 text-right text-white whitespace-nowrap">
                       {calc.lossPerContract < 0 ? '-' : ''}${Math.abs(calc.lossPerContract).toLocaleString()}
                     </td>
-                    <td className="py-2 px-2 text-right text-white">{calc.maxHands}</td>
-                    <td className="py-2 px-2 text-right text-white">{calc.maxHandsProbability}</td>
-                    <td className="py-2 px-2 text-right text-white font-semibold">
+                    {/* Adjusted Balance */}
+                    <td className="py-1 px-1.5 text-right text-white whitespace-nowrap">
+                      ${calc.adjustedBalance.toLocaleString()}
+                    </td>
+                    {/* Holding Cost */}
+                    <td className="py-1 px-1.5 text-right text-white whitespace-nowrap">
+                      ${calc.holdingCost.toLocaleString()}
+                    </td>
+                    {/* Extra Available Money */}
+                    <td className="py-1 px-1.5 text-right text-white whitespace-nowrap">
+                      ${calc.extraAvailableMoney.toLocaleString()}
+                    </td>
+                    {/* Max Hands */}
+                    <td className="py-1 px-1.5 text-right text-white whitespace-nowrap">
+                      {calc.maxHands}
+                    </td>
+                    {/* Max Hands Probability */}
+                    <td className="py-1 px-1.5 text-right text-white whitespace-nowrap">
+                      {calc.maxHandsProbability}
+                    </td>
+                    {/* Max Hands Safe Threshold */}
+                    <td className={`py-1 px-1.5 text-right font-bold whitespace-nowrap ${isLong ? 'text-green-400' : 'text-red-400'}`}>
                       {calc.maxHandsSafeThreshold}
                     </td>
-                    <td className="py-2 px-2 text-center">
+                    {/* Action */}
+                    <td className="py-1 px-1.5 text-center">
                       <button
                         onClick={() => onRemove(scenario.id)}
-                        className="text-red-400 hover:text-red-300 text-xs px-2 py-1 hover:bg-red-900/20 rounded transition-colors"
+                        className="px-2 py-0.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 rounded text-sm transition-colors"
+                        title="Remove Scenario"
                       >
-                        Remove
+                        ×
                       </button>
                     </td>
                   </tr>

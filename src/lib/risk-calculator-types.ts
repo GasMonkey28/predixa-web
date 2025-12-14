@@ -18,6 +18,10 @@ export interface Scenario {
 
 export interface ScenarioCalculation {
   assumePosition: number
+  totalLoss: number
+  adjustedBalance: number
+  holdingCost: number
+  extraAvailableMoney: number
   lossPerContract: number
   playByGrid: number
   maxHands: number
