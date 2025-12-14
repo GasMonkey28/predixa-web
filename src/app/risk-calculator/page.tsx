@@ -576,7 +576,7 @@ function ScenarioSection({
                 <th className="text-left py-1 px-1.5 text-gray-300 font-medium w-24 whitespace-nowrap" title="Scenario">
                   Scen
                 </th>
-                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-16 whitespace-nowrap" title="Probability">
+                <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-20 whitespace-nowrap" title="Probability">
                   Prob
                 </th>
                 <th className="text-right py-1 px-1.5 text-gray-300 font-medium w-20 whitespace-nowrap" title="Assume Position">
@@ -655,7 +655,7 @@ function ScenarioSection({
                             const decimalValue = Math.max(0, Math.min(100, percentValue)) / 100
                             onUpdate(scenario.id, { probability: decimalValue })
                           }}
-                          className="w-12 px-1.5 py-0.5 bg-zinc-800/50 border border-zinc-700 rounded text-white text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="w-16 px-1.5 py-0.5 bg-zinc-800/50 border border-zinc-700 rounded text-white text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                         <span className="text-gray-400 text-sm">%</span>
                       </div>
