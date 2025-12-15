@@ -8,7 +8,9 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/daily', '/weekly', '/future', '/account'],
+        // Only disallow /account as it's user-specific
+        // /daily, /weekly, /future are now allowed for SEO (crawlers can access via middleware)
+        disallow: ['/account'],
       },
     ],
     sitemap: `${siteUrl}/sitemap.xml`,

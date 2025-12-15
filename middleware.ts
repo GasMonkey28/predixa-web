@@ -16,6 +16,33 @@ const subscriptionRequiredRoutes = ['/daily', '/weekly', '/future', '/history']
 const accountRoute = '/account'
 
 /**
+ * Check if the request is from a search engine crawler.
+ * This allows search engines to index protected pages for SEO.
+ */
+function isSearchEngineCrawler(userAgent: string | null): boolean {
+  if (!userAgent) return false
+  
+  const crawlers = [
+    'googlebot',
+    'bingbot',
+    'slurp', // Yahoo
+    'duckduckbot',
+    'baiduspider',
+    'yandexbot',
+    'sogou',
+    'exabot',
+    'facebot', // Facebook
+    'ia_archiver', // Alexa
+    'msnbot',
+    'ahrefsbot',
+    'semrushbot',
+  ]
+  
+  const lowerUserAgent = userAgent.toLowerCase()
+  return crawlers.some(crawler => lowerUserAgent.includes(crawler))
+}
+
+/**
  * Check subscription status via entitlements API.
  * Returns true if user has active subscription or trial.
  */
@@ -75,6 +102,17 @@ export async function middleware(request: NextRequest) {
   
   // Skip API routes (they handle their own auth)
   if (pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
+  
+  // Check if the request is from a search engine crawler
+  const userAgent = request.headers.get('user-agent')
+  const isCrawler = isSearchEngineCrawler(userAgent)
+  
+  // Allow search engine crawlers to access all routes for SEO indexing
+  // This bypasses both authentication and subscription checks
+  if (isCrawler) {
+    console.log('Middleware: Search engine crawler detected, allowing access for SEO:', userAgent)
     return NextResponse.next()
   }
   
