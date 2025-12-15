@@ -24,6 +24,7 @@ function isSearchEngineCrawler(userAgent: string | null): boolean {
   
   const crawlers = [
     'googlebot',
+    'google-inspectiontool', // Google Search Console URL Inspection
     'bingbot',
     'slurp', // Yahoo
     'duckduckbot',
@@ -36,6 +37,8 @@ function isSearchEngineCrawler(userAgent: string | null): boolean {
     'msnbot',
     'ahrefsbot',
     'semrushbot',
+    'applebot', // Apple
+    'petalbot', // Huawei
   ]
   
   const lowerUserAgent = userAgent.toLowerCase()
@@ -102,6 +105,11 @@ export async function middleware(request: NextRequest) {
   
   // Skip API routes (they handle their own auth)
   if (pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
+  
+  // Skip SEO files - Next.js handles these specially
+  if (pathname === '/robots.txt' || pathname === '/sitemap.xml') {
     return NextResponse.next()
   }
   
@@ -183,8 +191,10 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - robots.txt (SEO file)
+     * - sitemap.xml (SEO file)
      * - public folder
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|public).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|public).*)',
   ],
 }
