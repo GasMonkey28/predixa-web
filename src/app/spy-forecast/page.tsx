@@ -4,7 +4,7 @@ import { createMetadata } from '@/lib/seo'
 
 export const metadata: Metadata = createMetadata({
   title: 'SPY Forecast | Daily SPY Outlook & Prediction | Predixa',
-  description: 'Get today\'s SPY forecast and outlook. View SPY direction probability, bullish vs bearish signals, and understand how Predixa forecasts SPY movement.',
+  description: 'Today\'s SPY forecast with direction probability, bullish vs bearish signals, and AI predictions. Learn how Predixa forecasts SPY movement using real-time data.',
   path: '/spy-forecast',
 })
 

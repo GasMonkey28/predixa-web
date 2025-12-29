@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.predixaweb.com'
 const siteName = 'Predixa'
-const defaultDescription = 'Professional Trading Analytics Platform for SPY trading, swing trading, and stock market analysis. Predict SPY movement with AI-powered signals, forecasts, and trading analytics for active traders.'
+const defaultDescription = 'Daily SPY forecasts with AI signals, direction probability, and tier rankings. Real-time options flow analysis for active traders. Start your free trial today.'
 
 export function getSiteUrl(path: string = ''): string {
   return `${siteUrl}${path}`

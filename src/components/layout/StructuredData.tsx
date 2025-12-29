@@ -9,6 +9,8 @@ const organizationSchema = {
   url: siteUrl,
   logo: `${siteUrl}/logo-large.jpg`,
   description: defaultDescription,
+  datePublished: '2024-01-01T00:00:00Z',
+  dateModified: new Date().toISOString(),
   contactPoint: {
     '@type': 'ContactPoint',
     email: 'support@predixaweb.com',
@@ -27,6 +29,8 @@ const websiteSchema = {
   name: siteName,
   url: siteUrl,
   description: defaultDescription,
+  datePublished: '2024-01-01T00:00:00Z',
+  dateModified: new Date().toISOString(),
   publisher: {
     '@type': 'Organization',
     name: siteName,
@@ -39,6 +43,8 @@ const softwareApplicationSchema = {
   name: siteName,
   applicationCategory: 'FinanceApplication',
   operatingSystem: 'Web',
+  datePublished: '2024-01-01T00:00:00Z',
+  dateModified: new Date().toISOString(),
   offers: {
     '@type': 'Offer',
     price: '19.99',

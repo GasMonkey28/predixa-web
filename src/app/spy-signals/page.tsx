@@ -4,7 +4,7 @@ import { createMetadata } from '@/lib/seo'
 
 export const metadata: Metadata = createMetadata({
   title: 'SPY Signals | SPY Trading Signals & Direction Probability | Predixa',
-  description: 'Understand SPY signals and how AI calculates signal strength. Learn to interpret bullish, bearish, and neutral SPY trading signals with probability metrics.',
+  description: 'AI-powered SPY trading signals with real-time strength calculations. Learn to interpret bullish, bearish, and neutral signals with probability metrics.',
   path: '/spy-signals',
 })
 

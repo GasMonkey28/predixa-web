@@ -3,7 +3,7 @@ import { createMetadata } from '@/lib/seo'
 
 export const metadata: Metadata = createMetadata({
   title: 'Daily SPY Analysis | SPY Forecast & Trading Signals | Predixa',
-  description: 'View today\'s SPY forecast with direction probability, tier rankings, price levels, and trading signals. Get daily SPY analysis with charts, support/resistance levels, and options flow data for active traders.',
+  description: 'Today\'s SPY forecast with AI signals, direction probability, and tier rankings. Real-time charts, support/resistance levels, and options flow for traders.',
   path: '/daily',
 })
 
