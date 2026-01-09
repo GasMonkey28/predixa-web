@@ -1,7 +1,24 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'motion/react';
 import { Activity } from 'lucide-react';
+import { useMemo } from 'react';
 import CandlestickChart from '@/components/charts/CandlestickChart';
+import { getWeekDateRange } from '@/lib/trading-calendar';
+
+interface WeeklyPrediction {
+  ticker: string
+  as_of_date: string
+  fwd_join_date: string
+  baseline_week_close: number
+  t_close_to_pre: number
+  t_lowest_to_close: number
+  t_highest_to_pre: number
+}
+
+interface WeeklyPredictions {
+  currentWeek: WeeklyPrediction | null
+  previousWeek: WeeklyPrediction | null
+}
 
 interface AttractiveChartSectionProps {
   data: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
@@ -9,9 +26,10 @@ interface AttractiveChartSectionProps {
   onChartTypeChange: (type: 'line' | 'candlestick') => void;
   title?: string;
   height?: number;
+  weeklyPredictions?: WeeklyPredictions;
 }
 
-function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'Price Chart', height = 320 }: AttractiveChartSectionProps) {
+function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'Price Chart', height = 320, weeklyPredictions }: AttractiveChartSectionProps) {
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -25,6 +43,73 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
     }
     return null;
   };
+
+  // Prepare data with prediction lines for LineChart
+  const chartDataWithPredictions = useMemo(() => {
+    if (!weeklyPredictions || (!weeklyPredictions.currentWeek && !weeklyPredictions.previousWeek)) {
+      return data;
+    }
+
+    // Helper to get date string in ET timezone (YYYY-MM-DD)
+    const getETDateString = (date: Date): string => {
+      const etDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }))
+      const year = etDate.getFullYear()
+      const month = String(etDate.getMonth() + 1).padStart(2, '0')
+      const day = String(etDate.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+
+    // Map predictions to data points based on date ranges
+    return data.map((point: any) => {
+      // Use timestamp if available, otherwise parse the time string
+      const pointDate = point.timestamp ? new Date(point.timestamp) : new Date(point.time);
+      const pointDateStr = getETDateString(pointDate);
+      
+      const result: any = { ...point };
+      
+      // Check if point falls within current week's range
+      if (weeklyPredictions.currentWeek) {
+        // Parse fwd_join_date as ET timezone (format: "2026-01-02")
+        const fwdJoinDateStr = weeklyPredictions.currentWeek.fwd_join_date;
+        const [year, month, day] = fwdJoinDateStr.split('-').map(Number);
+        const fridayDate = new Date();
+        fridayDate.setFullYear(year, month - 1, day);
+        fridayDate.setHours(12, 0, 0, 0); // Noon to avoid timezone issues
+        
+        const { monday, friday } = getWeekDateRange(fridayDate);
+        const mondayStr = getETDateString(monday);
+        const fridayStr = getETDateString(friday);
+        
+        if (pointDateStr >= mondayStr && pointDateStr <= fridayStr) {
+          result.currentWeek_close = weeklyPredictions.currentWeek.t_close_to_pre;
+          result.currentWeek_low = weeklyPredictions.currentWeek.t_lowest_to_close;
+          result.currentWeek_high = weeklyPredictions.currentWeek.t_highest_to_pre;
+        }
+      }
+      
+      // Check if point falls within previous week's range
+      if (weeklyPredictions.previousWeek) {
+        // Parse fwd_join_date as ET timezone (format: "2026-01-02")
+        const fwdJoinDateStr = weeklyPredictions.previousWeek.fwd_join_date;
+        const [year, month, day] = fwdJoinDateStr.split('-').map(Number);
+        const fridayDate = new Date();
+        fridayDate.setFullYear(year, month - 1, day);
+        fridayDate.setHours(12, 0, 0, 0); // Noon to avoid timezone issues
+        
+        const { monday, friday } = getWeekDateRange(fridayDate);
+        const mondayStr = getETDateString(monday);
+        const fridayStr = getETDateString(friday);
+        
+        if (pointDateStr >= mondayStr && pointDateStr <= fridayStr) {
+          result.previousWeek_close = weeklyPredictions.previousWeek.t_close_to_pre;
+          result.previousWeek_low = weeklyPredictions.previousWeek.t_lowest_to_close;
+          result.previousWeek_high = weeklyPredictions.previousWeek.t_highest_to_pre;
+        }
+      }
+      
+      return result;
+    });
+  }, [data, weeklyPredictions]);
 
   return (
     <motion.div
@@ -68,7 +153,7 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
         <div style={{ height: `${height}px` }}>
           {chartType === 'line' ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data}>
+              <LineChart data={chartDataWithPredictions}>
                 <defs>
                   <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor="#06b6d4" />
@@ -96,17 +181,86 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
                   dot={false}
                   animationDuration={1000}
                 />
+                {/* Current Week Prediction Lines */}
+                {weeklyPredictions?.currentWeek && (
+                  <>
+                    <Line 
+                      type="monotone" 
+                      dataKey="currentWeek_close" 
+                      stroke="#ffffff"
+                      strokeWidth={2}
+                      strokeOpacity={0.8}
+                      dot={false}
+                      strokeDasharray="5 5"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="currentWeek_low" 
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      strokeOpacity={0.8}
+                      dot={false}
+                      strokeDasharray="5 5"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="currentWeek_high" 
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      strokeOpacity={0.8}
+                      dot={false}
+                      strokeDasharray="5 5"
+                    />
+                  </>
+                )}
+                {/* Previous Week Prediction Lines */}
+                {weeklyPredictions?.previousWeek && (
+                  <>
+                    <Line 
+                      type="monotone" 
+                      dataKey="previousWeek_close" 
+                      stroke="#ffffff"
+                      strokeWidth={1.5}
+                      strokeOpacity={0.5}
+                      dot={false}
+                      strokeDasharray="3 3"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="previousWeek_low" 
+                      stroke="#10b981"
+                      strokeWidth={1.5}
+                      strokeOpacity={0.5}
+                      dot={false}
+                      strokeDasharray="3 3"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="previousWeek_high" 
+                      stroke="#ef4444"
+                      strokeWidth={1.5}
+                      strokeOpacity={0.5}
+                      dot={false}
+                      strokeDasharray="3 3"
+                    />
+                  </>
+                )}
               </LineChart>
             </ResponsiveContainer>
           ) : (
-          <CandlestickChart data={data.map(d => ({
-            time: d.time,
-            open: d.open,
-            high: d.high,
-            low: d.low,
-            close: d.close,
-            volume: d.volume
-          }))} height={height} />
+          <CandlestickChart 
+            data={data.map(d => ({
+              time: d.time,
+              timestamp: (d as any).timestamp, // Pass through timestamp if available
+              open: d.open,
+              high: d.high,
+              low: d.low,
+              close: d.close,
+              volume: d.volume
+            }))} 
+            height={height}
+            weeklyPredictions={weeklyPredictions}
+          />
           )}
         </div>
       </div>

@@ -8,24 +8,54 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 type ChartType = 'line' | 'candlestick'
 
+interface WeeklyPrediction {
+  ticker: string
+  as_of_date: string
+  fwd_join_date: string
+  baseline_week_close: number
+  t_close_to_pre: number
+  t_lowest_to_close: number
+  t_highest_to_pre: number
+}
+
+interface WeeklyPredictions {
+  currentWeek: WeeklyPrediction | null
+  previousWeek: WeeklyPrediction | null
+}
+
 function WeeklyPageContent() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>('line')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [weeklyPredictions, setWeeklyPredictions] = useState<WeeklyPredictions>({
+    currentWeek: null,
+    previousWeek: null,
+  })
 
   useEffect(() => {
     async function fetchData() {
       try {
-        // Add cache busting parameter to force fresh data
-        const response = await fetch(`/api/bars/weekly?t=${Date.now()}&r=${Math.random()}`)
-        const result = await response.json()
-        console.log('Fetched weekly data:', result)
-        console.log('Bars count:', result.bars?.length)
-        console.log('First bar:', result.bars?.[0])
-        console.log('Last bar:', result.bars?.[result.bars?.length - 1])
-        setData(result)
+        // Fetch both bars data and weekly predictions in parallel
+        const [barsResponse, predictionsResponse] = await Promise.all([
+          fetch(`/api/bars/weekly?t=${Date.now()}&r=${Math.random()}`),
+          fetch(`/api/weekly-predictions?t=${Date.now()}&r=${Math.random()}`),
+        ])
+        
+        const barsResult = await barsResponse.json()
+        console.log('Fetched weekly data:', barsResult)
+        console.log('Bars count:', barsResult.bars?.length)
+        console.log('First bar:', barsResult.bars?.[0])
+        console.log('Last bar:', barsResult.bars?.[barsResult.bars?.length - 1])
+        setData(barsResult)
+        
+        const predictionsResult = await predictionsResponse.json()
+        console.log('Fetched weekly predictions:', predictionsResult)
+        setWeeklyPredictions({
+          currentWeek: predictionsResult.currentWeek,
+          previousWeek: predictionsResult.previousWeek,
+        })
       } catch (err) {
         console.error('Error fetching data:', err)
         setError('Failed to load data')
@@ -58,6 +88,7 @@ function WeeklyPageContent() {
   const rows = data.bars || []
   const chartData = rows.map((bar: any) => ({
     time: new Date(bar.t).toLocaleDateString(),
+    timestamp: bar.t, // Keep original timestamp for date comparisons
     open: bar.o,
     high: bar.h,
     low: bar.l,
@@ -195,6 +226,7 @@ function WeeklyPageContent() {
             onChartTypeChange={setChartType}
             title="Price Chart"
             height={544}
+            weeklyPredictions={weeklyPredictions}
           />
         </motion.div>
       </div>

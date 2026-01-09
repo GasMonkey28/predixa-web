@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { getWeekDateRange } from '@/lib/trading-calendar'
 
 interface CandlestickData {
   time: string
@@ -15,12 +16,28 @@ interface CandlestickData {
   isCompensated?: boolean
 }
 
+interface WeeklyPrediction {
+  ticker: string
+  as_of_date: string
+  fwd_join_date: string
+  baseline_week_close: number
+  t_close_to_pre: number
+  t_lowest_to_close: number
+  t_highest_to_pre: number
+}
+
+interface WeeklyPredictions {
+  currentWeek: WeeklyPrediction | null
+  previousWeek: WeeklyPrediction | null
+}
+
 interface CandlestickChartProps {
   data: CandlestickData[]
   height?: number
+  weeklyPredictions?: WeeklyPredictions
 }
 
-export default function CandlestickChart({ data, height = 400 }: CandlestickChartProps) {
+export default function CandlestickChart({ data, height = 400, weeklyPredictions }: CandlestickChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(800)
@@ -385,6 +402,213 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
     )
   }
 
+  const renderPredictionLines = () => {
+    if (!weeklyPredictions || (!weeklyPredictions.currentWeek && !weeklyPredictions.previousWeek)) {
+      return null
+    }
+
+    const { width, height, margin } = chartDimensions
+    const { yScale, minPrice, maxPrice } = scales
+    const lines: JSX.Element[] = []
+
+    // Helper to get Y position for a price
+    const getY = (price: number) => margin.top + (maxPrice - price) * yScale
+
+    // Helper to get date string in ET timezone (YYYY-MM-DD)
+    // Timestamps are in format "2025-09-18T09:30:00" (ET timezone, no timezone indicator)
+    const getETDateString = (timestampOrDate: string | Date): string => {
+      if (typeof timestampOrDate === 'string') {
+        // Extract date part directly from timestamp string (format: "2025-09-18T09:30:00")
+        const datePart = timestampOrDate.split('T')[0]
+        if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+          return datePart // Already in YYYY-MM-DD format
+        }
+        // Fallback: parse as Date and convert to ET
+        const date = new Date(timestampOrDate)
+        const etDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }))
+        const year = etDate.getFullYear()
+        const month = String(etDate.getMonth() + 1).padStart(2, '0')
+        const day = String(etDate.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      } else {
+        // Date object: convert to ET timezone
+        const etDate = new Date(timestampOrDate.toLocaleString('en-US', { timeZone: 'America/New_York' }))
+        const year = etDate.getFullYear()
+        const month = String(etDate.getMonth() + 1).padStart(2, '0')
+        const day = String(etDate.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+    }
+
+    // Helper to check if a data point is within a date range
+    const isInDateRange = (pointTimestamp: string | Date, monday: Date, friday: Date): boolean => {
+      const pointDateStr = getETDateString(pointTimestamp)
+      const mondayStr = getETDateString(monday)
+      const fridayStr = getETDateString(friday)
+      // Include all bars from Monday through Friday (inclusive)
+      return pointDateStr >= mondayStr && pointDateStr <= fridayStr
+    }
+
+    // Render current week lines
+    if (weeklyPredictions.currentWeek) {
+      // Parse fwd_join_date as ET timezone (format: "2026-01-02")
+      // Create date in ET timezone to avoid UTC conversion issues
+      const fwdJoinDateStr = weeklyPredictions.currentWeek.fwd_join_date
+      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
+      // Create date at noon ET to avoid timezone edge cases
+      const fridayDate = new Date()
+      fridayDate.setFullYear(year, month - 1, day)
+      fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
+      
+      const { monday, friday } = getWeekDateRange(fridayDate)
+      
+      // Find start and end indices for current week
+      let startIndex = -1
+      let endIndex = -1
+      
+      for (let i = 0; i < data.length; i++) {
+        // Use timestamp if available (it's a string like "2025-09-18T09:30:00" in ET timezone)
+        // Otherwise fall back to parsing the time string
+        const pointTimestamp = (data[i] as any).timestamp || data[i].time
+        if (isInDateRange(pointTimestamp, monday, friday)) {
+          if (startIndex === -1) startIndex = i
+          endIndex = i
+        }
+      }
+      
+      if (startIndex !== -1 && endIndex !== -1) {
+        const startX = margin.left + startIndex * scales.xScale
+        const endX = margin.left + (endIndex + 1) * scales.xScale
+        
+        // White line - predicted close
+        lines.push(
+          <line
+            key="current-close"
+            x1={startX}
+            y1={getY(weeklyPredictions.currentWeek.t_close_to_pre)}
+            x2={endX}
+            y2={getY(weeklyPredictions.currentWeek.t_close_to_pre)}
+            stroke="#ffffff"
+            strokeWidth={2}
+            strokeOpacity={0.8}
+            strokeDasharray="5 5"
+          />
+        )
+        
+        // Green line - buy zone (lowest)
+        lines.push(
+          <line
+            key="current-low"
+            x1={startX}
+            y1={getY(weeklyPredictions.currentWeek.t_lowest_to_close)}
+            x2={endX}
+            y2={getY(weeklyPredictions.currentWeek.t_lowest_to_close)}
+            stroke="#10b981"
+            strokeWidth={2}
+            strokeOpacity={0.8}
+            strokeDasharray="5 5"
+          />
+        )
+        
+        // Red line - sell zone (highest)
+        lines.push(
+          <line
+            key="current-high"
+            x1={startX}
+            y1={getY(weeklyPredictions.currentWeek.t_highest_to_pre)}
+            x2={endX}
+            y2={getY(weeklyPredictions.currentWeek.t_highest_to_pre)}
+            stroke="#ef4444"
+            strokeWidth={2}
+            strokeOpacity={0.8}
+            strokeDasharray="5 5"
+          />
+        )
+      }
+    }
+
+    // Render previous week lines
+    if (weeklyPredictions.previousWeek) {
+      // Parse fwd_join_date as ET timezone (format: "2026-01-02")
+      // Create date in ET timezone to avoid UTC conversion issues
+      const fwdJoinDateStr = weeklyPredictions.previousWeek.fwd_join_date
+      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
+      // Create date at noon ET to avoid timezone edge cases
+      const fridayDate = new Date()
+      fridayDate.setFullYear(year, month - 1, day)
+      fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
+      
+      const { monday, friday } = getWeekDateRange(fridayDate)
+      
+      // Find start and end indices for previous week
+      let startIndex = -1
+      let endIndex = -1
+      
+      for (let i = 0; i < data.length; i++) {
+        // Use timestamp if available (it's a string like "2025-09-18T09:30:00" in ET timezone)
+        // Otherwise fall back to parsing the time string
+        const pointTimestamp = (data[i] as any).timestamp || data[i].time
+        if (isInDateRange(pointTimestamp, monday, friday)) {
+          if (startIndex === -1) startIndex = i
+          endIndex = i
+        }
+      }
+      
+      if (startIndex !== -1 && endIndex !== -1) {
+        // Start at the left edge of the first bar, end at the right edge of the last bar
+        const startX = margin.left + startIndex * scales.xScale
+        const endX = margin.left + (endIndex + 1) * scales.xScale
+        
+        // White line - predicted close (lighter for previous week)
+        lines.push(
+          <line
+            key="previous-close"
+            x1={startX}
+            y1={getY(weeklyPredictions.previousWeek.t_close_to_pre)}
+            x2={endX}
+            y2={getY(weeklyPredictions.previousWeek.t_close_to_pre)}
+            stroke="#ffffff"
+            strokeWidth={1.5}
+            strokeOpacity={0.5}
+            strokeDasharray="3 3"
+          />
+        )
+        
+        // Green line - buy zone (lighter for previous week)
+        lines.push(
+          <line
+            key="previous-low"
+            x1={startX}
+            y1={getY(weeklyPredictions.previousWeek.t_lowest_to_close)}
+            x2={endX}
+            y2={getY(weeklyPredictions.previousWeek.t_lowest_to_close)}
+            stroke="#10b981"
+            strokeWidth={1.5}
+            strokeOpacity={0.5}
+            strokeDasharray="3 3"
+          />
+        )
+        
+        // Red line - sell zone (lighter for previous week)
+        lines.push(
+          <line
+            key="previous-high"
+            x1={startX}
+            y1={getY(weeklyPredictions.previousWeek.t_highest_to_pre)}
+            x2={endX}
+            y2={getY(weeklyPredictions.previousWeek.t_highest_to_pre)}
+            stroke="#ef4444"
+            strokeWidth={1.5}
+            strokeOpacity={0.5}
+            strokeDasharray="3 3"
+          />
+        )
+      }
+    }
+
+    return <g>{lines}</g>
+  }
+
   if (!data.length) {
     return (
       <div className="w-full flex items-center justify-center" style={{ height }}>
@@ -398,6 +622,9 @@ export default function CandlestickChart({ data, height = 400 }: CandlestickChar
       <svg width="100%" height={height}>
         {/* Grid */}
         {renderGrid()}
+        
+        {/* Prediction Lines - rendered before candlesticks so they appear behind */}
+        {renderPredictionLines()}
         
         {/* Candlesticks */}
         {data.map((item, index) => renderCandlestick(item, index))}
