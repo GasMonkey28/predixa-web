@@ -5,6 +5,7 @@ import {
   findLastFridayOrMonday,
   findPreviousWeekFriday,
   formatDateYYYYMMDD,
+  getPreviousTradingDay,
 } from '@/lib/trading-calendar'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,7 @@ interface WeeklyPrediction {
 interface WeeklyPredictionsResponse {
   currentWeek: WeeklyPrediction | null
   previousWeek: WeeklyPrediction | null
+  allWeeks?: WeeklyPrediction[] // For 60min interval - all weeks in visible range
 }
 
 /**
@@ -61,8 +63,47 @@ async function fetchWeeklyPrediction(dateStr: string): Promise<WeeklyPrediction 
   }
 }
 
-export async function GET() {
+/**
+ * Get all Friday dates (or Monday if Friday is holiday) for weeks within a date range
+ */
+function getAllWeekDatesInRange(startDate: Date, endDate: Date): Date[] {
+  const weekDates: Date[] = []
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  
+  // Start from the most recent Friday and work backwards
+  let currentFriday = findLastFridayOrMonday(end)
+  const startDateStr = start.toISOString().split('T')[0]
+  
+  // Go back until we're before the start date
+  let iterations = 0
+  while (currentFriday >= start && iterations < 20) {
+    const fridayDateStr = currentFriday.toISOString().split('T')[0]
+    
+    // Only add if this Friday is on or after the start date
+    if (fridayDateStr >= startDateStr) {
+      weekDates.push(new Date(currentFriday))
+    }
+    
+    // Go back one week
+    const previousWeekDate = new Date(currentFriday)
+    previousWeekDate.setDate(previousWeekDate.getDate() - 7)
+    currentFriday = findLastFridayOrMonday(previousWeekDate)
+    
+    iterations++
+  }
+  
+  // Reverse to get chronological order (oldest first)
+  return weekDates.reverse()
+}
+
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const startDateStr = searchParams.get('startDate')
+    const endDateStr = searchParams.get('endDate')
+    const interval = searchParams.get('interval') || '15min'
+    
     // Find dates for current week and previous week
     const currentWeekDate = findLastFridayOrMonday()
     const previousWeekDate = findPreviousWeekFriday()
@@ -70,12 +111,34 @@ export async function GET() {
     const currentWeekDateStr = formatDateYYYYMMDD(currentWeekDate)
     const previousWeekDateStr = formatDateYYYYMMDD(previousWeekDate)
     
+    // For 60min interval, fetch predictions for all weeks in the visible range
+    let allWeeks: WeeklyPrediction[] = []
+    if (interval === '60min' && startDateStr && endDateStr) {
+      const startDate = new Date(startDateStr)
+      const endDate = new Date(endDateStr)
+      
+      // Get all week dates in the range
+      const weekDates = getAllWeekDatesInRange(startDate, endDate)
+      
+      console.log(`Fetching predictions for ${weekDates.length} weeks in 60min range`)
+      
+      // Fetch predictions for all weeks in parallel
+      const weekPromises = weekDates.map(date => 
+        fetchWeeklyPrediction(formatDateYYYYMMDD(date))
+      )
+      const weekResults = await Promise.all(weekPromises)
+      
+      // Filter out null results
+      allWeeks = weekResults.filter((pred): pred is WeeklyPrediction => pred !== null)
+    }
+    
     console.log('Fetching weekly predictions:', {
       currentWeek: currentWeekDateStr,
       previousWeek: previousWeekDateStr,
+      allWeeksCount: allWeeks.length,
     })
     
-    // Fetch both weeks' predictions in parallel
+    // Fetch both weeks' predictions in parallel (for 15min interval)
     const [currentWeek, previousWeek] = await Promise.all([
       fetchWeeklyPrediction(currentWeekDateStr),
       fetchWeeklyPrediction(previousWeekDateStr),
@@ -84,6 +147,7 @@ export async function GET() {
     const response: WeeklyPredictionsResponse = {
       currentWeek,
       previousWeek,
+      ...(interval === '60min' && allWeeks.length > 0 ? { allWeeks } : {}),
     }
     
     return NextResponse.json(response, {

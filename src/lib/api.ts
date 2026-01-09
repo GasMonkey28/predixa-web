@@ -22,15 +22,20 @@ export type BarsPayload = {
   bars: Bar[]
 }
 
-export async function fetchWeeklyBars(force = false): Promise<BarsPayload> {
+export async function fetchWeeklyBars(force = false, interval: '15min' | '60min' = '15min'): Promise<BarsPayload> {
   if (!BUCKET) {
     throw new Error('NEXT_PUBLIC_S3_BUCKET environment variable is not set. Please add it to your .env.local file.')
+  }
+  
+  // Validate interval parameter
+  if (interval !== '15min' && interval !== '60min') {
+    throw new Error(`Invalid interval: ${interval}. Must be '15min' or '60min'`)
   }
   
   // FORCE COMPLETE REBUILD - MAJOR CHANGE TO BREAK DEPLOYMENT CACHE
   // Using s3.amazonaws.com format for public access - S3 is case sensitive
   // CRITICAL FIX: Force lowercase ticker for S3 access - this fixes 403 errors
-  const url = `https://s3.amazonaws.com/${BUCKET}/bars/${S3_TICKER}/15min/latest.json`
+  const url = `https://s3.amazonaws.com/${BUCKET}/bars/${S3_TICKER}/${interval}/latest.json`
   
   // Removed verbose console.logs to avoid exposing bucket name in browser console
   try {

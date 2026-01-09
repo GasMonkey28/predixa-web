@@ -29,6 +29,7 @@ interface WeeklyPrediction {
 interface WeeklyPredictions {
   currentWeek: WeeklyPrediction | null
   previousWeek: WeeklyPrediction | null
+  allWeeks?: WeeklyPrediction[]
 }
 
 interface CandlestickChartProps {
@@ -403,7 +404,14 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
   }
 
   const renderPredictionLines = () => {
-    if (!weeklyPredictions || (!weeklyPredictions.currentWeek && !weeklyPredictions.previousWeek)) {
+    // Check if we have any predictions
+    const hasPredictions = weeklyPredictions && (
+      weeklyPredictions.currentWeek || 
+      weeklyPredictions.previousWeek || 
+      (weeklyPredictions.allWeeks && weeklyPredictions.allWeeks.length > 0)
+    )
+    
+    if (!hasPredictions) {
       return null
     }
 
@@ -441,42 +449,61 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
     }
 
     // Helper to check if a data point is within a date range
+    // This allows partial weeks - if any bar from the week exists, show lines for all matching bars
     const isInDateRange = (pointTimestamp: string | Date, monday: Date, friday: Date): boolean => {
       const pointDateStr = getETDateString(pointTimestamp)
       const mondayStr = getETDateString(monday)
       const fridayStr = getETDateString(friday)
       // Include all bars from Monday through Friday (inclusive)
+      // This works for partial weeks too - if only Tuesday-Friday is visible, those bars will match
       return pointDateStr >= mondayStr && pointDateStr <= fridayStr
     }
-
-    // Render current week lines
-    if (weeklyPredictions.currentWeek) {
-      // Parse fwd_join_date as ET timezone (format: "2026-01-02")
-      // Create date in ET timezone to avoid UTC conversion issues
-      const fwdJoinDateStr = weeklyPredictions.currentWeek.fwd_join_date
-      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
-      // Create date at noon ET to avoid timezone edge cases
-      const fridayDate = new Date()
-      fridayDate.setFullYear(year, month - 1, day)
-      fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
-      
+    
+    // Helper to find bars for a given week (works for partial weeks)
+    // Finds ANY bars that fall within the week's Monday-Friday range
+    const findBarsForWeek = (fridayDate: Date): { startIndex: number; endIndex: number } | null => {
       const { monday, friday } = getWeekDateRange(fridayDate)
+      const mondayStr = getETDateString(monday)
+      const fridayStr = getETDateString(friday)
       
-      // Find start and end indices for current week
       let startIndex = -1
       let endIndex = -1
       
+      // Check each bar to see if it falls within the week's date range
       for (let i = 0; i < data.length; i++) {
-        // Use timestamp if available (it's a string like "2025-09-18T09:30:00" in ET timezone)
-        // Otherwise fall back to parsing the time string
         const pointTimestamp = (data[i] as any).timestamp || data[i].time
-        if (isInDateRange(pointTimestamp, monday, friday)) {
+        const pointDateStr = getETDateString(pointTimestamp)
+        
+        // Check if this bar's date is within the week range (inclusive)
+        // This works for partial weeks - if only Friday is visible, it will match
+        if (pointDateStr >= mondayStr && pointDateStr <= fridayStr) {
           if (startIndex === -1) startIndex = i
           endIndex = i
         }
       }
       
+      // Return indices if we found ANY bars for this week (even if partial)
       if (startIndex !== -1 && endIndex !== -1) {
+        return { startIndex, endIndex }
+      }
+      
+      return null
+    }
+
+    // Render current week lines
+    if (weeklyPredictions.currentWeek) {
+      // Parse fwd_join_date as ET timezone (format: "2026-01-02")
+      const fwdJoinDateStr = weeklyPredictions.currentWeek.fwd_join_date
+      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
+      const fridayDate = new Date()
+      fridayDate.setFullYear(year, month - 1, day)
+      fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
+      
+      // Find bars for this week (works for partial weeks)
+      const weekBars = findBarsForWeek(fridayDate)
+      
+      if (weekBars) {
+        const { startIndex, endIndex } = weekBars
         const startX = margin.left + startIndex * scales.xScale
         const endX = margin.left + (endIndex + 1) * scales.xScale
         
@@ -530,31 +557,17 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
     // Render previous week lines
     if (weeklyPredictions.previousWeek) {
       // Parse fwd_join_date as ET timezone (format: "2026-01-02")
-      // Create date in ET timezone to avoid UTC conversion issues
       const fwdJoinDateStr = weeklyPredictions.previousWeek.fwd_join_date
       const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
-      // Create date at noon ET to avoid timezone edge cases
       const fridayDate = new Date()
       fridayDate.setFullYear(year, month - 1, day)
       fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
       
-      const { monday, friday } = getWeekDateRange(fridayDate)
+      // Find bars for this week (works for partial weeks)
+      const weekBars = findBarsForWeek(fridayDate)
       
-      // Find start and end indices for previous week
-      let startIndex = -1
-      let endIndex = -1
-      
-      for (let i = 0; i < data.length; i++) {
-        // Use timestamp if available (it's a string like "2025-09-18T09:30:00" in ET timezone)
-        // Otherwise fall back to parsing the time string
-        const pointTimestamp = (data[i] as any).timestamp || data[i].time
-        if (isInDateRange(pointTimestamp, monday, friday)) {
-          if (startIndex === -1) startIndex = i
-          endIndex = i
-        }
-      }
-      
-      if (startIndex !== -1 && endIndex !== -1) {
+      if (weekBars) {
+        const { startIndex, endIndex } = weekBars
         // Start at the left edge of the first bar, end at the right edge of the last bar
         const startX = margin.left + startIndex * scales.xScale
         const endX = margin.left + (endIndex + 1) * scales.xScale
@@ -603,6 +616,82 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
             strokeDasharray="3 3"
           />
         )
+      }
+    }
+
+    // Render lines for all weeks (60min interval)
+    if (weeklyPredictions.allWeeks && weeklyPredictions.allWeeks.length > 0) {
+      for (const weekPrediction of weeklyPredictions.allWeeks) {
+        // Parse fwd_join_date as ET timezone (format: "2026-01-02")
+        const fwdJoinDateStr = weekPrediction.fwd_join_date
+        const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
+        const fridayDate = new Date()
+        fridayDate.setFullYear(year, month - 1, day)
+        fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
+        
+        // Find bars for this week (works for partial weeks)
+        const weekBars = findBarsForWeek(fridayDate)
+        
+        if (weekBars) {
+          const { startIndex, endIndex } = weekBars
+          // Start at the left edge of the first bar, end at the right edge of the last bar
+          const startX = margin.left + startIndex * scales.xScale
+          const endX = margin.left + (endIndex + 1) * scales.xScale
+          
+          // Use lighter styling for older weeks (not current/previous)
+          const isCurrentOrPrevious = 
+            (weeklyPredictions.currentWeek && weekPrediction.fwd_join_date === weeklyPredictions.currentWeek.fwd_join_date) ||
+            (weeklyPredictions.previousWeek && weekPrediction.fwd_join_date === weeklyPredictions.previousWeek.fwd_join_date)
+          
+          const strokeWidth = isCurrentOrPrevious ? 2 : 1.5
+          const strokeOpacity = isCurrentOrPrevious ? 0.8 : 0.4
+          const dashArray = isCurrentOrPrevious ? '5 5' : '3 3'
+          
+          // White line - predicted close
+          lines.push(
+            <line
+              key={`all-week-${weekPrediction.fwd_join_date}-close`}
+              x1={startX}
+              y1={getY(weekPrediction.t_close_to_pre)}
+              x2={endX}
+              y2={getY(weekPrediction.t_close_to_pre)}
+              stroke="#ffffff"
+              strokeWidth={strokeWidth}
+              strokeOpacity={strokeOpacity}
+              strokeDasharray={dashArray}
+            />
+          )
+          
+          // Green line - buy zone (lowest)
+          lines.push(
+            <line
+              key={`all-week-${weekPrediction.fwd_join_date}-low`}
+              x1={startX}
+              y1={getY(weekPrediction.t_lowest_to_close)}
+              x2={endX}
+              y2={getY(weekPrediction.t_lowest_to_close)}
+              stroke="#10b981"
+              strokeWidth={strokeWidth}
+              strokeOpacity={strokeOpacity}
+              strokeDasharray={dashArray}
+            />
+          )
+          
+          // Red line - sell zone (highest)
+          lines.push(
+            <line
+              key={`all-week-${weekPrediction.fwd_join_date}-high`}
+              x1={startX}
+              y1={getY(weekPrediction.t_highest_to_pre)}
+              x2={endX}
+              y2={getY(weekPrediction.t_highest_to_pre)}
+              stroke="#ef4444"
+              strokeWidth={strokeWidth}
+              strokeOpacity={strokeOpacity}
+              strokeDasharray={dashArray}
+            />
+          )
+        }
       }
     }
 

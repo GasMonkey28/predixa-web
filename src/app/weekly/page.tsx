@@ -21,6 +21,7 @@ interface WeeklyPrediction {
 interface WeeklyPredictions {
   currentWeek: WeeklyPrediction | null
   previousWeek: WeeklyPrediction | null
+  allWeeks?: WeeklyPrediction[]
 }
 
 function WeeklyPageContent() {
@@ -28,6 +29,7 @@ function WeeklyPageContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>('line')
+  const [interval, setInterval] = useState<'15min' | '60min'>('15min')
   const [refreshKey, setRefreshKey] = useState(0)
   const [weeklyPredictions, setWeeklyPredictions] = useState<WeeklyPredictions>({
     currentWeek: null,
@@ -37,12 +39,9 @@ function WeeklyPageContent() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // Fetch both bars data and weekly predictions in parallel
-        const [barsResponse, predictionsResponse] = await Promise.all([
-          fetch(`/api/bars/weekly?t=${Date.now()}&r=${Math.random()}`),
-          fetch(`/api/weekly-predictions?t=${Date.now()}&r=${Math.random()}`),
-        ])
-        
+        setLoading(true)
+        // Fetch bars data first to get date range
+        const barsResponse = await fetch(`/api/bars/weekly?interval=${interval}&t=${Date.now()}&r=${Math.random()}`)
         const barsResult = await barsResponse.json()
         console.log('Fetched weekly data:', barsResult)
         console.log('Bars count:', barsResult.bars?.length)
@@ -50,11 +49,27 @@ function WeeklyPageContent() {
         console.log('Last bar:', barsResult.bars?.[barsResult.bars?.length - 1])
         setData(barsResult)
         
+        // Calculate date range from bars for 60min interval
+        let predictionsUrl = `/api/weekly-predictions?t=${Date.now()}&r=${Math.random()}`
+        if (interval === '60min' && barsResult.bars && barsResult.bars.length > 0) {
+          const firstBar = barsResult.bars[0]
+          const lastBar = barsResult.bars[barsResult.bars.length - 1]
+          // Extract date part from timestamps (format: "2025-09-18T09:30:00")
+          const startDate = firstBar.t ? firstBar.t.split('T')[0] : null
+          const endDate = lastBar.t ? lastBar.t.split('T')[0] : null
+          if (startDate && endDate) {
+            predictionsUrl += `&interval=60min&startDate=${startDate}&endDate=${endDate}`
+          }
+        }
+        
+        // Fetch predictions with date range if 60min
+        const predictionsResponse = await fetch(predictionsUrl)
         const predictionsResult = await predictionsResponse.json()
         console.log('Fetched weekly predictions:', predictionsResult)
         setWeeklyPredictions({
           currentWeek: predictionsResult.currentWeek,
           previousWeek: predictionsResult.previousWeek,
+          allWeeks: predictionsResult.allWeeks || undefined,
         })
       } catch (err) {
         console.error('Error fetching data:', err)
@@ -64,7 +79,7 @@ function WeeklyPageContent() {
       }
     }
     fetchData()
-  }, [refreshKey])
+  }, [refreshKey, interval])
 
   if (loading) {
     return (
@@ -227,6 +242,8 @@ function WeeklyPageContent() {
             title="Price Chart"
             height={544}
             weeklyPredictions={weeklyPredictions}
+            interval={interval}
+            onIntervalChange={setInterval}
           />
         </motion.div>
       </div>
