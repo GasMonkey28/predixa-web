@@ -5,40 +5,73 @@ import { motion } from 'motion/react'
 import AttractivePriceCard from '@/components/trading/AttractivePriceCard'
 import AttractiveChartSection from '@/components/trading/AttractiveChartSection'
 import DailyTiers from '@/components/trading/DailyTiers'
+import Model2Signals from '@/components/trading/Model2Signals'
+import Model2Chart from '@/components/trading/Model2Chart'
 import EconomicCalendarInvesting from '@/components/trading/EconomicCalendarInvesting'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { ChevronDown } from 'lucide-react'
 
 type ChartType = 'line' | 'candlestick'
+type ModelType = 'model1' | 'model2'
 
 function DailyPageContent() {
+  const [selectedModel, setSelectedModel] = useState<ModelType>('model1')
   const [data, setData] = useState<any>(null)
+  const [model2Data, setModel2Data] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [model2Loading, setModel2Loading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>('line')
+  const [model2ChartType, setModel2ChartType] = useState<ChartType>('candlestick')
   const [refreshKey, setRefreshKey] = useState(0)
 
+  // Fetch Model1 data
   useEffect(() => {
+    if (selectedModel !== 'model1') return
+    
     async function fetchData() {
       try {
-        // Add cache busting parameter to force fresh data
+        setLoading(true)
         const response = await fetch(`/api/bars/daily?t=${Date.now()}&r=${Math.random()}`)
         const result = await response.json()
-        console.log('Fetched data:', result)
-        console.log('Bars count:', result.bars?.length)
-        console.log('First bar:', result.bars?.[0])
-        console.log('Last bar:', result.bars?.[result.bars?.length - 1])
+        console.log('Fetched Model1 data:', result)
         setData(result)
+        setError(null)
       } catch (err) {
-        console.error('Error fetching data:', err)
-        setError('Failed to load data')
+        console.error('Error fetching Model1 data:', err)
+        setError('Failed to load Model1 data')
       } finally {
         setLoading(false)
       }
     }
     fetchData()
-  }, [refreshKey])
+  }, [refreshKey, selectedModel])
 
-  if (loading) {
+  // Fetch Model2 data
+  useEffect(() => {
+    if (selectedModel !== 'model2') return
+    
+    async function fetchModel2Data() {
+      try {
+        setModel2Loading(true)
+        const response = await fetch(`/api/model2/daily?t=${Date.now()}`)
+        const result = await response.json()
+        console.log('Fetched Model2 data:', result)
+        setModel2Data(result)
+        setError(null)
+      } catch (err) {
+        console.error('Error fetching Model2 data:', err)
+        setError('Failed to load Model2 data')
+      } finally {
+        setModel2Loading(false)
+      }
+    }
+    fetchModel2Data()
+  }, [selectedModel])
+
+  const isLoading = selectedModel === 'model1' ? loading : model2Loading
+
+  if (isLoading) {
     return (
       <main className="mx-auto max-w-6xl p-6">
         <div className="flex items-center justify-center h-64">
@@ -48,15 +81,32 @@ function DailyPageContent() {
     )
   }
 
-  if (error || !data) {
+  if (error) {
     return (
       <main className="mx-auto max-w-6xl p-6">
-        <div className="text-center text-red-600">{error || 'No data available'}</div>
+        <div className="text-center text-red-600">{error}</div>
       </main>
     )
   }
 
-  const rows = data.bars?.slice(-50) || []
+  if (selectedModel === 'model1' && !data) {
+    return (
+      <main className="mx-auto max-w-6xl p-6">
+        <div className="text-center text-red-600">No Model1 data available</div>
+      </main>
+    )
+  }
+
+  if (selectedModel === 'model2' && !model2Data) {
+    return (
+      <main className="mx-auto max-w-6xl p-6">
+        <div className="text-center text-red-600">No Model2 data available</div>
+      </main>
+    )
+  }
+
+  // Model1 chart data
+  const rows = selectedModel === 'model1' ? (data?.bars?.slice(-50) || []) : []
   const chartData = rows.map((bar: any) => ({
     time: new Date(bar.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     open: bar.o,
@@ -66,9 +116,9 @@ function DailyPageContent() {
     volume: bar.v || 0
   }))
 
-  // Calculate price change vs previous trading day's close
+  // Calculate price change vs previous trading day's close (Model1 only)
   // Match app logic: filter to regular market hours (9:30 AM - 3:00 PM ET) only
-  const allBars = data.bars || []
+  const allBars = selectedModel === 'model1' ? (data?.bars || []) : []
   const nyTZ = 'America/New_York'
   
   // Helper function to get hour and minute in ET timezone
@@ -204,7 +254,23 @@ function DailyPageContent() {
           <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
             AI-Powered Market Forecast
           </h1>
-          <p className="text-gray-300 text-lg">Signals publish near the opening bell, stay fixed all session, and are built for today—with an occasional carry into tomorrow.</p>
+          <p className="text-gray-300 text-lg mb-4">Signals publish near the opening bell, stay fixed all session, and are built for today—with an occasional carry into tomorrow.</p>
+          
+          {/* Model Selector */}
+          <div className="flex items-center justify-center gap-4">
+            <label className="text-gray-300 text-sm font-medium">Select Model:</label>
+            <div className="relative">
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value as ModelType)}
+                className="appearance-none bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 pr-10 text-white text-sm font-medium cursor-pointer hover:bg-zinc-700 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              >
+                <option value="model1">Model1_LongShortTier</option>
+                <option value="model2">Model2_HighLowSingle</option>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
         </motion.div>
 
         {/* Main Layout: Left Column (Trading Signals + Chart) and Right Column (Economic Calendar) */}
@@ -218,39 +284,54 @@ function DailyPageContent() {
           <div className="lg:col-span-2 space-y-4">
             {/* Trading Signals - Top Left */}
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 border-2 border-zinc-800/50 p-6 backdrop-blur-sm">
-              <DailyTiers ticker="SPY" />
+              {selectedModel === 'model1' ? (
+                <DailyTiers ticker="SPY" />
+              ) : (
+                <Model2Signals ticker="SPY" />
+              )}
             </div>
 
             {/* Price Chart - Bottom Left */}
             <div>
-              <AttractiveChartSection
-                data={chartData}
-                chartType={chartType}
-                onChartTypeChange={setChartType}
-                title="Price Chart"
-              />
+              {selectedModel === 'model1' ? (
+                <AttractiveChartSection
+                  data={chartData}
+                  chartType={chartType}
+                  onChartTypeChange={setChartType}
+                  title="Price Chart"
+                />
+              ) : (
+                <Model2Chart
+                  tradingDays={model2Data?.trading_days || []}
+                  height={400}
+                  chartType={model2ChartType}
+                  onChartTypeChange={setModel2ChartType}
+                />
+              )}
             </div>
           </div>
 
           {/* Right Column - SPY Daily OHLC + Economic Calendar */}
           <div className="lg:col-span-1 flex flex-col gap-4">
-            {/* SPY Daily OHLC - Top Right */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="w-full"
-            >
-              <AttractivePriceCard
-                price={currentPrice}
-                change={priceChange}
-                changePercent={priceChangePercent}
-                onRefresh={() => {
-                  setRefreshKey(prev => prev + 1)
-                  setLoading(true)
-                }}
-              />
-            </motion.div>
+            {/* SPY Daily OHLC - Top Right (Model1 only) */}
+            {selectedModel === 'model1' && (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+                className="w-full"
+              >
+                <AttractivePriceCard
+                  price={currentPrice}
+                  change={priceChange}
+                  changePercent={priceChangePercent}
+                  onRefresh={() => {
+                    setRefreshKey(prev => prev + 1)
+                    setLoading(true)
+                  }}
+                />
+              </motion.div>
+            )}
 
             {/* Economic Calendar - Bottom Right */}
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6 flex-1 flex flex-col">

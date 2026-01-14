@@ -1,0 +1,7 @@
+{
+  "Sid": "AllowPublicReadModel2Chart",
+  "Effect": "Allow",
+  "Principal": "*",
+  "Action": "s3:GetObject",
+  "Resource": "arn:aws:s3:::tradespark-822233328169-us-east-1/model2_y2y3/chart/*"
+}
