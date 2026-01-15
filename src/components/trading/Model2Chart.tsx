@@ -186,12 +186,12 @@ export default function Model2Chart({
           </g>
         )}
         
-        {/* Invisible hover area */}
+        {/* Invisible hover area - expanded for better sensitivity */}
         <rect
-          x={x - xScale / 2}
-          y={margin.top}
-          width={xScale}
-          height={height}
+          x={x - xScale * 0.75}
+          y={margin.top - 20}
+          width={xScale * 1.5}
+          height={height + 40}
           fill="transparent"
           onMouseEnter={() => setHoveredIndex(index)}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -268,12 +268,12 @@ export default function Model2Chart({
           </g>
         )}
         
-        {/* Invisible hover area */}
+        {/* Invisible hover area - expanded for better sensitivity */}
         <rect
-          x={x - xScale / 2}
-          y={margin.top}
-          width={xScale}
-          height={chartDimensions.height}
+          x={x - xScale * 0.75}
+          y={margin.top - 20}
+          width={xScale * 1.5}
+          height={chartDimensions.height + 40}
           fill="transparent"
           onMouseEnter={() => setHoveredIndex(index)}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -404,8 +404,34 @@ export default function Model2Chart({
     
     const day = validDays[hoveredIndex]
     const { xScale } = scales
-    const { margin } = chartDimensions
+    const { margin, width } = chartDimensions
     const x = margin.left + hoveredIndex * xScale + xScale / 2
+    
+    // Calculate tooltip position to avoid edge clipping
+    const tooltipWidth = 220
+    const tooltipOffset = 10
+    const totalChartWidth = margin.left + width + margin.right
+    
+    // Check if tooltip would overflow on the right
+    const tooltipRightX = x + tooltipOffset + tooltipWidth
+    const wouldOverflowRight = tooltipRightX > totalChartWidth
+    
+    // Check if tooltip would overflow on the left if positioned to the left
+    const tooltipLeftX = x - tooltipOffset - tooltipWidth
+    const wouldOverflowLeft = tooltipLeftX < 0
+    
+    // Determine tooltip X position
+    let tooltipX: number
+    if (wouldOverflowRight && !wouldOverflowLeft) {
+      // Position to the left of the bar
+      tooltipX = x - tooltipOffset - tooltipWidth
+    } else {
+      // Position to the right of the bar (default)
+      tooltipX = x + tooltipOffset
+    }
+    
+    // Ensure tooltip doesn't go below 0 (left edge)
+    tooltipX = Math.max(0, tooltipX)
     
     return (
       <g>
@@ -422,7 +448,7 @@ export default function Model2Chart({
         
         {/* Tooltip box */}
         <rect
-          x={x + 10}
+          x={tooltipX}
           y={margin.top + 10}
           width={220}
           height={day.notes ? 180 : 150}
@@ -434,27 +460,27 @@ export default function Model2Chart({
         />
         
         {/* Tooltip content */}
-        <text x={x + 20} y={margin.top + 30} fontSize="13" fontWeight="bold" fill="#f3f4f6">
+        <text x={tooltipX + 10} y={margin.top + 30} fontSize="13" fontWeight="bold" fill="#f3f4f6">
           {formatDate(day.as_of_date)}
         </text>
         
-        <text x={x + 20} y={margin.top + 50} fontSize="11" fill="#9ca3af">
+        <text x={tooltipX + 10} y={margin.top + 50} fontSize="11" fill="#9ca3af">
           Open: <tspan fill="#f3f4f6" fontFamily="monospace">{formatPrice(day.open_price!)}</tspan>
         </text>
         
-        <text x={x + 20} y={margin.top + 65} fontSize="11" fill="#9ca3af">
+        <text x={tooltipX + 10} y={margin.top + 65} fontSize="11" fill="#9ca3af">
           High: <tspan fill="#10b981" fontFamily="monospace">{formatPrice(day.high_price!)}</tspan>
         </text>
         
-        <text x={x + 20} y={margin.top + 80} fontSize="11" fill="#9ca3af">
+        <text x={tooltipX + 10} y={margin.top + 80} fontSize="11" fill="#9ca3af">
           Low: <tspan fill="#ef4444" fontFamily="monospace">{formatPrice(day.low_price!)}</tspan>
         </text>
         
-        <text x={x + 20} y={margin.top + 95} fontSize="11" fill="#9ca3af">
+        <text x={tooltipX + 10} y={margin.top + 95} fontSize="11" fill="#9ca3af">
           Close: <tspan fill="#3b82f6" fontFamily="monospace">{formatPrice(day.close_price!)}</tspan>
         </text>
         
-        <text x={x + 20} y={margin.top + 115} fontSize="11" fill="#9ca3af">
+        <text x={tooltipX + 10} y={margin.top + 115} fontSize="11" fill="#9ca3af">
           Signal: <tspan fill={day.final_signal === 'long' ? '#10b981' : day.final_signal === 'short' ? '#ef4444' : '#9ca3af'} fontWeight="bold">
             {day.final_signal.toUpperCase()}
           </tspan>
@@ -464,7 +490,7 @@ export default function Model2Chart({
         </text>
         
         {day.pnl_value != null && (
-          <text x={x + 20} y={margin.top + 135} fontSize="11" fill="#9ca3af">
+          <text x={tooltipX + 10} y={margin.top + 135} fontSize="11" fill="#9ca3af">
             PnL: <tspan fill={day.pnl_mark === 'profit' ? '#10b981' : '#ef4444'} fontWeight="bold" fontFamily="monospace">
               {day.pnl_value > 0 ? '+' : ''}{day.pnl_value.toFixed(2)}
             </tspan>
@@ -472,7 +498,7 @@ export default function Model2Chart({
         )}
         
         {day.notes && (
-          <text x={x + 20} y={margin.top + 155} fontSize="10" fill="#6b7280" width={200}>
+          <text x={tooltipX + 10} y={margin.top + 155} fontSize="10" fill="#6b7280" width={200}>
             {day.notes.length > 50 ? day.notes.substring(0, 50) + '...' : day.notes}
           </text>
         )}

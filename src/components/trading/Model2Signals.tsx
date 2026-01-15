@@ -120,7 +120,7 @@ export default function Model2Signals({ ticker = 'SPY' }: Model2SignalsProps) {
 
   // Format predictions
   const formatPrediction = (val: number) => {
-    return val >= 0 ? `+${val.toFixed(2)}%` : `${val.toFixed(2)}%`
+    return val >= 0 ? `+${val.toFixed(2)}` : `${val.toFixed(2)}`
   }
 
   return (

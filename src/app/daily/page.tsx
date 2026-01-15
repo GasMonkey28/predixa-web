@@ -281,7 +281,7 @@ function DailyPageContent() {
           className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"
         >
           {/* Left Column - Stacked */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className={`${selectedModel === 'model2' ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-4`}>
             {/* Trading Signals - Top Left */}
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 border-2 border-zinc-800/50 p-6 backdrop-blur-sm">
               {selectedModel === 'model1' ? (
@@ -311,7 +311,8 @@ function DailyPageContent() {
             </div>
           </div>
 
-          {/* Right Column - SPY Daily OHLC + Economic Calendar */}
+          {/* Right Column - SPY Daily OHLC + Economic Calendar (Model1 only) */}
+          {selectedModel === 'model1' && (
           <div className="lg:col-span-1 flex flex-col gap-4">
             {/* SPY Daily OHLC - Top Right (Model1 only) */}
             {selectedModel === 'model1' && (
@@ -333,11 +334,14 @@ function DailyPageContent() {
               </motion.div>
             )}
 
-            {/* Economic Calendar - Bottom Right */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6 flex-1 flex flex-col">
-              <EconomicCalendarInvesting />
-            </div>
+            {/* Economic Calendar - Bottom Right (Model1 only) */}
+            {selectedModel === 'model1' && (
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6 flex-1 flex flex-col">
+                <EconomicCalendarInvesting />
+              </div>
+            )}
           </div>
+          )}
         </motion.div>
       </div>
     </div>
