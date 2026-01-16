@@ -6,6 +6,9 @@ import AttractiveChartSection from '@/components/trading/AttractiveChartSection'
 import AttractivePriceCard from '@/components/trading/AttractivePriceCard'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
+// Force dynamic rendering - this page uses client-side hooks and cannot be statically generated
+export const dynamic = 'force-dynamic'
+
 type ChartType = 'line' | 'candlestick'
 
 interface WeeklyPrediction {

@@ -3,6 +3,9 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
+// Force dynamic rendering - this page performs client-side redirect
+export const dynamic = 'force-dynamic'
+
 export default function DailyPage() {
   const router = useRouter()
   

@@ -11,6 +11,9 @@ import Model2Chart from '@/components/trading/Model2Chart'
 import EconomicCalendarInvesting from '@/components/trading/EconomicCalendarInvesting'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
+// Force dynamic rendering - this page uses client-side hooks and cannot be statically generated
+export const dynamic = 'force-dynamic'
+
 type ChartType = 'line' | 'candlestick'
 type ModelType = 'model1' | 'model2'
 
