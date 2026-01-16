@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '@/lib/auth-store'
@@ -9,8 +9,19 @@ import { useAuthStore } from '@/lib/auth-store'
 const navigationItems = [
   {
     name: 'Daily',
-    href: '/daily',
-    icon: '📈'
+    icon: '📈',
+    items: [
+      {
+        name: 'Model1',
+        href: '/daily/model1',
+        icon: '📊'
+      },
+      {
+        name: 'Model2',
+        href: '/daily/model2',
+        icon: '📈'
+      }
+    ]
   },
   {
     name: 'Weekly',
@@ -81,6 +92,7 @@ const SOCIAL_LINKS = [
 export default function Navigation() {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { isAuthenticated } = useAuthStore()
   const [isNavigating, setIsNavigating] = useState(false)
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
@@ -96,14 +108,20 @@ export default function Navigation() {
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      // Don't close if clicking on a link inside the dropdown
+      const target = event.target as HTMLElement
+      if (target.closest('a')) {
+        return
+      }
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         setOpenDropdown(null)
       }
     }
 
     if (openDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
+      // Use click instead of mousedown to allow Link clicks to register first
+      document.addEventListener('click', handleClickOutside, true)
+      return () => document.removeEventListener('click', handleClickOutside, true)
     }
   }, [openDropdown])
 
@@ -132,11 +150,13 @@ export default function Navigation() {
                 // Check if item has sub-items (dropdown)
                 if ('items' in item && item.items) {
                   const isOpen = openDropdown === item.name
-                  const isActive = item.items.some(
-                    (subItem) =>
+                  const isActive = item.items.some((subItem) => {
+                    // Check if current pathname matches the sub-item href
+                    return (
                       pathname === subItem.href ||
                       (subItem.href !== '/news/spy' && pathname?.startsWith(subItem.href))
-                  )
+                    )
+                  })
 
                   return (
                     <div key={item.name} className="relative" ref={dropdownRef}>
@@ -172,23 +192,33 @@ export default function Navigation() {
                       {isOpen && (
                         <div className="absolute left-0 top-full mt-1 w-48 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg z-50 py-1">
                           {item.items.map((subItem) => {
-                            const isSubActive =
+                            const isNavigatingToSub = navigatingTo === subItem.href
+                            
+                            // For all dropdowns, use Link (now Daily uses different routes like Tools)
+                            let isSubActive = false
+                            isSubActive =
                               pathname === subItem.href ||
                               (subItem.href !== '/news/spy' &&
                                 pathname?.startsWith(subItem.href))
-                            const isNavigatingToSub = navigatingTo === subItem.href
-
+                            
                             return (
                               <Link
                                 key={subItem.name}
                                 href={subItem.href}
                                 prefetch={true}
                                 onClick={(e) => {
+                                  // Stop event propagation to prevent click-outside handler from firing
+                                  e.stopPropagation()
+                                  // Close dropdown immediately on click
+                                  setOpenDropdown(null)
                                   if (pathname !== subItem.href) {
                                     setIsNavigating(true)
                                     setNavigatingTo(subItem.href)
                                   }
-                                  setOpenDropdown(null)
+                                }}
+                                onMouseDown={(e) => {
+                                  // Also stop propagation on mousedown to prevent dropdown from closing
+                                  e.stopPropagation()
                                 }}
                                 className={clsx(
                                   'flex items-center space-x-2 px-4 py-2 text-sm transition-colors',
