@@ -13,6 +13,11 @@ const nextConfig = {
     // NEXT_PUBLIC_TICKER defaults to 'SPY' if not set
     NEXT_PUBLIC_TICKER: process.env.NEXT_PUBLIC_TICKER || 'SPY',
   },
+  // Disable static optimization to prevent build errors with client components
+  // Pages will be rendered on-demand instead of at build time
+  experimental: {
+    dynamicIO: true,
+  },
   // Allow app to build even if some env vars are missing (they'll fail gracefully at runtime)
   webpack: (config) => {
     return config

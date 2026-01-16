@@ -10,6 +10,9 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.predixaweb.com'
 const siteName = 'Predixa'
 const defaultDescription = 'Daily SPY forecasts with AI signals, direction probability, and tier rankings. Real-time options flow analysis and market analytics for active traders.'
 
+// Force dynamic rendering for all pages - many use client components that cannot be statically generated
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
