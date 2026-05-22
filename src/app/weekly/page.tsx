@@ -24,7 +24,9 @@ interface WeeklyPrediction {
 interface WeeklyPredictions {
   currentWeek: WeeklyPrediction | null
   previousWeek: WeeklyPrediction | null
+  nextWeek: WeeklyPrediction | null
   allWeeks?: WeeklyPrediction[]
+  publishReady?: boolean
 }
 
 function WeeklyPageContent() {
@@ -37,6 +39,7 @@ function WeeklyPageContent() {
   const [weeklyPredictions, setWeeklyPredictions] = useState<WeeklyPredictions>({
     currentWeek: null,
     previousWeek: null,
+    nextWeek: null,
   })
 
   useEffect(() => {
@@ -72,7 +75,9 @@ function WeeklyPageContent() {
         setWeeklyPredictions({
           currentWeek: predictionsResult.currentWeek,
           previousWeek: predictionsResult.previousWeek,
+          nextWeek: predictionsResult.nextWeek ?? null,
           allWeeks: predictionsResult.allWeeks || undefined,
+          publishReady: predictionsResult.publishReady,
         })
       } catch (err) {
         console.error('Error fetching data:', err)
@@ -83,6 +88,16 @@ function WeeklyPageContent() {
     }
     fetchData()
   }, [refreshKey, interval])
+
+  // On Fridays before the 2:50 PM CT publish, poll so next week appears automatically
+  useEffect(() => {
+    const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+    if (ctNow.getDay() !== 5 || weeklyPredictions.nextWeek) {
+      return
+    }
+    const timer = setInterval(() => setRefreshKey((k) => k + 1), 60_000)
+    return () => clearInterval(timer)
+  }, [weeklyPredictions.nextWeek])
 
   if (loading) {
     return (

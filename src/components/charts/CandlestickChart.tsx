@@ -29,6 +29,7 @@ interface WeeklyPrediction {
 interface WeeklyPredictions {
   currentWeek: WeeklyPrediction | null
   previousWeek: WeeklyPrediction | null
+  nextWeek: WeeklyPrediction | null
   allWeeks?: WeeklyPrediction[]
 }
 
@@ -407,7 +408,8 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
     // Check if we have any predictions
     const hasPredictions = weeklyPredictions && (
       weeklyPredictions.currentWeek || 
-      weeklyPredictions.previousWeek || 
+      weeklyPredictions.previousWeek ||
+      weeklyPredictions.nextWeek ||
       (weeklyPredictions.allWeeks && weeklyPredictions.allWeeks.length > 0)
     )
     
@@ -488,6 +490,90 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
       }
       
       return null
+    }
+
+    const estimateBarsPerTradingDay = (): number => {
+      const tradingDayCounts = new Map<string, number>()
+      for (const bar of data) {
+        const pointTimestamp = (bar as { timestamp?: string }).timestamp || bar.time
+        const dayKey = getETDateString(pointTimestamp)
+        tradingDayCounts.set(dayKey, (tradingDayCounts.get(dayKey) ?? 0) + 1)
+      }
+      const counts = [...tradingDayCounts.values()].filter((c) => c > 0)
+      if (counts.length === 0) return 26
+      return Math.max(1, Math.round(counts.reduce((a, b) => a + b, 0) / counts.length))
+    }
+
+    const getWeekLineSpan = (
+      fridayDate: Date,
+      allowFutureExtension: boolean
+    ): { startIndex: number; endIndex: number } | null => {
+      const weekBars = findBarsForWeek(fridayDate)
+      if (weekBars) return weekBars
+
+      if (!allowFutureExtension || data.length === 0) return null
+
+      const lastIndex = data.length - 1
+      const futureSpan = estimateBarsPerTradingDay() * 5
+      return { startIndex: lastIndex, endIndex: lastIndex + futureSpan }
+    }
+
+    const renderWeekLines = (
+      weekPrediction: WeeklyPrediction,
+      keyPrefix: string,
+      strokeWidth: number,
+      strokeOpacity: number,
+      dashArray: string,
+      allowFutureExtension: boolean
+    ) => {
+      const fwdJoinDateStr = weekPrediction.fwd_join_date
+      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
+      const fridayDate = new Date()
+      fridayDate.setFullYear(year, month - 1, day)
+      fridayDate.setHours(12, 0, 0, 0)
+
+      const weekBars = getWeekLineSpan(fridayDate, allowFutureExtension)
+      if (!weekBars) return
+
+      const { startIndex, endIndex } = weekBars
+      const startX = margin.left + startIndex * scales.xScale
+      const endX = margin.left + (endIndex + 1) * scales.xScale
+
+      lines.push(
+        <line
+          key={`${keyPrefix}-close`}
+          x1={startX}
+          y1={getY(weekPrediction.t_close_to_pre)}
+          x2={endX}
+          y2={getY(weekPrediction.t_close_to_pre)}
+          stroke="#a78bfa"
+          strokeWidth={strokeWidth}
+          strokeOpacity={strokeOpacity}
+          strokeDasharray={dashArray}
+        />,
+        <line
+          key={`${keyPrefix}-low`}
+          x1={startX}
+          y1={getY(weekPrediction.t_lowest_to_close)}
+          x2={endX}
+          y2={getY(weekPrediction.t_lowest_to_close)}
+          stroke="#34d399"
+          strokeWidth={strokeWidth}
+          strokeOpacity={strokeOpacity}
+          strokeDasharray={dashArray}
+        />,
+        <line
+          key={`${keyPrefix}-high`}
+          x1={startX}
+          y1={getY(weekPrediction.t_highest_to_pre)}
+          x2={endX}
+          y2={getY(weekPrediction.t_highest_to_pre)}
+          stroke="#f472b6"
+          strokeWidth={strokeWidth}
+          strokeOpacity={strokeOpacity}
+          strokeDasharray={dashArray}
+        />
+      )
     }
 
     // Render current week lines
@@ -619,6 +705,10 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
       }
     }
 
+    if (weeklyPredictions.nextWeek) {
+      renderWeekLines(weeklyPredictions.nextWeek, 'next-week', 2, 0.95, '6 4', true)
+    }
+
     // Render lines for all weeks (60min interval)
     if (weeklyPredictions.allWeeks && weeklyPredictions.allWeeks.length > 0) {
       for (const weekPrediction of weeklyPredictions.allWeeks) {
@@ -641,7 +731,8 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
           // Use lighter styling for older weeks (not current/previous)
           const isCurrentOrPrevious = 
             (weeklyPredictions.currentWeek && weekPrediction.fwd_join_date === weeklyPredictions.currentWeek.fwd_join_date) ||
-            (weeklyPredictions.previousWeek && weekPrediction.fwd_join_date === weeklyPredictions.previousWeek.fwd_join_date)
+            (weeklyPredictions.previousWeek && weekPrediction.fwd_join_date === weeklyPredictions.previousWeek.fwd_join_date) ||
+            (weeklyPredictions.nextWeek && weekPrediction.fwd_join_date === weeklyPredictions.nextWeek.fwd_join_date)
           
           const strokeWidth = isCurrentOrPrevious ? 2 : 1.5
           const strokeOpacity = isCurrentOrPrevious ? 0.8 : 0.4

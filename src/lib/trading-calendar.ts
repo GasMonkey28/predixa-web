@@ -5,6 +5,11 @@
 
 const NYSE_TIMEZONE = 'America/New_York'
 
+/** Weekly predictions publish Fridays at 2:50 PM Central Time */
+export const WEEKLY_PREDICTION_TIMEZONE = 'America/Chicago'
+export const WEEKLY_PREDICTION_CUTOFF_HOUR = 14
+export const WEEKLY_PREDICTION_CUTOFF_MINUTE = 50
+
 /**
  * Major NYSE holidays (MM-DD format)
  * Note: This is a simplified list. For production, consider using a comprehensive holiday calendar API
@@ -158,6 +163,66 @@ export function findPreviousWeekFriday(fromDate: Date = new Date()): Date {
   
   // Find the Friday of that week (or Monday if Friday was holiday)
   return findLastFridayOrMonday(previousWeekDate)
+}
+
+/**
+ * Current time as a Date in the given IANA timezone (wall-clock fields).
+ */
+export function getNowInTimeZone(timeZone: string, fromDate: Date = new Date()): Date {
+  return new Date(fromDate.toLocaleString('en-US', { timeZone }))
+}
+
+/**
+ * True on Fridays at or after 2:50 PM Central (weekly prediction publish time).
+ */
+export function isFridayAfterWeeklyPredictionCutoff(fromDate: Date = new Date()): boolean {
+  const ct = getNowInTimeZone(WEEKLY_PREDICTION_TIMEZONE, fromDate)
+  if (ct.getDay() !== 5) {
+    return false
+  }
+  const hour = ct.getHours()
+  const minute = ct.getMinutes()
+  return (
+    hour > WEEKLY_PREDICTION_CUTOFF_HOUR ||
+    (hour === WEEKLY_PREDICTION_CUTOFF_HOUR && minute >= WEEKLY_PREDICTION_CUTOFF_MINUTE)
+  )
+}
+
+/**
+ * Friday (or Monday substitute) of the Mon–Sun calendar week containing fromDate.
+ */
+export function findFridayOfWeekContaining(fromDate: Date = new Date()): Date {
+  const nyDate = new Date(fromDate.toLocaleString('en-US', { timeZone: NYSE_TIMEZONE }))
+  const d = new Date(nyDate)
+
+  const day = d.getDay()
+  if (day === 6) {
+    d.setDate(d.getDate() - 1)
+  } else if (day === 0) {
+    d.setDate(d.getDate() - 2)
+  } else {
+    d.setDate(d.getDate() + (5 - day))
+  }
+
+  if (d.getDay() === 5 && !isTradingDay(d)) {
+    const monday = new Date(d)
+    monday.setDate(d.getDate() - 4)
+    if (isTradingDay(monday)) {
+      return monday
+    }
+  }
+
+  return d
+}
+
+/**
+ * Friday of the calendar week after the week containing fromDate.
+ */
+export function findNextWeekFriday(fromDate: Date = new Date()): Date {
+  const thisWeekFriday = findFridayOfWeekContaining(fromDate)
+  const next = new Date(thisWeekFriday)
+  next.setDate(next.getDate() + 7)
+  return findFridayOfWeekContaining(next)
 }
 
 /**

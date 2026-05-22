@@ -2,10 +2,12 @@ import { NextResponse } from 'next/server'
 import axios from 'axios'
 import { config } from '@/lib/server/config'
 import {
+  findFridayOfWeekContaining,
   findLastFridayOrMonday,
+  findNextWeekFriday,
   findPreviousWeekFriday,
   formatDateYYYYMMDD,
-  getPreviousTradingDay,
+  isFridayAfterWeeklyPredictionCutoff,
 } from '@/lib/trading-calendar'
 
 export const dynamic = 'force-dynamic'
@@ -24,7 +26,10 @@ interface WeeklyPrediction {
 interface WeeklyPredictionsResponse {
   currentWeek: WeeklyPrediction | null
   previousWeek: WeeklyPrediction | null
+  /** Prediction for the upcoming week (published Fridays ~2:50 PM CT) */
+  nextWeek: WeeklyPrediction | null
   allWeeks?: WeeklyPrediction[] // For 60min interval - all weeks in visible range
+  publishReady?: boolean
 }
 
 /**
@@ -97,6 +102,62 @@ function getAllWeekDatesInRange(startDate: Date, endDate: Date): Date[] {
   return weekDates.reverse()
 }
 
+function classifyWeeklyPredictions(
+  latestPublish: WeeklyPrediction | null,
+  previousPublish: WeeklyPrediction | null,
+  referenceDate: Date = new Date()
+): Pick<WeeklyPredictionsResponse, 'currentWeek' | 'previousWeek' | 'nextWeek' | 'publishReady'> {
+  const thisWeekFridayStr = formatDateYYYYMMDD(findFridayOfWeekContaining(referenceDate))
+  const nextWeekFridayStr = formatDateYYYYMMDD(findNextWeekFriday(referenceDate))
+  const previousWeekFridayStr = formatDateYYYYMMDD(findPreviousWeekFriday(referenceDate))
+
+  let currentWeek: WeeklyPrediction | null = null
+  let previousWeek: WeeklyPrediction | null = null
+  let nextWeek: WeeklyPrediction | null = null
+
+  const assign = (pred: WeeklyPrediction) => {
+    if (pred.fwd_join_date === thisWeekFridayStr) {
+      currentWeek = pred
+      return
+    }
+    if (pred.fwd_join_date === nextWeekFridayStr) {
+      nextWeek = pred
+      return
+    }
+    if (pred.fwd_join_date === previousWeekFridayStr) {
+      previousWeek = pred
+    }
+  }
+
+  if (latestPublish) assign(latestPublish)
+  if (previousPublish) assign(previousPublish)
+
+  // After Friday 2:50 PM CT the newest S3 file targets next week
+  if (!nextWeek && latestPublish?.fwd_join_date === nextWeekFridayStr) {
+    nextWeek = latestPublish
+  }
+  if (nextWeek && !currentWeek && previousPublish?.fwd_join_date === thisWeekFridayStr) {
+    currentWeek = previousPublish
+  }
+  if (!previousWeek && previousPublish && previousPublish.fwd_join_date === previousWeekFridayStr) {
+    previousWeek = previousPublish
+  }
+
+  // Legacy fallback when fwd_join_date is missing or unexpected
+  if (!currentWeek && latestPublish && !nextWeek) {
+    currentWeek = latestPublish
+  }
+  if (!previousWeek && previousPublish && previousPublish !== currentWeek && previousPublish !== nextWeek) {
+    previousWeek = previousPublish
+  }
+
+  const publishReady =
+    isFridayAfterWeeklyPredictionCutoff(referenceDate) ||
+    nextWeek !== null
+
+  return { currentWeek, previousWeek, nextWeek, publishReady }
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -132,21 +193,23 @@ export async function GET(request: Request) {
       allWeeks = weekResults.filter((pred): pred is WeeklyPrediction => pred !== null)
     }
     
-    console.log('Fetching weekly predictions:', {
-      currentWeek: currentWeekDateStr,
-      previousWeek: previousWeekDateStr,
-      allWeeksCount: allWeeks.length,
-    })
-    
-    // Fetch both weeks' predictions in parallel (for 15min interval)
-    const [currentWeek, previousWeek] = await Promise.all([
+    const [latestPublish, previousPublish] = await Promise.all([
       fetchWeeklyPrediction(currentWeekDateStr),
       fetchWeeklyPrediction(previousWeekDateStr),
     ])
-    
+
+    const classified = classifyWeeklyPredictions(latestPublish, previousPublish)
+
+    console.log('Fetching weekly predictions:', {
+      latestPublish: currentWeekDateStr,
+      previousPublish: previousWeekDateStr,
+      allWeeksCount: allWeeks.length,
+      nextWeekFwdJoin: classified.nextWeek?.fwd_join_date ?? null,
+      publishReady: classified.publishReady,
+    })
+
     const response: WeeklyPredictionsResponse = {
-      currentWeek,
-      previousWeek,
+      ...classified,
       ...(interval === '60min' && allWeeks.length > 0 ? { allWeeks } : {}),
     }
     
@@ -164,6 +227,7 @@ export async function GET(request: Request) {
       {
         currentWeek: null,
         previousWeek: null,
+        nextWeek: null,
         error: 'Failed to fetch weekly predictions',
       },
       { status: 500 }

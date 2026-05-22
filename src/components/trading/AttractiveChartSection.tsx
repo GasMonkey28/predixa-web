@@ -19,6 +19,7 @@ interface WeeklyPrediction {
 interface WeeklyPredictions {
   currentWeek: WeeklyPrediction | null
   previousWeek: WeeklyPrediction | null
+  nextWeek: WeeklyPrediction | null
   allWeeks?: WeeklyPrediction[]
 }
 
@@ -53,7 +54,8 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
     // Check if we have any predictions
     const hasPredictions = weeklyPredictions && (
       weeklyPredictions.currentWeek || 
-      weeklyPredictions.previousWeek || 
+      weeklyPredictions.previousWeek ||
+      weeklyPredictions.nextWeek ||
       (weeklyPredictions.allWeeks && weeklyPredictions.allWeeks.length > 0)
     )
     
@@ -70,54 +72,46 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
       return `${year}-${month}-${day}`
     }
 
-    // Map predictions to data points based on date ranges
-    return data.map((point: any) => {
+    const applyWeekPrediction = (
+      result: Record<string, unknown>,
+      pointDateStr: string,
+      weekPrediction: WeeklyPrediction,
+      prefix: string
+    ) => {
+      const fwdJoinDateStr = weekPrediction.fwd_join_date
+      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
+      const fridayDate = new Date()
+      fridayDate.setFullYear(year, month - 1, day)
+      fridayDate.setHours(12, 0, 0, 0)
+
+      const { monday, friday } = getWeekDateRange(fridayDate)
+      const mondayStr = getETDateString(monday)
+      const fridayStr = getETDateString(friday)
+
+      if (pointDateStr >= mondayStr && pointDateStr <= fridayStr) {
+        result[`${prefix}_close`] = weekPrediction.t_close_to_pre
+        result[`${prefix}_low`] = weekPrediction.t_lowest_to_close
+        result[`${prefix}_high`] = weekPrediction.t_highest_to_pre
+      }
+    }
+
+    const mapped = data.map((point: any) => {
       // Use timestamp if available, otherwise parse the time string
       const pointDate = point.timestamp ? new Date(point.timestamp) : new Date(point.time);
       const pointDateStr = getETDateString(pointDate);
       
       const result: any = { ...point };
       
-      // Check if point falls within current week's range
       if (weeklyPredictions.currentWeek) {
-        // Parse fwd_join_date as ET timezone (format: "2026-01-02")
-        const fwdJoinDateStr = weeklyPredictions.currentWeek.fwd_join_date;
-        const [year, month, day] = fwdJoinDateStr.split('-').map(Number);
-        const fridayDate = new Date();
-        fridayDate.setFullYear(year, month - 1, day);
-        fridayDate.setHours(12, 0, 0, 0); // Noon to avoid timezone issues
-        
-        const { monday, friday } = getWeekDateRange(fridayDate);
-        const mondayStr = getETDateString(monday);
-        const fridayStr = getETDateString(friday);
-        
-        if (pointDateStr >= mondayStr && pointDateStr <= fridayStr) {
-          result.currentWeek_close = weeklyPredictions.currentWeek.t_close_to_pre;
-          result.currentWeek_low = weeklyPredictions.currentWeek.t_lowest_to_close;
-          result.currentWeek_high = weeklyPredictions.currentWeek.t_highest_to_pre;
-        }
+        applyWeekPrediction(result, pointDateStr, weeklyPredictions.currentWeek, 'currentWeek')
       }
-      
-      // Check if point falls within previous week's range
+
       if (weeklyPredictions.previousWeek) {
-        // Parse fwd_join_date as ET timezone (format: "2026-01-02")
-        const fwdJoinDateStr = weeklyPredictions.previousWeek.fwd_join_date;
-        const [year, month, day] = fwdJoinDateStr.split('-').map(Number);
-        const fridayDate = new Date();
-        fridayDate.setFullYear(year, month - 1, day);
-        fridayDate.setHours(12, 0, 0, 0); // Noon to avoid timezone issues
-        
-        const { monday, friday } = getWeekDateRange(fridayDate);
-        const mondayStr = getETDateString(monday);
-        const fridayStr = getETDateString(friday);
-        
-        // Include bars that fall within the week range (works for partial weeks)
-        // e.g., if only Friday is visible, it will still match and show lines
-        if (pointDateStr >= mondayStr && pointDateStr <= fridayStr) {
-          result.previousWeek_close = weeklyPredictions.previousWeek.t_close_to_pre;
-          result.previousWeek_low = weeklyPredictions.previousWeek.t_lowest_to_close;
-          result.previousWeek_high = weeklyPredictions.previousWeek.t_highest_to_pre;
-        }
+        applyWeekPrediction(result, pointDateStr, weeklyPredictions.previousWeek, 'previousWeek')
+      }
+
+      if (weeklyPredictions.nextWeek) {
+        applyWeekPrediction(result, pointDateStr, weeklyPredictions.nextWeek, 'nextWeek')
       }
       
       // Check if point falls within any of the allWeeks ranges (60min interval)
@@ -127,7 +121,8 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
           // Skip if this is already covered by currentWeek or previousWeek
           if (
             (weeklyPredictions.currentWeek && weekPrediction.fwd_join_date === weeklyPredictions.currentWeek.fwd_join_date) ||
-            (weeklyPredictions.previousWeek && weekPrediction.fwd_join_date === weeklyPredictions.previousWeek.fwd_join_date)
+            (weeklyPredictions.previousWeek && weekPrediction.fwd_join_date === weeklyPredictions.previousWeek.fwd_join_date) ||
+            (weeklyPredictions.nextWeek && weekPrediction.fwd_join_date === weeklyPredictions.nextWeek.fwd_join_date)
           ) {
             continue
           }
@@ -154,6 +149,41 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
       
       return result;
     });
+
+    // Next week may have no OHLC bars yet — add placeholder points so lines render on the right
+    if (weeklyPredictions.nextWeek && mapped.length > 0) {
+      const hasNextWeekOverlay = mapped.some((p: Record<string, unknown>) => p.nextWeek_close != null)
+      if (!hasNextWeekOverlay) {
+        const fwdJoinDateStr = weeklyPredictions.nextWeek.fwd_join_date
+        const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
+        const fridayDate = new Date()
+        fridayDate.setFullYear(year, month - 1, day)
+        fridayDate.setHours(12, 0, 0, 0)
+        const { monday, friday } = getWeekDateRange(fridayDate)
+        const lastPoint = mapped[mapped.length - 1] as Record<string, unknown>
+        const anchorClose = (lastPoint.close as number) ?? 0
+
+        for (let d = new Date(monday); d <= friday; d.setDate(d.getDate() + 1)) {
+          if (d.getDay() === 0 || d.getDay() === 6) continue
+          const dateStr = getETDateString(d)
+          mapped.push({
+            time: d.toLocaleDateString(),
+            timestamp: `${dateStr}T16:00:00`,
+            open: anchorClose,
+            high: anchorClose,
+            low: anchorClose,
+            close: anchorClose,
+            volume: 0,
+            isFutureWeekPlaceholder: true,
+            nextWeek_close: weeklyPredictions.nextWeek.t_close_to_pre,
+            nextWeek_low: weeklyPredictions.nextWeek.t_lowest_to_close,
+            nextWeek_high: weeklyPredictions.nextWeek.t_highest_to_pre,
+          })
+        }
+      }
+    }
+
+    return mapped;
   }, [data, weeklyPredictions]);
 
   return (
@@ -285,6 +315,41 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
                     />
                   </>
                 )}
+                {/* Next Week Prediction Lines (published Fridays ~2:50 PM CT) */}
+                {weeklyPredictions?.nextWeek && (
+                  <>
+                    <Line 
+                      type="monotone" 
+                      dataKey="nextWeek_close" 
+                      stroke="#a78bfa"
+                      strokeWidth={2}
+                      strokeOpacity={0.95}
+                      dot={false}
+                      strokeDasharray="6 4"
+                      connectNulls
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="nextWeek_low" 
+                      stroke="#34d399"
+                      strokeWidth={2}
+                      strokeOpacity={0.95}
+                      dot={false}
+                      strokeDasharray="6 4"
+                      connectNulls
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="nextWeek_high" 
+                      stroke="#f472b6"
+                      strokeWidth={2}
+                      strokeOpacity={0.95}
+                      dot={false}
+                      strokeDasharray="6 4"
+                      connectNulls
+                    />
+                  </>
+                )}
                 {/* Previous Week Prediction Lines */}
                 {weeklyPredictions?.previousWeek && (
                   <>
@@ -322,7 +387,8 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
                   // Skip if this is already covered by currentWeek or previousWeek
                   if (
                     (weeklyPredictions.currentWeek && weekPrediction.fwd_join_date === weeklyPredictions.currentWeek.fwd_join_date) ||
-                    (weeklyPredictions.previousWeek && weekPrediction.fwd_join_date === weeklyPredictions.previousWeek.fwd_join_date)
+                    (weeklyPredictions.previousWeek && weekPrediction.fwd_join_date === weeklyPredictions.previousWeek.fwd_join_date) ||
+                    (weeklyPredictions.nextWeek && weekPrediction.fwd_join_date === weeklyPredictions.nextWeek.fwd_join_date)
                   ) {
                     return null
                   }
