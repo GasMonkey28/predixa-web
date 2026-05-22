@@ -34,7 +34,7 @@ function WeeklyPageContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>('line')
-  const [interval, setInterval] = useState<'15min' | '60min'>('15min')
+  const [barInterval, setBarInterval] = useState<'15min' | '60min'>('15min')
   const [refreshKey, setRefreshKey] = useState(0)
   const [weeklyPredictions, setWeeklyPredictions] = useState<WeeklyPredictions>({
     currentWeek: null,
@@ -47,7 +47,7 @@ function WeeklyPageContent() {
       try {
         setLoading(true)
         // Fetch bars data first to get date range
-        const barsResponse = await fetch(`/api/bars/weekly?interval=${interval}&t=${Date.now()}&r=${Math.random()}`)
+        const barsResponse = await fetch(`/api/bars/weekly?interval=${barInterval}&t=${Date.now()}&r=${Math.random()}`)
         const barsResult = await barsResponse.json()
         console.log('Fetched weekly data:', barsResult)
         console.log('Bars count:', barsResult.bars?.length)
@@ -57,7 +57,7 @@ function WeeklyPageContent() {
         
         // Calculate date range from bars for 60min interval
         let predictionsUrl = `/api/weekly-predictions?t=${Date.now()}&r=${Math.random()}`
-        if (interval === '60min' && barsResult.bars && barsResult.bars.length > 0) {
+        if (barInterval === '60min' && barsResult.bars && barsResult.bars.length > 0) {
           const firstBar = barsResult.bars[0]
           const lastBar = barsResult.bars[barsResult.bars.length - 1]
           // Extract date part from timestamps (format: "2025-09-18T09:30:00")
@@ -87,7 +87,7 @@ function WeeklyPageContent() {
       }
     }
     fetchData()
-  }, [refreshKey, interval])
+  }, [refreshKey, barInterval])
 
   // On Fridays before the 2:50 PM CT publish, poll so next week appears automatically
   useEffect(() => {
@@ -95,8 +95,8 @@ function WeeklyPageContent() {
     if (ctNow.getDay() !== 5 || weeklyPredictions.nextWeek) {
       return
     }
-    const timer = setInterval(() => setRefreshKey((k) => k + 1), 60_000)
-    return () => clearInterval(timer)
+    const timer = window.setInterval(() => setRefreshKey((k) => k + 1), 60_000)
+    return () => window.clearInterval(timer)
   }, [weeklyPredictions.nextWeek])
 
   if (loading) {
@@ -260,8 +260,8 @@ function WeeklyPageContent() {
             title="Price Chart"
             height={544}
             weeklyPredictions={weeklyPredictions}
-            interval={interval}
-            onIntervalChange={setInterval}
+            interval={barInterval}
+            onIntervalChange={setBarInterval}
           />
         </motion.div>
       </div>
