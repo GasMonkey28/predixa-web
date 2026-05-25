@@ -89,10 +89,9 @@ function WeeklyPageContent() {
     fetchData()
   }, [refreshKey, barInterval])
 
-  // On Fridays before the 2:50 PM CT publish, poll so next week appears automatically
+  // Poll until next-week prediction is available (Friday publish) or after a holiday Monday
   useEffect(() => {
-    const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
-    if (ctNow.getDay() !== 5 || weeklyPredictions.nextWeek) {
+    if (weeklyPredictions.nextWeek) {
       return
     }
     const timer = window.setInterval(() => setRefreshKey((k) => k + 1), 60_000)

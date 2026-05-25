@@ -11,23 +11,6 @@ export const WEEKLY_PREDICTION_CUTOFF_HOUR = 14
 export const WEEKLY_PREDICTION_CUTOFF_MINUTE = 50
 
 /**
- * Major NYSE holidays (MM-DD format)
- * Note: This is a simplified list. For production, consider using a comprehensive holiday calendar API
- */
-const NYSE_HOLIDAYS: string[] = [
-  '01-01', // New Year's Day
-  '01-15', // Martin Luther King Jr. Day (3rd Monday, simplified)
-  '02-19', // Presidents' Day (3rd Monday, simplified)
-  '03-29', // Good Friday (varies, simplified)
-  '05-27', // Memorial Day (last Monday, simplified)
-  '06-19', // Juneteenth
-  '07-04', // Independence Day
-  '09-02', // Labor Day (1st Monday, simplified)
-  '11-28', // Thanksgiving (4th Thursday, simplified)
-  '12-25', // Christmas
-]
-
-/**
  * Check if a date is a weekend (Saturday or Sunday)
  */
 function isWeekend(date: Date): boolean {
@@ -35,46 +18,75 @@ function isWeekend(date: Date): boolean {
   return day === 0 || day === 6 // Sunday or Saturday
 }
 
+function nthWeekdayOfMonth(year: number, monthIndex: number, weekday: number, n: number): Date {
+  let count = 0
+  const cursor = new Date(year, monthIndex, 1)
+  while (cursor.getMonth() === monthIndex) {
+    if (cursor.getDay() === weekday) {
+      count++
+      if (count === n) {
+        return new Date(cursor)
+      }
+    }
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  throw new Error(`Could not find weekday ${weekday} occurrence ${n} in month ${monthIndex}`)
+}
+
+function lastWeekdayOfMonth(year: number, monthIndex: number, weekday: number): Date {
+  const cursor = new Date(year, monthIndex + 1, 0)
+  while (cursor.getDay() !== weekday) {
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return cursor
+}
+
+/** NYSE full-day closures for a calendar year (floating + fixed dates). */
+function getNyseHolidayDates(year: number): Set<string> {
+  const dates = new Set<string>([
+    formatDateYYYYMMDD(new Date(year, 0, 1)),
+    formatDateYYYYMMDD(nthWeekdayOfMonth(year, 0, 1, 3)), // MLK Day
+    formatDateYYYYMMDD(nthWeekdayOfMonth(year, 1, 1, 3)), // Presidents' Day
+    formatDateYYYYMMDD(lastWeekdayOfMonth(year, 4, 1)), // Memorial Day
+    formatDateYYYYMMDD(new Date(year, 5, 19)), // Juneteenth
+    formatDateYYYYMMDD(new Date(year, 6, 4)), // Independence Day
+    formatDateYYYYMMDD(nthWeekdayOfMonth(year, 8, 1, 1)), // Labor Day
+    formatDateYYYYMMDD(nthWeekdayOfMonth(year, 10, 4, 4)), // Thanksgiving
+    formatDateYYYYMMDD(new Date(year, 11, 25)), // Christmas
+  ])
+  return dates
+}
+
 /**
- * Check if a date matches a holiday pattern
- * This is a simplified check - for production, use actual holiday dates
+ * Check if a date is an NYSE holiday (year-aware floating Mondays/Thursdays).
  */
 function isHoliday(date: Date): boolean {
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const dateStr = `${month}-${day}`
-  
-  // Check if it's a known holiday
-  if (NYSE_HOLIDAYS.includes(dateStr)) {
+  const nyDate = new Date(date.toLocaleString('en-US', { timeZone: NYSE_TIMEZONE }))
+  const year = nyDate.getFullYear()
+  const dateStr = formatDateYYYYMMDD(nyDate)
+
+  if (getNyseHolidayDates(year).has(dateStr)) {
     return true
   }
-  
-  // Check for observed holidays (if holiday falls on weekend)
-  // This is simplified - actual NYSE rules are more complex
-  const dayOfWeek = date.getDay()
-  
-  // If Monday and previous Friday was a holiday
+
+  // Observed: Sunday holiday closed -> following Monday
+  const dayOfWeek = nyDate.getDay()
   if (dayOfWeek === 1) {
-    const prevFriday = new Date(date)
-    prevFriday.setDate(date.getDate() - 3)
-    const prevMonth = String(prevFriday.getMonth() + 1).padStart(2, '0')
-    const prevDay = String(prevFriday.getDate()).padStart(2, '0')
-    if (NYSE_HOLIDAYS.includes(`${prevMonth}-${prevDay}`)) {
+    const prevSunday = new Date(nyDate)
+    prevSunday.setDate(nyDate.getDate() - 1)
+    if (getNyseHolidayDates(prevSunday.getFullYear()).has(formatDateYYYYMMDD(prevSunday))) {
       return true
     }
   }
-  
-  // If Friday and next Monday is a holiday
+  // Observed: Saturday holiday closed -> preceding Friday
   if (dayOfWeek === 5) {
-    const nextMonday = new Date(date)
-    nextMonday.setDate(date.getDate() + 3)
-    const nextMonth = String(nextMonday.getMonth() + 1).padStart(2, '0')
-    const nextDay = String(nextMonday.getDate()).padStart(2, '0')
-    if (NYSE_HOLIDAYS.includes(`${nextMonth}-${nextDay}`)) {
+    const nextSaturday = new Date(nyDate)
+    nextSaturday.setDate(nyDate.getDate() + 1)
+    if (getNyseHolidayDates(nextSaturday.getFullYear()).has(formatDateYYYYMMDD(nextSaturday))) {
       return true
     }
   }
-  
+
   return false
 }
 
@@ -223,6 +235,37 @@ export function findNextWeekFriday(fromDate: Date = new Date()): Date {
   const next = new Date(thisWeekFriday)
   next.setDate(next.getDate() + 7)
   return findFridayOfWeekContaining(next)
+}
+
+/**
+ * Anchor date for weekly prediction labels: today on trading days, else last session.
+ * Keeps "next week" stable through Monday holidays before the new week opens.
+ */
+export function getMarketAnchorDate(fromDate: Date = new Date()): Date {
+  const nyDate = new Date(fromDate.toLocaleString('en-US', { timeZone: NYSE_TIMEZONE }))
+  if (isTradingDay(nyDate)) {
+    return nyDate
+  }
+  return getPreviousTradingDay(nyDate)
+}
+
+export function parseDateYYYYMMDD(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const date = new Date()
+  date.setFullYear(year, month - 1, day)
+  date.setHours(12, 0, 0, 0)
+  return date
+}
+
+/** True when a prediction's fwd_join week overlaps the Mon–Fri span for weekFriday. */
+export function fwdJoinOverlapsWeek(fwdJoinDate: string, weekFriday: Date): boolean {
+  const predRange = getWeekDateRange(parseDateYYYYMMDD(fwdJoinDate))
+  const weekRange = getWeekDateRange(weekFriday)
+  const predMon = formatDateYYYYMMDD(predRange.monday)
+  const predFri = formatDateYYYYMMDD(predRange.friday)
+  const weekMon = formatDateYYYYMMDD(weekRange.monday)
+  const weekFri = formatDateYYYYMMDD(weekRange.friday)
+  return predMon <= weekFri && predFri >= weekMon
 }
 
 /**

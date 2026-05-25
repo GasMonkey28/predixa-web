@@ -524,7 +524,12 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
       strokeWidth: number,
       strokeOpacity: number,
       dashArray: string,
-      allowFutureExtension: boolean
+      allowFutureExtension: boolean,
+      colors: { close: string; low: string; high: string } = {
+        close: '#a78bfa',
+        low: '#34d399',
+        high: '#f472b6',
+      }
     ) => {
       const fwdJoinDateStr = weekPrediction.fwd_join_date
       const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
@@ -546,7 +551,7 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
           y1={getY(weekPrediction.t_close_to_pre)}
           x2={endX}
           y2={getY(weekPrediction.t_close_to_pre)}
-          stroke="#a78bfa"
+          stroke={colors.close}
           strokeWidth={strokeWidth}
           strokeOpacity={strokeOpacity}
           strokeDasharray={dashArray}
@@ -557,7 +562,7 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
           y1={getY(weekPrediction.t_lowest_to_close)}
           x2={endX}
           y2={getY(weekPrediction.t_lowest_to_close)}
-          stroke="#34d399"
+          stroke={colors.low}
           strokeWidth={strokeWidth}
           strokeOpacity={strokeOpacity}
           strokeDasharray={dashArray}
@@ -568,7 +573,7 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
           y1={getY(weekPrediction.t_highest_to_pre)}
           x2={endX}
           y2={getY(weekPrediction.t_highest_to_pre)}
-          stroke="#f472b6"
+          stroke={colors.high}
           strokeWidth={strokeWidth}
           strokeOpacity={strokeOpacity}
           strokeDasharray={dashArray}
@@ -576,68 +581,22 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
       )
     }
 
-    // Render current week lines
     if (weeklyPredictions.currentWeek) {
-      // Parse fwd_join_date as ET timezone (format: "2026-01-02")
       const fwdJoinDateStr = weeklyPredictions.currentWeek.fwd_join_date
       const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
       const fridayDate = new Date()
       fridayDate.setFullYear(year, month - 1, day)
-      fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
-      
-      // Find bars for this week (works for partial weeks)
-      const weekBars = findBarsForWeek(fridayDate)
-      
-      if (weekBars) {
-        const { startIndex, endIndex } = weekBars
-        const startX = margin.left + startIndex * scales.xScale
-        const endX = margin.left + (endIndex + 1) * scales.xScale
-        
-        // White line - predicted close
-        lines.push(
-          <line
-            key="current-close"
-            x1={startX}
-            y1={getY(weeklyPredictions.currentWeek.t_close_to_pre)}
-            x2={endX}
-            y2={getY(weeklyPredictions.currentWeek.t_close_to_pre)}
-            stroke="#ffffff"
-            strokeWidth={2}
-            strokeOpacity={0.8}
-            strokeDasharray="5 5"
-          />
-        )
-        
-        // Green line - buy zone (lowest)
-        lines.push(
-          <line
-            key="current-low"
-            x1={startX}
-            y1={getY(weeklyPredictions.currentWeek.t_lowest_to_close)}
-            x2={endX}
-            y2={getY(weeklyPredictions.currentWeek.t_lowest_to_close)}
-            stroke="#10b981"
-            strokeWidth={2}
-            strokeOpacity={0.8}
-            strokeDasharray="5 5"
-          />
-        )
-        
-        // Red line - sell zone (highest)
-        lines.push(
-          <line
-            key="current-high"
-            x1={startX}
-            y1={getY(weeklyPredictions.currentWeek.t_highest_to_pre)}
-            x2={endX}
-            y2={getY(weeklyPredictions.currentWeek.t_highest_to_pre)}
-            stroke="#ef4444"
-            strokeWidth={2}
-            strokeOpacity={0.8}
-            strokeDasharray="5 5"
-          />
-        )
-      }
+      fridayDate.setHours(12, 0, 0, 0)
+      const extendFuture = !findBarsForWeek(fridayDate)
+      renderWeekLines(
+        weeklyPredictions.currentWeek,
+        'current-week',
+        2,
+        0.8,
+        '5 5',
+        extendFuture,
+        { close: '#ffffff', low: '#10b981', high: '#ef4444' }
+      )
     }
 
     // Render previous week lines

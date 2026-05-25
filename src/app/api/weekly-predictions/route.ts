@@ -7,7 +7,11 @@ import {
   findNextWeekFriday,
   findPreviousWeekFriday,
   formatDateYYYYMMDD,
+  fwdJoinOverlapsWeek,
+  getMarketAnchorDate,
+  getWeekDateRange,
   isFridayAfterWeeklyPredictionCutoff,
+  parseDateYYYYMMDD,
 } from '@/lib/trading-calendar'
 
 export const dynamic = 'force-dynamic'
@@ -102,48 +106,60 @@ function getAllWeekDatesInRange(startDate: Date, endDate: Date): Date[] {
   return weekDates.reverse()
 }
 
+function isBeforePredictionWeek(pred: WeeklyPrediction, anchor: Date): boolean {
+  const predWeek = getWeekDateRange(parseDateYYYYMMDD(pred.fwd_join_date))
+  return formatDateYYYYMMDD(anchor) < formatDateYYYYMMDD(predWeek.monday)
+}
+
 function classifyWeeklyPredictions(
   latestPublish: WeeklyPrediction | null,
   previousPublish: WeeklyPrediction | null,
   referenceDate: Date = new Date()
 ): Pick<WeeklyPredictionsResponse, 'currentWeek' | 'previousWeek' | 'nextWeek' | 'publishReady'> {
-  const thisWeekFridayStr = formatDateYYYYMMDD(findFridayOfWeekContaining(referenceDate))
-  const nextWeekFridayStr = formatDateYYYYMMDD(findNextWeekFriday(referenceDate))
-  const previousWeekFridayStr = formatDateYYYYMMDD(findPreviousWeekFriday(referenceDate))
+  const anchor = getMarketAnchorDate(referenceDate)
+  const thisWeekFriday = findFridayOfWeekContaining(anchor)
+  const nextWeekFriday = findNextWeekFriday(anchor)
+  const previousWeekFriday = findPreviousWeekFriday(anchor)
 
   let currentWeek: WeeklyPrediction | null = null
   let previousWeek: WeeklyPrediction | null = null
   let nextWeek: WeeklyPrediction | null = null
 
   const assign = (pred: WeeklyPrediction) => {
-    if (pred.fwd_join_date === thisWeekFridayStr) {
-      currentWeek = pred
+    if (fwdJoinOverlapsWeek(pred.fwd_join_date, nextWeekFriday)) {
+      if (!nextWeek) nextWeek = pred
       return
     }
-    if (pred.fwd_join_date === nextWeekFridayStr) {
-      nextWeek = pred
+    if (fwdJoinOverlapsWeek(pred.fwd_join_date, thisWeekFriday)) {
+      if (!currentWeek) currentWeek = pred
       return
     }
-    if (pred.fwd_join_date === previousWeekFridayStr) {
-      previousWeek = pred
+    if (fwdJoinOverlapsWeek(pred.fwd_join_date, previousWeekFriday)) {
+      if (!previousWeek) previousWeek = pred
     }
   }
 
-  if (latestPublish) assign(latestPublish)
-  if (previousPublish) assign(previousPublish)
+  // Friday publish targets a week that has not started yet (e.g. holiday Monday)
+  if (latestPublish && isBeforePredictionWeek(latestPublish, anchor)) {
+    nextWeek = latestPublish
+  } else if (latestPublish) {
+    assign(latestPublish)
+  }
 
-  // After Friday 2:50 PM CT the newest S3 file targets next week
-  if (!nextWeek && latestPublish?.fwd_join_date === nextWeekFridayStr) {
+  if (previousPublish) {
+    assign(previousPublish)
+  }
+
+  if (!nextWeek && latestPublish && fwdJoinOverlapsWeek(latestPublish.fwd_join_date, nextWeekFriday)) {
     nextWeek = latestPublish
   }
-  if (nextWeek && !currentWeek && previousPublish?.fwd_join_date === thisWeekFridayStr) {
+  if (nextWeek && !currentWeek && previousPublish && fwdJoinOverlapsWeek(previousPublish.fwd_join_date, thisWeekFriday)) {
     currentWeek = previousPublish
   }
-  if (!previousWeek && previousPublish && previousPublish.fwd_join_date === previousWeekFridayStr) {
+  if (!previousWeek && previousPublish && fwdJoinOverlapsWeek(previousPublish.fwd_join_date, previousWeekFriday)) {
     previousWeek = previousPublish
   }
 
-  // Legacy fallback when fwd_join_date is missing or unexpected
   if (!currentWeek && latestPublish && !nextWeek) {
     currentWeek = latestPublish
   }
