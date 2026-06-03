@@ -6,11 +6,11 @@ import { verifyCognitoToken } from '@/lib/server/cognito-token'
 
 // Define protected routes that require authentication
 // NOTE: /news is intentionally NOT in this list - news page is always free for everyone
-const protectedRoutes = ['/daily', '/weekly', '/future', '/history', '/account']
+const protectedRoutes = ['/summary', '/daily', '/weekly', '/future', '/history', '/account']
 
 // Define routes that require active subscription (not just authentication)
 // NOTE: /news is intentionally NOT in this list - news page is always free for everyone
-const subscriptionRequiredRoutes = ['/daily', '/weekly', '/future', '/history']
+const subscriptionRequiredRoutes = ['/summary', '/daily', '/weekly', '/future', '/history']
 
 // Account page is accessible to authenticated users (for subscription management)
 const accountRoute = '/account'

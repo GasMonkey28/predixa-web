@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
 import { subscriptionService } from '@/lib/subscription-service'
+import { POST_LOGIN_PATH } from '@/lib/constants'
 import { toast } from 'react-hot-toast'
 
 export default function SignupForm() {
@@ -215,9 +216,9 @@ export default function SignupForm() {
         
         // Redirect based on subscription status
         if (hasActive) {
-          console.log('✅ Redirecting to /daily (has active subscription/trial)')
+          console.log(`✅ Redirecting to ${POST_LOGIN_PATH} (has active subscription/trial)`)
           toast.success('Welcome! Redirecting to your dashboard...')
-          router.push('/daily')
+          router.push(POST_LOGIN_PATH)
         } else {
           console.log('📝 Redirecting to /account (no active subscription)')
           toast.success('Account confirmed! Please set up your subscription.')

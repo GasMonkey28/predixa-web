@@ -8,6 +8,11 @@ import { useAuthStore } from '@/lib/auth-store'
 
 const navigationItems = [
   {
+    name: 'Summary',
+    href: '/summary',
+    icon: '📋',
+  },
+  {
     name: 'Daily',
     icon: '📈',
     items: [

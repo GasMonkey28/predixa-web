@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth-store'
+import { POST_LOGIN_PATH } from '@/lib/constants'
 import LoginForm from '@/components/auth/LoginForm'
 import SignupForm from '@/components/auth/SignupForm'
 
@@ -13,10 +14,10 @@ export default function HomePage() {
   const [showLogin, setShowLogin] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
 
-  // Redirect authenticated users to /daily
+  // Redirect authenticated users to summary dashboard
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.push('/daily')
+      router.push(POST_LOGIN_PATH)
     }
   }, [isAuthenticated, isLoading, router])
 

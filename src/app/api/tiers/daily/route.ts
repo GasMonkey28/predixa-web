@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
-import axios from 'axios'
 
 import { config } from '@/lib/server/config'
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 import { logger } from '@/lib/server/logger'
+import {
+  etDateString,
+  fetchLatestSummary,
+  fetchPreviousSummary,
+} from '@/lib/server/summary-json'
 
 // Force dynamic rendering - prevents Next.js from caching this route
 export const dynamic = 'force-dynamic'
@@ -18,6 +22,37 @@ const cleanText = (text: string) => {
     .replace(/[^\x20-\x7E]/g, '') // Remove non-ASCII characters
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
+}
+
+function transformSummary(s3Data: Record<string, unknown>, actualDate: string, prevLong: string | null, prevShort: string | null, prevDate: string | null) {
+  return {
+    date: actualDate,
+    long_tier: (s3Data.long_signal as string) || (s3Data.long_tier as string) || (s3Data.longTier as string) || 'N/A',
+    short_tier: (s3Data.short_signal as string) || (s3Data.short_tier as string) || (s3Data.shortTier as string) || 'N/A',
+    long_score: (s3Data.long_score as number) || (s3Data.longScore as number) || 0,
+    short_score: (s3Data.short_score as number) || (s3Data.shortScore as number) || 0,
+    summary: cleanText((s3Data.summary as string) || (s3Data.SUMMARY as string) || 'No summary available'),
+    suggestions: Array.isArray(s3Data.suggestions)
+      ? (s3Data.suggestions as string[]).map(cleanText)
+      : Array.isArray(s3Data.SUGGESTIONS)
+      ? (s3Data.SUGGESTIONS as string[]).map(cleanText)
+      : [],
+    confidence: cleanText((s3Data.confidence as string) || (s3Data.CONFIDENCE as string) || 'Unknown'),
+    risk: cleanText((s3Data.risk as string) || (s3Data.RISK as string) || 'Unknown'),
+    outlook: cleanText((s3Data.outlook as string) || (s3Data.OUTLOOK as string) || 'No outlook available'),
+    disclaimer: cleanText(
+      (s3Data.disclaimer as string) ||
+        (s3Data.DISCLAIMER as string) ||
+        'Data provided for informational purposes only.'
+    ),
+    compensation_explanation: cleanText(
+      (s3Data.compensation_explanation as string) || (s3Data.compensationExplanation as string) || ''
+    ),
+    opposing_strength_warning: s3Data.opposing_strength_warning ?? null,
+    prev_date: prevDate,
+    prev_long_tier: prevLong ?? 'N/A',
+    prev_short_tier: prevShort ?? 'N/A',
+  }
 }
 
 export async function GET(request: Request) {
@@ -41,103 +76,42 @@ export async function GET(request: Request) {
       )
     }
 
-    // Get today's date in YYYY-MM-DD format using ET timezone (market timezone)
-    // This ensures consistent date calculation regardless of server timezone
-    const etTimeZone = 'America/New_York'
-    const now = new Date()
-    const etDate = new Date(now.toLocaleString('en-US', { timeZone: etTimeZone }))
-    const today = etDate.toLocaleDateString('en-CA') // Returns YYYY-MM-DD format
-    
-    // Calculate yesterday in ET timezone
-    const yesterdayEt = new Date(etDate)
-    yesterdayEt.setDate(yesterdayEt.getDate() - 1)
-    const yesterdayStr = yesterdayEt.toLocaleDateString('en-CA')
-    
-    let url = `https://s3.amazonaws.com/${BUCKET}/summary_json/${today}.json`
-    // Removed console.logs to avoid exposing bucket name
-    
+    const today = etDateString(0)
+
     try {
-      let response
-      let actualDate = today
-      try {
-        response = await axios.get(url, {
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        })
+      const { date: actualDate, data: s3Data } = await fetchLatestSummary(BUCKET, today)
+
+      if (actualDate !== today) {
+        logger.warn({ today, actualDate }, 'Using most recent summary_json (today missing)')
+      } else {
         logger.debug({ sourceDate: today }, 'Fetched tiers data for today')
-      } catch (todayError) {
-        logger.warn({ today, fallbackDate: yesterdayStr }, 'Today tier data missing; falling back to yesterday')
-        url = `https://${BUCKET}.s3.amazonaws.com/summary_json/${yesterdayStr}.json`
-        actualDate = yesterdayStr
-        response = await axios.get(url, {
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        })
-        logger.debug({ sourceDate: yesterdayStr }, 'Fetched tiers data for fallback date')
-      }
-      
-      // Transform today's (or actual) data
-      const s3Data = response.data
-
-      // Compute previous day string based on actualDate (UTC-safe)
-      const [ay, am, ad] = actualDate.split('-').map((n: string) => parseInt(n, 10))
-      const baseUtc = new Date(Date.UTC(ay, (am || 1) - 1, ad || 1))
-      baseUtc.setUTCDate(baseUtc.getUTCDate() - 1)
-      const prevDateStr = baseUtc.toISOString().slice(0, 10)
-
-      // Try to fetch previous day's tiers
-      let prevLong: string | null = null
-      let prevShort: string | null = null
-      try {
-        const prevUrl = `https://${BUCKET}.s3.amazonaws.com/summary_json/${prevDateStr}.json`
-        const prevResp = await axios.get(prevUrl, {
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        })
-        const prevData = prevResp.data
-        prevLong = prevData.long_signal || prevData.long_tier || prevData.longTier || 'N/A'
-        prevShort = prevData.short_signal || prevData.short_tier || prevData.shortTier || 'N/A'
-      } catch (prevErr) {
-        // If previous day isn't available, leave as null
-        logger.debug({ prevDate: prevDateStr }, 'Previous day tier data not available')
       }
 
-      const transformedData = {
-        date: actualDate, // Use the actual date of the data fetched
-        long_tier: s3Data.long_signal || s3Data.long_tier || s3Data.longTier || 'N/A',
-        short_tier: s3Data.short_signal || s3Data.short_tier || s3Data.shortTier || 'N/A',
-        long_score: s3Data.long_score || s3Data.longScore || 0,
-        short_score: s3Data.short_score || s3Data.shortScore || 0,
-        summary: cleanText(s3Data.summary || s3Data.SUMMARY || 'No summary available'),
-        suggestions: Array.isArray(s3Data.suggestions)
-          ? s3Data.suggestions.map(cleanText)
-          : Array.isArray(s3Data.SUGGESTIONS)
-          ? s3Data.SUGGESTIONS.map(cleanText)
-          : [],
-        confidence: cleanText(s3Data.confidence || s3Data.CONFIDENCE || 'Unknown'),
-        risk: cleanText(s3Data.risk || s3Data.RISK || 'Unknown'),
-        outlook: cleanText(s3Data.outlook || s3Data.OUTLOOK || 'No outlook available'),
-        disclaimer: cleanText(s3Data.disclaimer || s3Data.DISCLAIMER || 'Data provided for informational purposes only.'),
-        compensation_explanation: cleanText(s3Data.compensation_explanation || s3Data.compensationExplanation || ''),
-        opposing_strength_warning: s3Data.opposing_strength_warning || null,
-        prev_date: prevDateStr,
-        prev_long_tier: prevLong ?? 'N/A',
-        prev_short_tier: prevShort ?? 'N/A'
-      }
-      
+      const prev = await fetchPreviousSummary(BUCKET, actualDate)
+      const prevLong =
+        prev
+          ? (prev.data.long_signal as string) ||
+            (prev.data.long_tier as string) ||
+            (prev.data.longTier as string) ||
+            'N/A'
+          : null
+      const prevShort =
+        prev
+          ? (prev.data.short_signal as string) ||
+            (prev.data.short_tier as string) ||
+            (prev.data.shortTier as string) ||
+            'N/A'
+          : null
+
+      const transformedData = transformSummary(s3Data, actualDate, prevLong, prevShort, prev?.date ?? null)
+
       return NextResponse.json(transformedData, {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0',
-          'Surrogate-Control': 'no-store'
-        }
+          Pragma: 'no-cache',
+          Expires: '0',
+          'Surrogate-Control': 'no-store',
+        },
       })
     } catch (s3Error) {
       const message =
@@ -173,8 +147,8 @@ export async function GET(request: Request) {
         status: 200,
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0',
+          Pragma: 'no-cache',
+          Expires: '0',
           'Surrogate-Control': 'no-store',
           ...getRateLimitHeaders(clientIp),
         },

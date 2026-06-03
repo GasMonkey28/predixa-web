@@ -56,6 +56,33 @@ describe('/api/tiers/daily', () => {
     expect(payload.fallback).toBeUndefined()
   })
 
+  it('falls back to the most recent available summary when today is missing', async () => {
+    mockedAxiosGet
+      .mockRejectedValueOnce(new Error('today missing'))
+      .mockResolvedValueOnce({
+        data: {
+          long_signal: 'A',
+          short_signal: 'B',
+          summary: 'Friday summary.',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          long_signal: 'C',
+          short_signal: 'D',
+        },
+      })
+
+    const { GET } = await import('../daily/route')
+    const response = (await GET(new Request('https://example.com/api/tiers/daily'))) as NextResponse
+    const payload = (await response.json()) as any
+
+    expect(response.status).toBe(200)
+    expect(payload.long_tier).toBe('A')
+    expect(payload.short_tier).toBe('B')
+    expect(payload.fallback).toBeUndefined()
+  })
+
   it('returns graceful fallback when S3 fetch fails', async () => {
     mockedAxiosGet.mockRejectedValue(new Error('Missing summary_json file'))
 

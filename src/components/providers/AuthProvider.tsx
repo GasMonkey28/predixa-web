@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { configureAmplify } from '@/lib/amplify'
+import { POST_LOGIN_PATH } from '@/lib/constants'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -37,8 +38,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           
           // Use router.push instead of window.location.href for better Next.js integration
           setTimeout(() => {
-            console.log('AuthProvider: Redirecting to /daily')
-            router.push('/daily')
+            console.log(`AuthProvider: Redirecting to ${POST_LOGIN_PATH}`)
+            router.push(POST_LOGIN_PATH)
           }, 100)
         } else {
           console.log('AuthProvider: No tokens found, redirecting to home')
