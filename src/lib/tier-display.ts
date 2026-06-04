@@ -13,7 +13,17 @@ export const tierStrengths: Record<string, number> = {
   D: 0,
 }
 
-export const tierConfig = {
+export interface TierVisualConfig {
+  label: string
+  description: string
+  bg: string
+  glow: string
+  text: string
+  border: string
+  strength: number
+}
+
+export const tierConfig: Record<'S' | 'A' | 'B' | 'C' | 'D', TierVisualConfig> = {
   S: {
     label: 'S-Tier',
     description: 'Exceptional Signal',
@@ -59,11 +69,6 @@ export const tierConfig = {
     border: 'border-gray-500/50',
     strength: 1,
   },
-} as const
-
-export type TierVisualConfig = (typeof tierConfig)[keyof typeof tierConfig] & {
-  strength: number
-  label?: string
 }
 
 export function getTierConfig(tier: string): TierVisualConfig {
@@ -85,13 +90,11 @@ export function getTierConfig(tier: string): TierVisualConfig {
     return { ...tierConfig.S, strength: displayStrength, label: tier }
   }
   if (tier.includes('+')) {
-    const base = tierConfig[baseTier as keyof typeof tierConfig]
+    const base = tierConfig[baseTier as keyof typeof tierConfig] ?? tierConfig.C
     return { ...base, strength: displayStrength, label: tier }
   }
-  return {
-    ...(tierConfig[baseTier as keyof typeof tierConfig] || tierConfig.C),
-    strength: displayStrength,
-  }
+  const fallback = tierConfig[baseTier as keyof typeof tierConfig] ?? tierConfig.C
+  return { ...fallback, strength: displayStrength }
 }
 
 export function getDominantSignal(longTier: string, shortTier: string): {
