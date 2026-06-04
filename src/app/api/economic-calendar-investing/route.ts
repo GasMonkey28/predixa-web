@@ -42,9 +42,7 @@ interface CalendarEvent {
 // embedded in a <script id="__NEXT_DATA__"> JSON blob rather than an HTML table.
 // Shape: props.pageProps.state.economicCalendarStore.calendarEventsByDate[date] = Event[]
 function parseNextData(html: string, requestedDate: string): CalendarEvent[] {
-  const match = html.match(
-    /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/
-  )
+  const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
   if (!match || !match[1]) {
     return []
   }
@@ -115,80 +113,129 @@ function parseNextData(html: string, requestedDate: string): CalendarEvent[] {
   return events
 }
 
+const INVESTING_URL = 'https://www.investing.com/economic-calendar'
+
+const BROWSER_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Cache-Control': 'no-cache',
+  Pragma: 'no-cache',
+  Referer: 'https://www.investing.com/',
+}
+
+type FetchAttempt = { method: string; url: string; useProxyHeaders: boolean }
+
+function buildFetchAttempts(customProxyUrl: string | null, scraperApiKey: string | null): FetchAttempt[] {
+  const attempts: FetchAttempt[] = []
+
+  // Direct first — works on Vercel when Investing.com does not block the IP.
+  attempts.push({ method: 'direct', url: INVESTING_URL, useProxyHeaders: false })
+
+  if (scraperApiKey) {
+    attempts.push({
+      method: 'scraperapi',
+      url: `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(INVESTING_URL)}`,
+      useProxyHeaders: true,
+    })
+  }
+
+  // Custom proxy last — avoids a stale CUSTOM_PROXY_URL (offline Railway) breaking the calendar.
+  if (customProxyUrl) {
+    const proxyBase =
+      customProxyUrl.startsWith('http://') || customProxyUrl.startsWith('https://')
+        ? customProxyUrl
+        : `https://${customProxyUrl}`
+    attempts.push({
+      method: 'custom_proxy',
+      url: `${proxyBase}?url=${encodeURIComponent(INVESTING_URL)}`,
+      useProxyHeaders: true,
+    })
+  }
+
+  return attempts
+}
+
+function isUsableCalendarHtml(data: unknown): data is string {
+  return (
+    typeof data === 'string' &&
+    data.length > 10_000 &&
+    data.includes('__NEXT_DATA__') &&
+    data.includes('calendarEventsByDate')
+  )
+}
+
+async function fetchInvestingHtml(
+  customProxyUrl: string | null,
+  scraperApiKey: string | null
+): Promise<{ html: string; method: string }> {
+  const attempts = buildFetchAttempts(customProxyUrl, scraperApiKey)
+  const errors: string[] = []
+
+  for (const attempt of attempts) {
+    try {
+      console.log('[ECONOMIC CALENDAR] Trying fetch method:', attempt.method, attempt.url.slice(0, 120))
+      const response = await axios.get(attempt.url, {
+        headers: attempt.useProxyHeaders ? {} : BROWSER_HEADERS,
+        timeout: 30000,
+        maxRedirects: 5,
+        validateStatus: (status) => status < 500,
+      })
+
+      console.log('[ECONOMIC CALENDAR] Response:', {
+        method: attempt.method,
+        status: response.status,
+        length: typeof response.data === 'string' ? response.data.length : 0,
+      })
+
+      if (response.status === 403 || response.status === 429) {
+        errors.push(`${attempt.method}: HTTP ${response.status}`)
+        continue
+      }
+      if (response.status >= 400) {
+        errors.push(`${attempt.method}: HTTP ${response.status}`)
+        continue
+      }
+      if (!isUsableCalendarHtml(response.data)) {
+        errors.push(`${attempt.method}: missing __NEXT_DATA__ / calendarEventsByDate`)
+        continue
+      }
+
+      return { html: response.data, method: attempt.method }
+    } catch (err: any) {
+      errors.push(`${attempt.method}: ${err.message}`)
+    }
+  }
+
+  throw new Error(
+    `Could not fetch Investing.com calendar (${errors.join('; ') || 'no methods configured'})`
+  )
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
 
   console.log('Investing.com Economic Calendar API - fetching for date:', date)
 
-  // Note: no trailing slash - the slashed URL 308-redirects to this one.
-  const investingUrl = 'https://www.investing.com/economic-calendar'
-
   const scraperApiKey = config.proxies.scraperApiKey
-  const customProxyUrl = config.proxies.customProxyUrl // e.g., Railway proxy server
-  let fetchUrl = investingUrl
-  let useProxy = false
+  const customProxyUrl = config.proxies.customProxyUrl
+  let fetchMethod = 'unknown'
 
   try {
-    // Priority 1: Custom proxy server (e.g., Railway free tier)
-    if (customProxyUrl) {
-      const proxyUrl =
-        customProxyUrl.startsWith('http://') || customProxyUrl.startsWith('https://')
-          ? customProxyUrl
-          : `https://${customProxyUrl}`
-      fetchUrl = `${proxyUrl}?url=${encodeURIComponent(investingUrl)}`
-      useProxy = true
-      console.log('[ECONOMIC CALENDAR] Using custom proxy server:', proxyUrl)
-    }
-    // Priority 2: ScraperAPI (if configured)
-    else if (scraperApiKey) {
-      fetchUrl = `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(investingUrl)}`
-      useProxy = true
-      console.log('[ECONOMIC CALENDAR] Using ScraperAPI to bypass blocking')
-    }
-
-    const response = await axios.get(fetchUrl, {
-      headers: useProxy
-        ? {}
-        : {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-            'Referer': 'https://www.investing.com/'
-          },
-      timeout: 30000,
-      maxRedirects: 5,
-      validateStatus: (status) => status < 500
-    })
-
-    console.log('[ECONOMIC CALENDAR] Investing.com response status:', response.status)
-    console.log('[ECONOMIC CALENDAR] Response data length:', response.data?.length || 0)
-
-    if (response.status === 403) {
-      throw new Error('Investing.com blocked the request (403 Forbidden).')
-    }
-    if (response.status === 429) {
-      throw new Error('Rate limited by Investing.com (429 Too Many Requests).')
-    }
-    if (response.status >= 400) {
-      throw new Error(`Investing.com returned error ${response.status}`)
-    }
-    if (!response.data || typeof response.data !== 'string') {
-      throw new Error('Invalid response data from Investing.com')
-    }
+    const { html, method } = await fetchInvestingHtml(customProxyUrl, scraperApiKey)
+    fetchMethod = method
 
     // Parse the embedded __NEXT_DATA__ JSON (the new site structure).
-    const allEvents = parseNextData(response.data, date)
+    const allEvents = parseNextData(html, date)
     console.log('[ECONOMIC CALENDAR] Parsed events from __NEXT_DATA__:', allEvents.length)
 
     if (allEvents.length === 0) {
       // Either we were blocked or the page structure changed again.
       console.error(
         '[ECONOMIC CALENDAR] No events parsed from __NEXT_DATA__. The page may be blocked or its structure changed.',
-        { responseSize: response.data.length, hasNextData: response.data.includes('__NEXT_DATA__') }
+        { responseSize: html.length, hasNextData: html.includes('__NEXT_DATA__'), fetchMethod }
       )
       return NextResponse.json(
         {
@@ -197,6 +244,7 @@ export async function GET(request: Request) {
           source: 'investing.com',
           date,
           isScraped: false,
+          fetchMethod,
           note: 'Could not parse economic calendar data from Investing.com (blocked or structure changed).'
         },
         {
@@ -249,7 +297,8 @@ export async function GET(request: Request) {
         count: usaEvents.length,
         source: 'investing.com',
         date,
-        isScraped: true
+        isScraped: true,
+        fetchMethod,
       },
       {
         headers: {
@@ -267,8 +316,8 @@ export async function GET(request: Request) {
       code: error.code,
       status: error.response?.status,
       statusText: error.response?.statusText,
-      url: fetchUrl,
-      usingProxy: useProxy
+      hasCustomProxy: !!customProxyUrl,
+      hasScraperApi: !!scraperApiKey,
     })
 
     return NextResponse.json(
@@ -279,7 +328,10 @@ export async function GET(request: Request) {
         date,
         isScraped: false,
         error: 'Failed to fetch Investing.com economic calendar data',
-        details: error.message
+        details: error.message,
+        hint: customProxyUrl
+          ? 'Remove stale CUSTOM_PROXY_URL from Vercel if Railway proxy is offline, or add SCRAPER_API_KEY.'
+          : 'Add SCRAPER_API_KEY in Vercel if Investing.com blocks direct requests.',
       },
       {
         status: 200,
