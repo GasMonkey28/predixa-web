@@ -33,6 +33,7 @@ export default function Model2Chart({
   onChartTypeChange 
 }: Model2ChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [showPnl, setShowPnl] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(800)
 
@@ -163,7 +164,7 @@ export default function Model2Chart({
         )}
         
         {/* PnL marker */}
-        {day.pnl_value != null && (
+        {showPnl && day.pnl_value != null && (
           <g>
             <circle
               cx={x}
@@ -245,7 +246,7 @@ export default function Model2Chart({
         )}
         
         {/* PnL marker */}
-        {day.pnl_value != null && (
+        {showPnl && day.pnl_value != null && (
           <g>
             <circle
               cx={x}
@@ -489,7 +490,7 @@ export default function Model2Chart({
           )}
         </text>
         
-        {day.pnl_value != null && (
+        {showPnl && day.pnl_value != null && (
           <text x={tooltipX + 10} y={margin.top + 135} fontSize="11" fill="#9ca3af">
             PnL: <tspan fill={day.pnl_mark === 'profit' ? '#10b981' : '#ef4444'} fontWeight="bold" fontFamily="monospace">
               {day.pnl_value > 0 ? '+' : ''}{day.pnl_value.toFixed(2)}
@@ -597,6 +598,22 @@ export default function Model2Chart({
               strokeWidth={1}
             />
           </svg>
+        </div>
+
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <span className="text-xs text-zinc-500">PnL markers</span>
+          <button
+            type="button"
+            onClick={() => setShowPnl((on) => !on)}
+            className={`px-3 py-1 rounded-lg text-sm transition-all ${
+              showPnl
+                ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400'
+                : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-300'
+            }`}
+            aria-pressed={showPnl}
+          >
+            {showPnl ? 'On' : 'Off'}
+          </button>
         </div>
       </div>
     </motion.div>
