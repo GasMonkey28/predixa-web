@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import axios from 'axios'
 
 import { config } from '@/lib/server/config'
+import {
+  ECONOMIC_CALENDAR_TIMEZONE,
+  getEconomicCalendarDate,
+} from '@/lib/trading-calendar'
 
 // Force dynamic rendering - prevents Next.js from caching this route
 export const dynamic = 'force-dynamic'
@@ -59,10 +63,10 @@ function parseNextData(html: string, requestedDate: string): CalendarEvent[] {
     return []
   }
 
-  // Prefer the requested date; otherwise flatten everything the page returned.
-  const rawEvents: any[] = Array.isArray(byDate[requestedDate])
-    ? byDate[requestedDate]
-    : Object.values(byDate).flat() as any[]
+  const { events: rawEvents, embeddedDate } = resolveRawEvents(byDate, requestedDate)
+  if (rawEvents.length === 0) {
+    return []
+  }
 
   const normalizeValue = (val: any): string | null => {
     if (val === null || val === undefined) return null
@@ -71,16 +75,16 @@ function parseNextData(html: string, requestedDate: string): CalendarEvent[] {
     return str
   }
 
-  // Investing.com timestamps are ISO/UTC; the UI expects Eastern Time "HH:MM".
-  const toEasternTime = (iso: string): string | null => {
+  // Investing.com timestamps are ISO/UTC; show release time in Central Time.
+  const toCentralTime = (iso: string): string | null => {
     try {
       const d = new Date(iso)
       if (isNaN(d.getTime())) return null
       return new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York',
+        timeZone: ECONOMIC_CALENDAR_TIMEZONE,
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false
+        hour12: false,
       }).format(d)
     } catch {
       return null
@@ -99,7 +103,7 @@ function parseNextData(html: string, requestedDate: string): CalendarEvent[] {
 
     events.push({
       id: `investing-${e.eventId ?? index}`,
-      time: toEasternTime(e.time) || '08:30',
+      time: toCentralTime(e.time) || '08:30',
       event: eventName,
       impact: parseInt(e.importance, 10) || 1,
       country: e.country || (e.currency === 'USD' ? 'United States' : ''),
@@ -111,6 +115,36 @@ function parseNextData(html: string, requestedDate: string): CalendarEvent[] {
   })
 
   return events
+}
+
+/** Pick the Investing.com day bucket closest to the requested Central calendar date. */
+function resolveRawEvents(
+  byDate: Record<string, any[]>,
+  requestedDate: string
+): { events: any[]; embeddedDate: string | null } {
+  const keys = Object.keys(byDate).sort()
+  if (keys.length === 0) {
+    return { events: [], embeddedDate: null }
+  }
+
+  if (Array.isArray(byDate[requestedDate])) {
+    return { events: byDate[requestedDate], embeddedDate: requestedDate }
+  }
+
+  // Prefer the newest embedded day that is still on or before the requested date.
+  const onOrBefore = keys.filter((k) => k <= requestedDate)
+  if (onOrBefore.length === 0) {
+    // SSR only has a future day (e.g. UTC ahead of Central) — avoid showing tomorrow.
+    return { events: [], embeddedDate: keys[0] ?? null }
+  }
+
+  const pickKey = onOrBefore[onOrBefore.length - 1]
+  const bucket = byDate[pickKey] || []
+  const onRequested = bucket.filter((e) => e?.date === requestedDate)
+  return {
+    events: onRequested.length > 0 ? onRequested : bucket,
+    embeddedDate: pickKey,
+  }
 }
 
 const INVESTING_URL = 'https://www.investing.com/economic-calendar'
@@ -130,18 +164,7 @@ type FetchAttempt = { method: string; url: string; useProxyHeaders: boolean }
 function buildFetchAttempts(customProxyUrl: string | null, scraperApiKey: string | null): FetchAttempt[] {
   const attempts: FetchAttempt[] = []
 
-  // Direct first — works on Vercel when Investing.com does not block the IP.
-  attempts.push({ method: 'direct', url: INVESTING_URL, useProxyHeaders: false })
-
-  if (scraperApiKey) {
-    attempts.push({
-      method: 'scraperapi',
-      url: `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(INVESTING_URL)}`,
-      useProxyHeaders: true,
-    })
-  }
-
-  // Custom proxy last — avoids a stale CUSTOM_PROXY_URL (offline Railway) breaking the calendar.
+  // Railway/custom proxy first — production Vercel IPs are usually blocked (403).
   if (customProxyUrl) {
     const proxyBase =
       customProxyUrl.startsWith('http://') || customProxyUrl.startsWith('https://')
@@ -153,6 +176,16 @@ function buildFetchAttempts(customProxyUrl: string | null, scraperApiKey: string
       useProxyHeaders: true,
     })
   }
+
+  if (scraperApiKey) {
+    attempts.push({
+      method: 'scraperapi',
+      url: `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(INVESTING_URL)}`,
+      useProxyHeaders: true,
+    })
+  }
+
+  attempts.push({ method: 'direct', url: INVESTING_URL, useProxyHeaders: false })
 
   return attempts
 }
@@ -215,9 +248,14 @@ async function fetchInvestingHtml(
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
+  const date = searchParams.get('date') || getEconomicCalendarDate()
 
-  console.log('Investing.com Economic Calendar API - fetching for date:', date)
+  console.log(
+    '[ECONOMIC CALENDAR] Fetching for calendar date (Central):',
+    date,
+    'timezone:',
+    ECONOMIC_CALENDAR_TIMEZONE
+  )
 
   const scraperApiKey = config.proxies.scraperApiKey
   const customProxyUrl = config.proxies.customProxyUrl
@@ -229,7 +267,9 @@ export async function GET(request: Request) {
 
     // Parse the embedded __NEXT_DATA__ JSON (the new site structure).
     const allEvents = parseNextData(html, date)
-    console.log('[ECONOMIC CALENDAR] Parsed events from __NEXT_DATA__:', allEvents.length)
+    console.log('[ECONOMIC CALENDAR] Parsed events from __NEXT_DATA__:', allEvents.length, {
+      requestedDate: date,
+    })
 
     if (allEvents.length === 0) {
       // Either we were blocked or the page structure changed again.
@@ -297,6 +337,7 @@ export async function GET(request: Request) {
         count: usaEvents.length,
         source: 'investing.com',
         date,
+        timezone: ECONOMIC_CALENDAR_TIMEZONE,
         isScraped: true,
         fetchMethod,
       },

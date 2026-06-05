@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { fetchEconomicCalendarInvesting } from '@/lib/api'
+import {
+  ECONOMIC_CALENDAR_TIMEZONE,
+  getEconomicCalendarDate,
+} from '@/lib/trading-calendar'
 
 interface EconomicEvent {
   id: string
@@ -29,8 +33,9 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
     async function fetchEvents() {
       try {
         console.log('Fetching Investing.com economic calendar data from API...')
-        const data = await fetchEconomicCalendarInvesting()
-        console.log('Investing.com economic calendar data received:', data)
+        const calendarDate = getEconomicCalendarDate()
+        const data = await fetchEconomicCalendarInvesting(calendarDate)
+        console.log('Investing.com economic calendar data received:', data, 'date:', calendarDate)
         
         // Handle different possible API response structures
         let eventsArray = []
@@ -134,8 +139,9 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
     setError(null)
     try {
       console.log('Refreshing Investing.com economic calendar data...')
-      const data = await fetchEconomicCalendarInvesting()
-      console.log('Refreshed Investing.com economic calendar data:', data)
+      const calendarDate = getEconomicCalendarDate()
+      const data = await fetchEconomicCalendarInvesting(calendarDate)
+      console.log('Refreshed Investing.com economic calendar data:', data, 'date:', calendarDate)
       
       // Handle different possible API response structures
       let eventsArray = []
@@ -253,11 +259,12 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
       const [hours, minutes] = eventTime.split(':').map(Number)
       if (isNaN(hours) || isNaN(minutes)) return false
       
-      // Get current time in ET (Eastern Time) since economic events are typically in ET
       const now = new Date()
-      const etTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
-      const currentHours = etTime.getHours()
-      const currentMinutes = etTime.getMinutes()
+      const centralTime = new Date(
+        now.toLocaleString('en-US', { timeZone: ECONOMIC_CALENDAR_TIMEZONE })
+      )
+      const currentHours = centralTime.getHours()
+      const currentMinutes = centralTime.getMinutes()
       
       // Compare times
       if (currentHours > hours) return true
@@ -368,6 +375,9 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-lg font-semibold text-white mb-1">Economic Calendar</h2>
+          <p className="text-xs text-gray-500">
+            Today ({ECONOMIC_CALENDAR_TIMEZONE.replace('America/', '')}): {getEconomicCalendarDate()}
+          </p>
           {lastUpdated && (
             <p className="text-xs text-gray-400">
               Last updated: {lastUpdated.toLocaleTimeString()}

@@ -136,8 +136,13 @@ export async function fetchEconomicCalendarFred(): Promise<any> {
   }
 }
 
-export async function fetchEconomicCalendarInvesting(): Promise<any> {
-  const url = '/api/economic-calendar-investing'
+export async function fetchEconomicCalendarInvesting(calendarDate?: string): Promise<any> {
+  const params = new URLSearchParams()
+  if (calendarDate) {
+    params.set('date', calendarDate)
+  }
+  const qs = params.toString()
+  const url = qs ? `/api/economic-calendar-investing?${qs}` : '/api/economic-calendar-investing'
   console.log('Investing.com Economic Calendar API - attempting to fetch from:', url)
   
   try {

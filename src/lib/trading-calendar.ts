@@ -7,6 +7,23 @@ const NYSE_TIMEZONE = 'America/New_York'
 
 /** Weekly predictions publish Fridays at 2:50 PM Central Time */
 export const WEEKLY_PREDICTION_TIMEZONE = 'America/Chicago'
+
+/** Economic calendar day + release times (US traders, Central Time). */
+export const ECONOMIC_CALENDAR_TIMEZONE = 'America/Chicago'
+
+/** YYYY-MM-DD for a given instant in an IANA timezone (avoids UTC day rollover). */
+export function getDateStringInTimeZone(timeZone: string, date: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
+export function getEconomicCalendarDate(date: Date = new Date()): string {
+  return getDateStringInTimeZone(ECONOMIC_CALENDAR_TIMEZONE, date)
+}
 export const WEEKLY_PREDICTION_CUTOFF_HOUR = 14
 export const WEEKLY_PREDICTION_CUTOFF_MINUTE = 50
 
