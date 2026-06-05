@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import axios from 'axios'
+import * as cheerio from 'cheerio'
 
 import { config } from '@/lib/server/config'
 import {
   ECONOMIC_CALENDAR_TIMEZONE,
+  getDateStringInTimeZone,
   getEconomicCalendarDate,
 } from '@/lib/trading-calendar'
 
@@ -167,7 +169,10 @@ function resolveRawEvents(
   }
 }
 
-const INVESTING_URL = 'https://www.investing.com/economic-calendar'
+const INVESTING_PAGE_URL = 'https://www.investing.com/economic-calendar'
+// Same XHR the investing.com "Today" tab uses (GMT-5 / US session). __NEXT_DATA__ alone is often tomorrow (UTC).
+const LEGACY_CALENDAR_API_URL =
+  'https://www.investing.com/economic-calendar/Service/getCalendarFilteredData?country=5&timeZone=8&timeFilter=timeRemain&currentTab=today&limit_from=0'
 
 const BROWSER_HEADERS = {
   'User-Agent':
@@ -179,12 +184,34 @@ const BROWSER_HEADERS = {
   Referer: 'https://www.investing.com/',
 }
 
-type FetchAttempt = { method: string; url: string; useProxyHeaders: boolean }
+const LEGACY_HEADERS = {
+  ...BROWSER_HEADERS,
+  Accept: 'application/json, text/javascript, */*; q=0.01',
+  'X-Requested-With': 'XMLHttpRequest',
+}
 
-function buildFetchAttempts(customProxyUrl: string | null, scraperApiKey: string | null): FetchAttempt[] {
+type FetchAttempt = { method: string; url: string; useProxyHeaders: boolean; headers: Record<string, string> }
+
+function buildFetchAttempts(
+  targetUrl: string,
+  customProxyUrl: string | null,
+  scraperApiKey: string | null,
+  directHeaders: Record<string, string>,
+  preferDirectFirst = false
+): FetchAttempt[] {
   const attempts: FetchAttempt[] = []
 
-  // Railway/custom proxy first — production Vercel IPs are usually blocked (403).
+  const directAttempt: FetchAttempt = {
+    method: 'direct',
+    url: targetUrl,
+    useProxyHeaders: false,
+    headers: directHeaders,
+  }
+
+  if (preferDirectFirst) {
+    attempts.push(directAttempt)
+  }
+
   if (customProxyUrl) {
     const proxyBase =
       customProxyUrl.startsWith('http://') || customProxyUrl.startsWith('https://')
@@ -192,54 +219,64 @@ function buildFetchAttempts(customProxyUrl: string | null, scraperApiKey: string
         : `https://${customProxyUrl}`
     attempts.push({
       method: 'custom_proxy',
-      url: `${proxyBase}?url=${encodeURIComponent(INVESTING_URL)}`,
+      url: `${proxyBase}?url=${encodeURIComponent(targetUrl)}`,
       useProxyHeaders: true,
+      headers: directHeaders,
     })
   }
 
   if (scraperApiKey) {
     attempts.push({
       method: 'scraperapi',
-      url: `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(INVESTING_URL)}`,
+      url: `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}`,
       useProxyHeaders: true,
+      headers: directHeaders,
     })
   }
 
-  attempts.push({ method: 'direct', url: INVESTING_URL, useProxyHeaders: false })
+  if (!preferDirectFirst) {
+    attempts.push(directAttempt)
+  }
 
   return attempts
 }
 
-function isUsableCalendarHtml(data: unknown): data is string {
-  return (
-    typeof data === 'string' &&
-    data.length > 10_000 &&
-    data.includes('__NEXT_DATA__') &&
-    data.includes('calendarEventsByDate')
-  )
-}
-
-async function fetchInvestingHtml(
+async function fetchWithAttempts(
+  targetUrl: string,
   customProxyUrl: string | null,
-  scraperApiKey: string | null
-): Promise<{ html: string; method: string }> {
-  const attempts = buildFetchAttempts(customProxyUrl, scraperApiKey)
+  scraperApiKey: string | null,
+  directHeaders: Record<string, string>,
+  validate: (data: unknown) => boolean,
+  label: string,
+  preferDirectFirst = false
+): Promise<{ body: string; method: string }> {
+  const attempts = buildFetchAttempts(
+    targetUrl,
+    customProxyUrl,
+    scraperApiKey,
+    directHeaders,
+    preferDirectFirst
+  )
   const errors: string[] = []
 
   for (const attempt of attempts) {
     try {
-      console.log('[ECONOMIC CALENDAR] Trying fetch method:', attempt.method, attempt.url.slice(0, 120))
+      console.log(`[ECONOMIC CALENDAR] Trying ${label}:`, attempt.method, attempt.url.slice(0, 120))
       const response = await axios.get(attempt.url, {
-        headers: attempt.useProxyHeaders ? {} : BROWSER_HEADERS,
+        headers: attempt.useProxyHeaders ? {} : attempt.headers,
         timeout: 30000,
         maxRedirects: 5,
         validateStatus: (status) => status < 500,
       })
 
+      const body =
+        typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '')
+
       console.log('[ECONOMIC CALENDAR] Response:', {
+        label,
         method: attempt.method,
         status: response.status,
-        length: typeof response.data === 'string' ? response.data.length : 0,
+        length: body.length,
       })
 
       if (response.status === 403 || response.status === 429) {
@@ -250,20 +287,128 @@ async function fetchInvestingHtml(
         errors.push(`${attempt.method}: HTTP ${response.status}`)
         continue
       }
-      if (!isUsableCalendarHtml(response.data)) {
-        errors.push(`${attempt.method}: missing __NEXT_DATA__ / calendarEventsByDate`)
+      if (!validate(body)) {
+        errors.push(`${attempt.method}: unexpected payload`)
         continue
       }
 
-      return { html: response.data, method: attempt.method }
+      return { body, method: attempt.method }
     } catch (err: any) {
       errors.push(`${attempt.method}: ${err.message}`)
     }
   }
 
-  throw new Error(
-    `Could not fetch Investing.com calendar (${errors.join('; ') || 'no methods configured'})`
+  throw new Error(`${label} failed (${errors.join('; ') || 'no methods'})`)
+}
+
+function parseLegacyTheDayIso(html: string): string | null {
+  const m = html.match(/class="theDay"[^>]*>[^,]+,\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/)
+  if (!m) return null
+  const d = new Date(`${m[1]} ${m[2]}, ${m[3]} 12:00:00`)
+  if (isNaN(d.getTime())) return null
+  return getDateStringInTimeZone(ECONOMIC_CALENDAR_TIMEZONE, d)
+}
+
+function normalizeLegacyCell($: cheerio.CheerioAPI, $row: cheerio.Cheerio<any>, prefix: string): string | null {
+  const cell = $row.find(`[id^="${prefix}"]`).first()
+  if (!cell.length) return null
+  const text = cell.find('span').first().text().trim() || cell.text().trim()
+  if (!text || text === '&nbsp;' || text === '-' || text === 'TBD' || text === 'N/A') return null
+  return text
+}
+
+function parseLegacyCalendarApi(body: string, requestedDate: string): ParseResult {
+  const empty: ParseResult = { events: [], embeddedDate: null, isAheadOfRequested: false }
+  let json: { data?: string }
+  try {
+    json = JSON.parse(body)
+  } catch {
+    return empty
+  }
+
+  const html = json?.data
+  if (!html || typeof html !== 'string' || !html.includes('eventRowId')) {
+    return empty
+  }
+
+  const embeddedDate = parseLegacyTheDayIso(html) || requestedDate
+  const requestedSlash = requestedDate.replace(/-/g, '/')
+  const $ = cheerio.load(`<table><tbody>${html}</tbody></table>`)
+  const events: CalendarEvent[] = []
+
+  $('tr[data-event-datetime]').each((index, element) => {
+    const $row = $(element)
+    const datetime = $row.attr('data-event-datetime') || ''
+    if (datetime && !datetime.startsWith(requestedSlash)) return
+
+    const flagText = $row.find('td.flagCur').text().replace(/\s+/g, ' ').trim()
+    if (!flagText.includes('USD')) return
+
+    const eventCell = $row.find('td.event').first()
+    const eventName = eventCell.find('a').first().text().trim() || eventCell.text().trim()
+    if (!eventName || /holiday/i.test(eventName)) return
+
+    const impactIcons = $row.find('td.sentiment i.grayFullBullishIcon').length
+    const impact = impactIcons >= 3 ? 3 : impactIcons === 2 ? 2 : impactIcons === 1 ? 1 : 2
+
+    const time =
+      $row.find('td.time').first().text().trim() ||
+      (datetime.match(/\d{2}:\d{2}/)?.[0] ?? '08:30')
+
+    const eventId = $row.attr('event_attr_ID') || String(index)
+
+    events.push({
+      id: `investing-${eventId}`,
+      time,
+      event: eventName,
+      impact,
+      country: 'United States',
+      currency: 'USD',
+      actual: normalizeLegacyCell($, $row, 'eventActual_'),
+      forecast: normalizeLegacyCell($, $row, 'eventForecast_'),
+      previous: normalizeLegacyCell($, $row, 'eventPrevious_'),
+    })
+  })
+
+  return {
+    events,
+    embeddedDate,
+    isAheadOfRequested: embeddedDate > requestedDate,
+  }
+}
+
+async function fetchLegacyCalendar(
+  customProxyUrl: string | null,
+  scraperApiKey: string | null
+): Promise<{ body: string; method: string }> {
+  return fetchWithAttempts(
+    LEGACY_CALENDAR_API_URL,
+    customProxyUrl,
+    scraperApiKey,
+    LEGACY_HEADERS,
+    (data) => typeof data === 'string' && data.includes('"data"') && data.includes('eventRowId'),
+    'legacy-api',
+    true
   )
+}
+
+async function fetchNextCalendarHtml(
+  customProxyUrl: string | null,
+  scraperApiKey: string | null
+): Promise<{ html: string; method: string }> {
+  const result = await fetchWithAttempts(
+    INVESTING_PAGE_URL,
+    customProxyUrl,
+    scraperApiKey,
+    BROWSER_HEADERS,
+    (data) =>
+      typeof data === 'string' &&
+      data.length > 10_000 &&
+      data.includes('__NEXT_DATA__') &&
+      data.includes('calendarEventsByDate'),
+    'next-page'
+  )
+  return { html: result.body, method: result.method }
 }
 
 export async function GET(request: Request) {
@@ -280,26 +425,48 @@ export async function GET(request: Request) {
   const scraperApiKey = config.proxies.scraperApiKey
   const customProxyUrl = config.proxies.customProxyUrl
   let fetchMethod = 'unknown'
+  let dataSource = 'investing.com'
 
   try {
-    const { html, method } = await fetchInvestingHtml(customProxyUrl, scraperApiKey)
-    fetchMethod = method
+    let parsed: ParseResult = { events: [], embeddedDate: null, isAheadOfRequested: false }
 
-    // Parse the embedded __NEXT_DATA__ JSON (the new site structure).
-    const parsed = parseNextData(html, date)
+    try {
+      const { body, method } = await fetchLegacyCalendar(customProxyUrl, scraperApiKey)
+      fetchMethod = `${method}-legacy`
+      parsed = parseLegacyCalendarApi(body, date)
+      dataSource = 'investing.com-today-api'
+      console.log('[ECONOMIC CALENDAR] Legacy Today API events:', parsed.events.length, {
+        calendarDay: parsed.embeddedDate,
+      })
+    } catch (legacyErr: any) {
+      console.warn('[ECONOMIC CALENDAR] Legacy API failed, falling back to __NEXT_DATA__:', legacyErr.message)
+    }
+
+    if (parsed.events.length === 0) {
+      const { html, method } = await fetchNextCalendarHtml(customProxyUrl, scraperApiKey)
+      fetchMethod = method
+      parsed = parseNextData(html, date)
+      dataSource = 'investing.com-next-data'
+      console.log('[ECONOMIC CALENDAR] __NEXT_DATA__ events:', parsed.events.length, {
+        calendarDay: parsed.embeddedDate,
+      })
+    }
+
     const { events: allEvents, embeddedDate, isAheadOfRequested } = parsed
     const calendarDay = embeddedDate || date
-    console.log('[ECONOMIC CALENDAR] Parsed events from __NEXT_DATA__:', allEvents.length, {
+    console.log('[ECONOMIC CALENDAR] Final parse:', allEvents.length, {
       requestedDate: date,
       calendarDay,
       isAheadOfRequested,
+      dataSource,
+      fetchMethod,
     })
 
     if (allEvents.length === 0) {
       // Either we were blocked or the page structure changed again.
       console.error(
         '[ECONOMIC CALENDAR] No events parsed from __NEXT_DATA__. The page may be blocked or its structure changed.',
-        { responseSize: html.length, hasNextData: html.includes('__NEXT_DATA__'), fetchMethod }
+        { fetchMethod, dataSource }
       )
       return NextResponse.json(
         {
@@ -361,7 +528,7 @@ export async function GET(request: Request) {
       {
         events: usaEvents.slice(0, 20),
         count: usaEvents.length,
-        source: 'investing.com',
+        source: dataSource,
         date: calendarDay,
         requestedDate: date,
         isAheadOfRequested,
