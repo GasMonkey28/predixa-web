@@ -24,18 +24,31 @@ interface Model2ChartProps {
   height?: number
   chartType?: 'line' | 'candlestick'
   onChartTypeChange?: (type: 'line' | 'candlestick') => void
+  /** Strip outer card/header — for Summary market insight embed */
+  embedded?: boolean
+  showPnlToggle?: boolean
+  /** Limit visible trading days (most recent) */
+  maxDays?: number
 }
 
-export default function Model2Chart({ 
-  tradingDays, 
-  height = 400, 
+export default function Model2Chart({
+  tradingDays,
+  height = 400,
   chartType = 'candlestick',
-  onChartTypeChange 
+  onChartTypeChange,
+  embedded = false,
+  showPnlToggle = true,
+  maxDays,
 }: Model2ChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [showPnl, setShowPnl] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(800)
+
+  const chartDays = useMemo(() => {
+    if (!maxDays || tradingDays.length <= maxDays) return tradingDays
+    return tradingDays.slice(-maxDays)
+  }, [tradingDays, maxDays])
 
   useEffect(() => {
     const updateWidth = () => {
@@ -51,13 +64,13 @@ export default function Model2Chart({
 
   // Filter out days without price data
   const validDays = useMemo(() => {
-    return tradingDays.filter(day => 
+    return chartDays.filter(day =>
       day.open_price != null && 
       day.high_price != null && 
       day.low_price != null && 
       day.close_price != null
     )
-  }, [tradingDays])
+  }, [chartDays])
 
   const chartDimensions = useMemo(() => {
     if (!validDays.length) return { width: 0, height: 0, margin: { top: 20, right: 30, left: 50, bottom: 100 } }
@@ -515,20 +528,15 @@ export default function Model2Chart({
     )
   }
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 p-6"
-    >
-      <div className="relative z-10">
-        {/* Header */}
+  const chartBody = (
+    <>
+      {!embedded && (
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-cyan-400" />
             <h3 className="text-zinc-200">Price Chart</h3>
           </div>
-          
+
           {onChartTypeChange && (
             <div className="flex gap-2">
               <button
@@ -554,52 +562,39 @@ export default function Model2Chart({
             </div>
           )}
         </div>
+      )}
 
-        {/* Chart */}
-        <div ref={containerRef} className="w-full">
-          <svg width="100%" height={height}>
-            {/* Grid */}
-            {renderGrid()}
-            
-            {/* Chart */}
-            {chartType === 'candlestick' 
-              ? validDays.map((day, index) => renderCandlestick(day, index))
-              : validDays.map((day, index) => renderLine(day, index))
-            }
-            
-            {/* Tooltip */}
-            {renderTooltip()}
-            
-            {/* X-axis */}
-            <line
-              x1={chartDimensions.margin.left}
-              y1={chartDimensions.margin.top + chartDimensions.height}
-              x2={chartDimensions.margin.left + chartDimensions.width}
-              y2={chartDimensions.margin.top + chartDimensions.height}
-              stroke="currentColor"
-              className="text-gray-600 dark:text-gray-400"
-              strokeWidth={1}
-            />
-            
-            {/* X-axis labels */}
-            {renderXAxisLabels()}
-            
-            {/* Signal labels */}
-            {renderSignalLabels()}
-            
-            {/* Y-axis */}
-            <line
-              x1={chartDimensions.margin.left}
-              y1={chartDimensions.margin.top}
-              x2={chartDimensions.margin.left}
-              y2={chartDimensions.margin.top + chartDimensions.height}
-              stroke="currentColor"
-              className="text-gray-600 dark:text-gray-400"
-              strokeWidth={1}
-            />
-          </svg>
-        </div>
+      <div ref={containerRef} className="w-full">
+        <svg width="100%" height={height}>
+          {renderGrid()}
+          {chartType === 'candlestick'
+            ? validDays.map((day, index) => renderCandlestick(day, index))
+            : validDays.map((day, index) => renderLine(day, index))}
+          {renderTooltip()}
+          <line
+            x1={chartDimensions.margin.left}
+            y1={chartDimensions.margin.top + chartDimensions.height}
+            x2={chartDimensions.margin.left + chartDimensions.width}
+            y2={chartDimensions.margin.top + chartDimensions.height}
+            stroke="currentColor"
+            className="text-gray-600 dark:text-gray-400"
+            strokeWidth={1}
+          />
+          {renderXAxisLabels()}
+          {renderSignalLabels()}
+          <line
+            x1={chartDimensions.margin.left}
+            y1={chartDimensions.margin.top}
+            x2={chartDimensions.margin.left}
+            y2={chartDimensions.margin.top + chartDimensions.height}
+            stroke="currentColor"
+            className="text-gray-600 dark:text-gray-400"
+            strokeWidth={1}
+          />
+        </svg>
+      </div>
 
+      {showPnlToggle && (
         <div className="mt-4 flex items-center justify-end gap-2">
           <span className="text-xs text-zinc-500">PnL markers</span>
           <button
@@ -615,7 +610,21 @@ export default function Model2Chart({
             {showPnl ? 'On' : 'Off'}
           </button>
         </div>
-      </div>
+      )}
+    </>
+  )
+
+  if (embedded) {
+    return <div className="w-full">{chartBody}</div>
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 p-6"
+    >
+      <div className="relative z-10">{chartBody}</div>
     </motion.div>
   )
 }

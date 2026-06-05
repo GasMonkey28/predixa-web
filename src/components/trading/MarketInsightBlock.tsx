@@ -6,6 +6,7 @@ import { AlertTriangle, BarChart3, Calendar, Layers } from 'lucide-react'
 
 import type { MarketInsightResponse } from '@/lib/server/market-insight-types'
 import MarketInsightTierStance from '@/components/trading/MarketInsightTierStance'
+import MarketInsightModelSignals from '@/components/trading/MarketInsightModelSignals'
 
 const sectionIcons: Record<string, typeof BarChart3> = {
   tiers: Layers,
@@ -84,6 +85,8 @@ export default function MarketInsightBlock() {
               </div>
               {section.id === 'tiers' ? (
                 <MarketInsightTierStance fallbackText={section.body} />
+              ) : section.id === 'models' ? (
+                <MarketInsightModelSignals facts={data.facts} fallbackText={section.body} />
               ) : (
                 <p className="text-sm text-zinc-300 leading-relaxed">{section.body}</p>
               )}

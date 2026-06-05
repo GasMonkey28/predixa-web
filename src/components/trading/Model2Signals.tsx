@@ -237,70 +237,11 @@ export default function Model2Signals({ ticker = 'SPY' }: Model2SignalsProps) {
 
       {/* Signal Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Y1 Signal */}
+        {/* Y2Y3 Signal */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.1 }}
-          whileHover={{ scale: 1.02, y: -4 }}
-          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-950/80 to-zinc-900/90 border-2 border-blue-500/30 p-6"
-        >
-          <motion.div
-            className="absolute inset-0 bg-blue-500 opacity-30 blur-3xl"
-            animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.3, 0.4, 0.3]
-            }}
-            transition={{
-              duration: 4,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-          />
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <BarChart3 className="w-6 h-6 text-blue-400" />
-                <div>
-                  <span className="text-lg font-bold text-white block">Y1 Signal</span>
-                  <span className="text-xs text-blue-300">Prediction Signal</span>
-                </div>
-              </div>
-              <motion.div
-                whileHover={{ scale: 1.1, rotate: 5 }}
-                className={`px-4 py-2 rounded-xl ${
-                  today.y1_signal === 'long'
-                    ? 'bg-gradient-to-r from-emerald-600 to-green-500'
-                    : today.y1_signal === 'short'
-                      ? 'bg-gradient-to-r from-red-600 to-rose-500'
-                      : 'bg-gradient-to-r from-zinc-700 to-gray-600'
-                } shadow-xl`}
-              >
-                <span className="text-xl font-black text-white">
-                  {today.y1_signal.toUpperCase() || 'N/A'}
-                </span>
-              </motion.div>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 border border-zinc-700">
-                <span className="text-sm text-gray-400">Pred Y1</span>
-                <span className={`text-lg font-bold ${
-                  today.pred_y1 >= 0 ? 'text-green-400' : 'text-red-400'
-                }`}>
-                  {formatPrediction(today.pred_y1)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Y2Y3 Signal */}
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
           whileHover={{ scale: 1.02, y: -4 }}
           className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-950/80 to-zinc-900/90 border-2 border-purple-500/30 p-6"
         >
@@ -349,6 +290,65 @@ export default function Model2Signals({ ticker = 'SPY' }: Model2SignalsProps) {
                   today.pred_y2_plus_y3 >= 0 ? 'text-green-400' : 'text-red-400'
                 }`}>
                   {formatPrediction(today.pred_y2_plus_y3)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Y1 Signal */}
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+          whileHover={{ scale: 1.02, y: -4 }}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-950/80 to-zinc-900/90 border-2 border-blue-500/30 p-6"
+        >
+          <motion.div
+            className="absolute inset-0 bg-blue-500 opacity-30 blur-3xl"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.4, 0.3]
+            }}
+            transition={{
+              duration: 4,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          />
+          
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <BarChart3 className="w-6 h-6 text-blue-400" />
+                <div>
+                  <span className="text-lg font-bold text-white block">Y1 Signal</span>
+                  <span className="text-xs text-blue-300">Prediction Signal</span>
+                </div>
+              </div>
+              <motion.div
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                className={`px-4 py-2 rounded-xl ${
+                  today.y1_signal === 'long'
+                    ? 'bg-gradient-to-r from-emerald-600 to-green-500'
+                    : today.y1_signal === 'short'
+                      ? 'bg-gradient-to-r from-red-600 to-rose-500'
+                      : 'bg-gradient-to-r from-zinc-700 to-gray-600'
+                } shadow-xl`}
+              >
+                <span className="text-xl font-black text-white">
+                  {today.y1_signal.toUpperCase() || 'N/A'}
+                </span>
+              </motion.div>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 border border-zinc-700">
+                <span className="text-sm text-gray-400">Pred Y1</span>
+                <span className={`text-lg font-bold ${
+                  today.pred_y1 >= 0 ? 'text-green-400' : 'text-red-400'
+                }`}>
+                  {formatPrediction(today.pred_y1)}
                 </span>
               </div>
             </div>
