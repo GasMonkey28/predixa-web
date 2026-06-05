@@ -4,13 +4,17 @@ Simple proxy server for bypassing Investing.com blocking.
 
 ## Quick Deploy to Railway
 
-1. Create a new GitHub repo (or use this folder)
-2. Push these files to the repo
-3. In Railway, click "New Project" → "Deploy from GitHub repo"
-4. Select your repo
-5. Railway will auto-detect and deploy
-6. Copy the URL Railway gives you
-7. Add it to Vercel as `CUSTOM_PROXY_URL` environment variable
+1. Railway → connect GitHub repo `predixa-web`
+2. **Settings → Root Directory:** `railway-proxy-server`
+3. Build uses **Dockerfile** (avoids Next.js CVE checks on the main app)
+4. Deploy and copy the public URL
+5. Vercel → `CUSTOM_PROXY_URL` = that URL (no trailing slash), then redeploy Vercel
+
+Test calendar HTML via proxy:
+
+```
+https://YOUR-RAILWAY-URL/?url=https://www.investing.com/economic-calendar
+```
 
 ## Files Needed
 
