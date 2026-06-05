@@ -5,11 +5,9 @@ import {
   AlertCircle,
   ArrowDownRight,
   ArrowUpRight,
-  CheckCircle2,
   Info,
   TrendingDown,
   TrendingUp,
-  Zap,
 } from 'lucide-react'
 
 import { getDominantSignal, getTierConfig } from '@/lib/tier-display'
@@ -303,42 +301,6 @@ export default function MarketInsightTierStance({ fallbackText }: { fallbackText
           <p className="text-sm font-bold text-white leading-snug">{data.confidence}</p>
         </div>
       </div>
-
-      {(data.summary || data.outlook || (data.suggestions?.length ?? 0) > 0) && (
-        <div className="rounded-xl border border-blue-700/30 bg-gradient-to-br from-blue-950/50 to-indigo-950/40 p-3">
-          {data.summary && (
-            <div className="mb-2">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Zap className="w-3.5 h-3.5 text-yellow-400" />
-                <span className="text-xs font-semibold text-white">Quick insight</span>
-              </div>
-              <p className="text-[11px] text-blue-200 leading-relaxed">{data.summary}</p>
-            </div>
-          )}
-          {data.outlook && data.outlook !== 'No outlook available' && (
-            <p className="text-[11px] text-indigo-200/90 mb-2">
-              <span className="font-semibold text-indigo-300">Outlook: </span>
-              {data.outlook}
-            </p>
-          )}
-          {data.suggestions && data.suggestions.length > 0 && (
-            <div className="space-y-1.5">
-              <span className="text-[10px] font-semibold text-gray-400 uppercase">
-                Recommendations
-              </span>
-              {data.suggestions.slice(0, 2).map((s, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-2 p-2 rounded-md bg-blue-900/25 border border-blue-700/20"
-                >
-                  <CheckCircle2 className="w-3 h-3 text-blue-400 mt-0.5 shrink-0" />
-                  <span className="text-[11px] text-blue-100 leading-snug">{s}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       <p className="text-[10px] text-zinc-500">Session date: {data.date}</p>
     </div>

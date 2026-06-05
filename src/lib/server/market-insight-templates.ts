@@ -55,7 +55,7 @@ function agreementCopy(facts: MarketInsightFacts): string {
     return `Mixed but not chaotic: ${bits.join('; ') || 'some inputs align'}. Size and confirm with your own plan.`
   }
   if (label === 'insufficient_data') {
-    return 'One or more inputs are missing—read the sections above with extra caution.'
+    return 'Not enough clear long/short signals to compare today.'
   }
   return 'Models and tiers disagree today—avoid forcing a single narrative; wait for clearer alignment or reduce size.'
 }
