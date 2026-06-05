@@ -190,7 +190,7 @@ const LEGACY_HEADERS = {
   'X-Requested-With': 'XMLHttpRequest',
 }
 
-type FetchAttempt = { method: string; url: string; useProxyHeaders: boolean; headers: Record<string, string> }
+type FetchAttempt = { method: string; url: string; headers: Record<string, string> }
 
 function buildFetchAttempts(
   targetUrl: string,
@@ -204,7 +204,6 @@ function buildFetchAttempts(
   const directAttempt: FetchAttempt = {
     method: 'direct',
     url: targetUrl,
-    useProxyHeaders: false,
     headers: directHeaders,
   }
 
@@ -220,7 +219,6 @@ function buildFetchAttempts(
     attempts.push({
       method: 'custom_proxy',
       url: `${proxyBase}?url=${encodeURIComponent(targetUrl)}`,
-      useProxyHeaders: true,
       headers: directHeaders,
     })
   }
@@ -229,7 +227,6 @@ function buildFetchAttempts(
     attempts.push({
       method: 'scraperapi',
       url: `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}`,
-      useProxyHeaders: true,
       headers: directHeaders,
     })
   }
@@ -263,7 +260,7 @@ async function fetchWithAttempts(
     try {
       console.log(`[ECONOMIC CALENDAR] Trying ${label}:`, attempt.method, attempt.url.slice(0, 120))
       const response = await axios.get(attempt.url, {
-        headers: attempt.useProxyHeaders ? {} : attempt.headers,
+        headers: attempt.headers,
         timeout: 30000,
         maxRedirects: 5,
         validateStatus: (status) => status < 500,
@@ -381,6 +378,8 @@ async function fetchLegacyCalendar(
   customProxyUrl: string | null,
   scraperApiKey: string | null
 ): Promise<{ body: string; method: string }> {
+  // Vercel IPs are blocked direct; local dev can hit Investing.com directly first.
+  const preferDirectFirst = !process.env.VERCEL
   return fetchWithAttempts(
     LEGACY_CALENDAR_API_URL,
     customProxyUrl,
@@ -388,7 +387,7 @@ async function fetchLegacyCalendar(
     LEGACY_HEADERS,
     (data) => typeof data === 'string' && data.includes('"data"') && data.includes('eventRowId'),
     'legacy-api',
-    true
+    preferDirectFirst
   )
 }
 

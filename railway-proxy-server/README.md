@@ -16,6 +16,14 @@ Test calendar HTML via proxy:
 https://YOUR-RAILWAY-URL/?url=https://www.investing.com/economic-calendar
 ```
 
+Test the **Today** XHR (production uses this; proxy must send JSON/XHR headers):
+
+```
+https://YOUR-RAILWAY-URL/?url=https://www.investing.com/economic-calendar/Service/getCalendarFilteredData?country=5&timeZone=8&timeFilter=timeRemain&currentTab=today&limit_from=0
+```
+
+Response should be JSON with `eventRowId` in the `data` field (not a multi‑MB HTML blob).
+
 ## Files Needed
 
 - `server.js` - The proxy server
