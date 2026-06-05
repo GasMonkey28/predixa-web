@@ -3,6 +3,8 @@ export type InstrumentType = 'stock' | 'future' | 'mini_future'
 export interface TradeJournalEntry {
   id: string
   entryDate: string
+  /** Optional YYYY-MM bucket for monthly P&L (defaults to entry date month). */
+  profitMonth: string | null
   no: number
   instrumentType: InstrumentType
   positionSize: number
@@ -14,9 +16,21 @@ export interface TradeJournalEntry {
   rating: string
 }
 
-export interface TradeJournalDocument {
-  userId: string
+/** Manual profit line assigned to a month (carry-over, corrections, etc.). */
+export interface MonthlyProfitEntry {
+  id: string
+  monthKey: string
+  amount: number
+  note: string
+}
+
+export interface TradeJournalData {
   entries: TradeJournalEntry[]
+  monthlyProfitEntries: MonthlyProfitEntry[]
+}
+
+export interface TradeJournalDocument extends TradeJournalData {
+  userId: string
   updatedAt: string
 }
 
@@ -146,6 +160,131 @@ export function calcOpenPositionSummary(entries: TradeJournalEntry[]): OpenPosit
   }
 }
 
+export function getEntryProfit(entry: TradeJournalEntry): number | null {
+  return (
+    entry.profit ??
+    calcProfit(entry.buyPrice, entry.soldPrice, entry.instrumentType, entry.positionSize)
+  )
+}
+
+export interface MonthlyProfitSummary {
+  monthKey: string
+  label: string
+  tradeTotal: number
+  adjustmentTotal: number
+  total: number
+  tradeCount: number
+  adjustmentCount: number
+}
+
+function isValidMonthKey(value: string | null | undefined): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}$/.test(value)
+}
+
+export function getProfitMonthKey(entry: TradeJournalEntry): string | null {
+  if (isValidMonthKey(entry.profitMonth)) return entry.profitMonth
+  const fromDate = entry.entryDate?.slice(0, 7)
+  return isValidMonthKey(fromDate) ? fromDate : null
+}
+
+export function formatMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split('-').map(Number)
+  if (!year || !month) return monthKey
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+type MonthBucket = {
+  tradeTotal: number
+  tradeCount: number
+  adjustmentTotal: number
+  adjustmentCount: number
+}
+
+function getOrCreateMonthBucket(
+  byMonth: Map<string, MonthBucket>,
+  monthKey: string
+): MonthBucket {
+  const bucket = byMonth.get(monthKey) ?? {
+    tradeTotal: 0,
+    tradeCount: 0,
+    adjustmentTotal: 0,
+    adjustmentCount: 0,
+  }
+  byMonth.set(monthKey, bucket)
+  return bucket
+}
+
+/** Sum trade + manual profit by month. Newest month first. */
+export function calcMonthlyProfitSummaries(
+  entries: TradeJournalEntry[],
+  monthlyProfitEntries: MonthlyProfitEntry[] = []
+): MonthlyProfitSummary[] {
+  const byMonth = new Map<string, MonthBucket>()
+
+  for (const entry of entries) {
+    const profit = getEntryProfit(entry)
+    if (profit == null) continue
+
+    const monthKey = getProfitMonthKey(entry)
+    if (!monthKey) continue
+
+    const bucket = getOrCreateMonthBucket(byMonth, monthKey)
+    bucket.tradeTotal += profit
+    bucket.tradeCount += 1
+  }
+
+  for (const line of monthlyProfitEntries) {
+    if (!isValidMonthKey(line.monthKey)) continue
+    const bucket = getOrCreateMonthBucket(byMonth, line.monthKey)
+    bucket.adjustmentTotal += line.amount
+    bucket.adjustmentCount += 1
+  }
+
+  return Array.from(byMonth.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([monthKey, bucket]) => ({
+      monthKey,
+      label: formatMonthLabel(monthKey),
+      tradeTotal: bucket.tradeTotal,
+      adjustmentTotal: bucket.adjustmentTotal,
+      total: bucket.tradeTotal + bucket.adjustmentTotal,
+      tradeCount: bucket.tradeCount,
+      adjustmentCount: bucket.adjustmentCount,
+    }))
+}
+
+export function normalizeMonthlyProfitEntry(
+  entry: Partial<MonthlyProfitEntry>,
+  index: number
+): MonthlyProfitEntry {
+  const monthKey =
+    typeof entry.monthKey === 'string' && isValidMonthKey(entry.monthKey)
+      ? entry.monthKey
+      : new Date().toISOString().slice(0, 7)
+
+  return {
+    id: typeof entry.id === 'string' && entry.id ? entry.id : `month-profit-${index}`,
+    monthKey,
+    amount: coerceNumber(entry.amount) ?? 0,
+    note: typeof entry.note === 'string' ? entry.note : '',
+  }
+}
+
+export function createMonthlyProfitEntry(monthKey?: string): MonthlyProfitEntry {
+  return normalizeMonthlyProfitEntry(
+    {
+      id: crypto.randomUUID(),
+      monthKey: monthKey ?? new Date().toISOString().slice(0, 7),
+      amount: 0,
+      note: '',
+    },
+    0
+  )
+}
+
 export function withRecalculatedProfit(entry: TradeJournalEntry): TradeJournalEntry {
   return {
     ...entry,
@@ -164,9 +303,15 @@ export function normalizeEntry(entry: Partial<TradeJournalEntry>, index: number)
   const positionSize =
     typeof entry.positionSize === 'number' && entry.positionSize > 0 ? entry.positionSize : 1
 
+  const profitMonth =
+    typeof entry.profitMonth === 'string' && isValidMonthKey(entry.profitMonth)
+      ? entry.profitMonth
+      : null
+
   const normalized: TradeJournalEntry = {
     id: typeof entry.id === 'string' && entry.id ? entry.id : `entry-${index}`,
     entryDate: typeof entry.entryDate === 'string' ? entry.entryDate : '',
+    profitMonth,
     no: typeof entry.no === 'number' ? entry.no : 0,
     instrumentType,
     positionSize,
@@ -186,6 +331,7 @@ export function createEmptyEntry(no: number): TradeJournalEntry {
     {
       id: crypto.randomUUID(),
       entryDate: new Date().toISOString().slice(0, 10),
+      profitMonth: null,
       no,
       instrumentType: DEFAULT_INSTRUMENT_TYPE,
       positionSize: 1,

@@ -1,5 +1,11 @@
 import { fetchAuthSession } from 'aws-amplify/auth'
-import { TradeJournalEntry } from '@/lib/trade-journal-types'
+import {
+  MonthlyProfitEntry,
+  normalizeEntry,
+  normalizeMonthlyProfitEntry,
+  TradeJournalData,
+  TradeJournalEntry,
+} from '@/lib/trade-journal-types'
 
 const LOCAL_STORAGE_KEY = 'predixa-trade-journal'
 
@@ -7,8 +13,40 @@ function localKey(userId?: string | null) {
   return userId ? `${LOCAL_STORAGE_KEY}:${userId}` : LOCAL_STORAGE_KEY
 }
 
-export async function loadTradeJournalEntries(userId?: string | null): Promise<TradeJournalEntry[]> {
-  if (typeof window === 'undefined') return []
+function normalizeData(raw: unknown): TradeJournalData {
+  if (Array.isArray(raw)) {
+    return {
+      entries: raw.map((entry, index) => normalizeEntry(entry as Partial<TradeJournalEntry>, index)),
+      monthlyProfitEntries: [],
+    }
+  }
+
+  if (!raw || typeof raw !== 'object') {
+    return { entries: [], monthlyProfitEntries: [] }
+  }
+
+  const data = raw as {
+    entries?: unknown
+    monthlyProfitEntries?: unknown
+  }
+
+  const entries = Array.isArray(data.entries)
+    ? data.entries.map((entry, index) => normalizeEntry(entry as Partial<TradeJournalEntry>, index))
+    : []
+
+  const monthlyProfitEntries = Array.isArray(data.monthlyProfitEntries)
+    ? data.monthlyProfitEntries.map((entry, index) =>
+        normalizeMonthlyProfitEntry(entry as Partial<MonthlyProfitEntry>, index)
+      )
+    : []
+
+  return { entries, monthlyProfitEntries }
+}
+
+export async function loadTradeJournal(userId?: string | null): Promise<TradeJournalData> {
+  if (typeof window === 'undefined') {
+    return { entries: [], monthlyProfitEntries: [] }
+  }
 
   try {
     const headers: HeadersInit = { 'Content-Type': 'application/json' }
@@ -23,11 +61,13 @@ export async function loadTradeJournalEntries(userId?: string | null): Promise<T
         credentials: 'include',
       })
       if (response.ok) {
-        const data = (await response.json()) as { entries?: TradeJournalEntry[] }
-        if (Array.isArray(data.entries)) {
-          localStorage.setItem(localKey(userId), JSON.stringify(data.entries))
-          return data.entries
+        const data = (await response.json()) as {
+          entries?: unknown
+          monthlyProfitEntries?: unknown
         }
+        const normalized = normalizeData(data)
+        localStorage.setItem(localKey(userId), JSON.stringify(normalized))
+        return normalized
       }
     }
   } catch (error) {
@@ -36,24 +76,27 @@ export async function loadTradeJournalEntries(userId?: string | null): Promise<T
 
   try {
     const saved = localStorage.getItem(localKey(userId))
-    if (saved) {
-      const parsed = JSON.parse(saved) as TradeJournalEntry[]
-      if (Array.isArray(parsed)) return parsed
-    }
+    if (saved) return normalizeData(JSON.parse(saved))
   } catch (error) {
     console.error('Failed to load trade journal from localStorage:', error)
   }
 
-  return []
+  return { entries: [], monthlyProfitEntries: [] }
 }
 
-export async function saveTradeJournalEntries(
-  entries: TradeJournalEntry[],
+/** @deprecated Use loadTradeJournal */
+export async function loadTradeJournalEntries(userId?: string | null): Promise<TradeJournalEntry[]> {
+  const data = await loadTradeJournal(userId)
+  return data.entries
+}
+
+export async function saveTradeJournal(
+  data: TradeJournalData,
   userId?: string | null
 ): Promise<void> {
   if (typeof window === 'undefined') return
 
-  localStorage.setItem(localKey(userId), JSON.stringify(entries))
+  localStorage.setItem(localKey(userId), JSON.stringify(data))
 
   try {
     const headers: HeadersInit = { 'Content-Type': 'application/json' }
@@ -66,9 +109,17 @@ export async function saveTradeJournalEntries(
       method: 'PUT',
       headers,
       credentials: 'include',
-      body: JSON.stringify({ entries }),
+      body: JSON.stringify(data),
     })
   } catch (error) {
     console.warn('Trade journal API save failed; kept local backup:', error)
   }
+}
+
+/** @deprecated Use saveTradeJournal */
+export async function saveTradeJournalEntries(
+  entries: TradeJournalEntry[],
+  userId?: string | null
+): Promise<void> {
+  await saveTradeJournal({ entries, monthlyProfitEntries: [] }, userId)
 }

@@ -7,18 +7,21 @@ import { clsx } from 'clsx'
 import { useAuthStore } from '@/lib/auth-store'
 import {
   TradeJournalEntry,
+  MonthlyProfitEntry,
   InstrumentType,
   INSTRUMENT_OPTIONS,
+  calcMonthlyProfitSummaries,
   calcOpenPositionSummary,
-  calcProfit,
   createEmptyEntry,
+  createMonthlyProfitEntry,
+  getEntryProfit,
   normalizeEntry,
   getTradeNumber,
   isShortPosition,
   renumberEntries,
   withRecalculatedProfit,
 } from '@/lib/trade-journal-types'
-import { loadTradeJournalEntries, saveTradeJournalEntries } from '@/lib/trade-journal-storage'
+import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
 
 function parseNumber(value: string): number | null {
   if (value.trim() === '') return null
@@ -39,6 +42,7 @@ const PRICE_INPUT =
 export default function TradeJournalPage() {
   const { user, isAuthenticated } = useAuthStore()
   const [entries, setEntries] = useState<TradeJournalEntry[]>([])
+  const [monthlyProfitEntries, setMonthlyProfitEntries] = useState<MonthlyProfitEntry[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
@@ -48,9 +52,12 @@ export default function TradeJournalPage() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const loaded = await loadTradeJournalEntries(user?.userId)
+      const loaded = await loadTradeJournal(user?.userId)
       if (!cancelled) {
-        setEntries(renumberEntries(loaded.map((entry, index) => normalizeEntry(entry, index))))
+        setEntries(
+          renumberEntries(loaded.entries.map((entry, index) => normalizeEntry(entry, index)))
+        )
+        setMonthlyProfitEntries(loaded.monthlyProfitEntries)
         setIsLoaded(true)
       }
     })()
@@ -64,26 +71,39 @@ export default function TradeJournalPage() {
 
     setIsSaving(true)
     const timer = window.setTimeout(async () => {
-      await saveTradeJournalEntries(entries, user?.userId)
+      await saveTradeJournal({ entries, monthlyProfitEntries }, user?.userId)
       setLastSavedAt(new Date().toLocaleTimeString())
       setIsSaving(false)
     }, 600)
 
     return () => window.clearTimeout(timer)
-  }, [entries, isLoaded, user?.userId])
+  }, [entries, monthlyProfitEntries, isLoaded, user?.userId])
 
-  const totalProfit = useMemo(
-    () =>
-      entries.reduce((sum, entry) => {
-        const profit =
-          entry.profit ??
-          calcProfit(entry.buyPrice, entry.soldPrice, entry.instrumentType, entry.positionSize)
-        return sum + (profit ?? 0)
-      }, 0),
-    [entries]
-  )
+  const totalProfit = useMemo(() => {
+    const tradeTotal = entries.reduce((sum, entry) => sum + (getEntryProfit(entry) ?? 0), 0)
+    const manualTotal = monthlyProfitEntries.reduce((sum, line) => sum + line.amount, 0)
+    return tradeTotal + manualTotal
+  }, [entries, monthlyProfitEntries])
 
   const positionSummary = useMemo(() => calcOpenPositionSummary(entries), [entries])
+  const monthlySummaries = useMemo(
+    () => calcMonthlyProfitSummaries(entries, monthlyProfitEntries),
+    [entries, monthlyProfitEntries]
+  )
+
+  const addMonthlyProfitEntry = () => {
+    setMonthlyProfitEntries((prev) => [...prev, createMonthlyProfitEntry()])
+  }
+
+  const updateMonthlyProfitEntry = (id: string, patch: Partial<MonthlyProfitEntry>) => {
+    setMonthlyProfitEntries((prev) =>
+      prev.map((line) => (line.id === id ? { ...line, ...patch } : line))
+    )
+  }
+
+  const removeMonthlyProfitEntry = (id: string) => {
+    setMonthlyProfitEntries((prev) => prev.filter((line) => line.id !== id))
+  }
 
   const updateEntry = useCallback((id: string, patch: Partial<TradeJournalEntry>) => {
     setEntries((prev) =>
@@ -148,8 +168,8 @@ export default function TradeJournalPage() {
             Trade Journal
           </h1>
           <p className="text-gray-300">
-            Buy: positive = long, negative = short. Position shows while open (clears when sold).
-            P&L = points × size × multiplier — E-mini ×5 (default), ES ×50, stock × shares.
+            Buy: positive = long, negative = short. Position clears when sold. Use P&L Month to
+            count a trade in another month, or add manual month profit for carry-over/adjustments.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-400">
             <span>
@@ -210,6 +230,104 @@ export default function TradeJournalPage() {
             </div>
           </div>
 
+          <div className="border-b border-zinc-800/80 px-4 py-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-medium text-gray-400">Monthly P&L</h3>
+              <button
+                type="button"
+                onClick={addMonthlyProfitEntry}
+                className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-gray-300 hover:bg-zinc-800"
+              >
+                + Add month profit
+              </button>
+            </div>
+
+            {monthlySummaries.length > 0 ? (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {monthlySummaries.map((month) => (
+                  <div
+                    key={month.monthKey}
+                    className="min-w-[8.5rem] rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3 py-2"
+                  >
+                    <div className="text-xs text-gray-500">{month.label}</div>
+                    <div
+                      className={clsx(
+                        'text-sm font-semibold tabular-nums',
+                        month.total > 0 && 'text-emerald-400',
+                        month.total < 0 && 'text-red-400',
+                        month.total === 0 && 'text-gray-300'
+                      )}
+                    >
+                      {month.total > 0 ? '+' : ''}
+                      {month.total.toFixed(2)}
+                    </div>
+                    <div className="text-[10px] text-gray-600">
+                      trades {month.tradeCount > 0 ? month.tradeTotal.toFixed(2) : '—'}
+                      {month.adjustmentCount > 0 && (
+                        <>
+                          {' '}
+                          · adj {month.adjustmentTotal > 0 ? '+' : ''}
+                          {month.adjustmentTotal.toFixed(2)}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mb-3 text-xs text-gray-500">Close trades or add manual month profit below.</p>
+            )}
+
+            {monthlyProfitEntries.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500">
+                  Manual month profit — move P&L between months, carry-over, corrections.
+                </p>
+                {monthlyProfitEntries.map((line) => (
+                  <div
+                    key={line.id}
+                    className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-2 py-2"
+                  >
+                    <input
+                      type="month"
+                      value={line.monthKey}
+                      onChange={(e) =>
+                        updateMonthlyProfitEntry(line.id, { monthKey: e.target.value })
+                      }
+                      className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-white"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={line.amount}
+                      onChange={(e) =>
+                        updateMonthlyProfitEntry(line.id, {
+                          amount: parseNumber(e.target.value) ?? 0,
+                        })
+                      }
+                      placeholder="Amount"
+                      className="w-[10ch] rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs tabular-nums text-white"
+                    />
+                    <input
+                      type="text"
+                      value={line.note}
+                      onChange={(e) => updateMonthlyProfitEntry(line.id, { note: e.target.value })}
+                      placeholder="Note (e.g. April carry-over)"
+                      className="min-w-[12rem] flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeMonthlyProfitEntry(line.id)}
+                      className="rounded-md px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="overflow-x-auto pb-4">
             <table className="min-w-[1000px] w-full text-sm">
               <thead className="bg-zinc-900/80 text-gray-300">
@@ -233,6 +351,12 @@ export default function TradeJournalPage() {
                   <th className={`py-3 text-left font-medium ${PRICE_COL}`}>Sold</th>
                   <th className={`py-3 text-left font-medium ${PRICE_COL}`}>Target</th>
                   <th className={`py-3 text-left font-medium ${PRICE_COL}`}>Profit</th>
+                  <th
+                    className="px-2 py-3 text-left font-medium w-[8.5rem]"
+                    title="Count this trade's profit in a different month (blank = entry date month)"
+                  >
+                    P&L Month
+                  </th>
                   <th className="px-3 py-3 text-left font-medium">Reason</th>
                   <th className="px-3 py-3 text-left font-medium w-24">Rating</th>
                   <th className="px-3 py-3 text-left font-medium w-20" />
@@ -241,7 +365,7 @@ export default function TradeJournalPage() {
               <tbody>
                 {entries.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="px-4 py-10 text-center text-gray-400">
+                    <td colSpan={13} className="px-4 py-10 text-center text-gray-400">
                       No trades yet. Click &quot;Add Trade&quot; to start recording.
                     </td>
                   </tr>
@@ -249,14 +373,7 @@ export default function TradeJournalPage() {
                   entries.map((entry) => {
                     const tradeNo = getTradeNumber(entries, entry.id)
                     const isShort = isShortPosition(entry.buyPrice)
-                    const profit =
-                      entry.profit ??
-                      calcProfit(
-                        entry.buyPrice,
-                        entry.soldPrice,
-                        entry.instrumentType,
-                        entry.positionSize
-                      )
+                    const profit = getEntryProfit(entry)
                     return (
                       <tr
                         key={entry.id}
@@ -405,6 +522,19 @@ export default function TradeJournalPage() {
                           >
                             {profit == null ? '—' : profit.toFixed(2)}
                           </span>
+                        </td>
+                        <td className="px-1 py-2 w-[8.5rem]">
+                          <input
+                            type="month"
+                            value={entry.profitMonth ?? ''}
+                            onChange={(e) =>
+                              updateEntry(entry.id, {
+                                profitMonth: e.target.value || null,
+                              })
+                            }
+                            title="Leave blank to use entry date month"
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-1 py-1.5 text-xs text-white"
+                          />
                         </td>
                         <td className="px-2 py-2">
                           <input

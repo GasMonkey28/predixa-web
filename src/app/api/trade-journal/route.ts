@@ -4,7 +4,13 @@ import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dyn
 
 import { SESSION_COOKIE_NAME } from '@/lib/constants'
 import { config } from '@/lib/server/config'
-import { normalizeEntry, TradeJournalEntry } from '@/lib/trade-journal-types'
+import {
+  MonthlyProfitEntry,
+  normalizeEntry,
+  normalizeMonthlyProfitEntry,
+  TradeJournalData,
+  TradeJournalEntry,
+} from '@/lib/trade-journal-types'
 
 const client = new DynamoDBClient({
   region: config.aws.region,
@@ -67,6 +73,26 @@ function sanitizeEntries(entries: unknown): TradeJournalEntry[] {
     .map((entry, index) => normalizeEntry(entry as Partial<TradeJournalEntry>, index))
 }
 
+function sanitizeMonthlyProfitEntries(entries: unknown): MonthlyProfitEntry[] {
+  if (!Array.isArray(entries)) return []
+
+  return entries
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry, index) => normalizeMonthlyProfitEntry(entry as Partial<MonthlyProfitEntry>, index))
+}
+
+function sanitizeJournalData(body: unknown): TradeJournalData {
+  if (!body || typeof body !== 'object') {
+    return { entries: [], monthlyProfitEntries: [] }
+  }
+
+  const data = body as { entries?: unknown; monthlyProfitEntries?: unknown }
+  return {
+    entries: sanitizeEntries(data.entries),
+    monthlyProfitEntries: sanitizeMonthlyProfitEntries(data.monthlyProfitEntries),
+  }
+}
+
 export async function GET(request: NextRequest) {
   const idToken = extractIdToken(request)
   if (!idToken) {
@@ -88,6 +114,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       entries: sanitizeEntries(result.Item?.entries),
+      monthlyProfitEntries: sanitizeMonthlyProfitEntries(result.Item?.monthlyProfitEntries),
       updatedAt: result.Item?.updatedAt ?? null,
     })
   } catch (error: unknown) {
@@ -110,7 +137,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const entries = sanitizeEntries(body.entries)
+    const journal = sanitizeJournalData(body)
     const now = new Date().toISOString()
 
     await docClient.send(
@@ -118,7 +145,8 @@ export async function PUT(request: NextRequest) {
         TableName: TABLE_NAME,
         Item: {
           userId,
-          entries,
+          entries: journal.entries,
+          monthlyProfitEntries: journal.monthlyProfitEntries,
           updatedAt: now,
         },
       })
