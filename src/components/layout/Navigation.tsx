@@ -51,6 +51,11 @@ const navigationItems = [
         name: 'Risk Calculator',
         href: '/risk-calculator',
         icon: '📊'
+      },
+      {
+        name: 'Trade Journal',
+        href: '/trade-journal',
+        icon: '📝'
       }
     ]
   },

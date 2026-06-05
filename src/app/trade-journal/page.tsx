@@ -1,0 +1,445 @@
+'use client'
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { motion } from 'motion/react'
+import { GripVertical } from 'lucide-react'
+import { clsx } from 'clsx'
+import { useAuthStore } from '@/lib/auth-store'
+import {
+  TradeJournalEntry,
+  InstrumentType,
+  INSTRUMENT_OPTIONS,
+  calcOpenPositionSummary,
+  calcProfit,
+  createEmptyEntry,
+  normalizeEntry,
+  getTradeNumber,
+  isShortPosition,
+  renumberEntries,
+  withRecalculatedProfit,
+} from '@/lib/trade-journal-types'
+import { loadTradeJournalEntries, saveTradeJournalEntries } from '@/lib/trade-journal-storage'
+
+function parseNumber(value: string): number | null {
+  if (value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatNumber(value: number | null): string {
+  return value == null ? '' : String(value)
+}
+
+const PROFIT_FIELDS = new Set(['buyPrice', 'soldPrice', 'instrumentType', 'positionSize'])
+
+const PRICE_COL = 'w-[10ch] min-w-[10ch] max-w-[10ch] px-1'
+const PRICE_INPUT =
+  'w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 py-1.5 text-xs tabular-nums text-white'
+
+export default function TradeJournalPage() {
+  const { user, isAuthenticated } = useAuthStore()
+  const [entries, setEntries] = useState<TradeJournalEntry[]>([])
+  const [isLoaded, setIsLoaded] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const loaded = await loadTradeJournalEntries(user?.userId)
+      if (!cancelled) {
+        setEntries(renumberEntries(loaded.map((entry, index) => normalizeEntry(entry, index))))
+        setIsLoaded(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.userId])
+
+  useEffect(() => {
+    if (!isLoaded) return
+
+    setIsSaving(true)
+    const timer = window.setTimeout(async () => {
+      await saveTradeJournalEntries(entries, user?.userId)
+      setLastSavedAt(new Date().toLocaleTimeString())
+      setIsSaving(false)
+    }, 600)
+
+    return () => window.clearTimeout(timer)
+  }, [entries, isLoaded, user?.userId])
+
+  const totalProfit = useMemo(
+    () =>
+      entries.reduce((sum, entry) => {
+        const profit =
+          entry.profit ??
+          calcProfit(entry.buyPrice, entry.soldPrice, entry.instrumentType, entry.positionSize)
+        return sum + (profit ?? 0)
+      }, 0),
+    [entries]
+  )
+
+  const positionSummary = useMemo(() => calcOpenPositionSummary(entries), [entries])
+
+  const updateEntry = useCallback((id: string, patch: Partial<TradeJournalEntry>) => {
+    setEntries((prev) =>
+      renumberEntries(
+        prev.map((entry) => {
+          if (entry.id !== id) return entry
+          const next = { ...entry, ...patch }
+          if (Object.keys(patch).some((key) => PROFIT_FIELDS.has(key))) {
+            return withRecalculatedProfit(next)
+          }
+          return next
+        })
+      )
+    )
+  }, [])
+
+  const addEntry = () => {
+    setEntries((prev) => renumberEntries([...prev, createEmptyEntry(prev.length + 1)]))
+  }
+
+  const removeEntry = (id: string) => {
+    setEntries((prev) => renumberEntries(prev.filter((entry) => entry.id !== id)))
+  }
+
+  const moveEntry = useCallback((fromId: string, toId: string) => {
+    if (fromId === toId) return
+    setEntries((prev) => {
+      const fromIndex = prev.findIndex((entry) => entry.id === fromId)
+      const toIndex = prev.findIndex((entry) => entry.id === toId)
+      if (fromIndex < 0 || toIndex < 0) return prev
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return renumberEntries(next)
+    })
+  }, [])
+
+  const clearDragState = () => {
+    setDraggedId(null)
+    setDragOverId(null)
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20" />
+
+      <div className="relative mx-auto max-w-7xl p-4 pb-12 sm:p-6 sm:pb-16">
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Trade Journal
+          </h1>
+          <p className="text-gray-300">
+            Buy: positive = long, negative = short. Position shows while open (clears when sold).
+            P&L = points × size × multiplier — E-mini ×5 (default), ES ×50, stock × shares.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-400">
+            <span>
+              Storage:{' '}
+              {isAuthenticated
+                ? 'DynamoDB (signed in) + local backup'
+                : 'Browser local backup only — sign in to sync'}
+            </span>
+            <span className="text-emerald-400">
+              Total P&L: {totalProfit >= 0 ? '+' : ''}
+              {totalProfit.toFixed(2)}
+            </span>
+            <span>{isSaving ? 'Saving…' : lastSavedAt ? `Saved ${lastSavedAt}` : 'Ready'}</span>
+          </div>
+        </motion.div>
+
+        <div className="rounded-2xl border border-zinc-800/60 bg-zinc-950/70 backdrop-blur-sm overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
+            <h2 className="text-lg font-semibold text-white">Trades</h2>
+            <button
+              type="button"
+              onClick={addEntry}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
+            >
+              Add Trade
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-800/80 bg-zinc-900/50 px-4 py-3">
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-medium text-gray-400">Net Position</span>
+              <span
+                className={clsx(
+                  'text-2xl font-bold tabular-nums',
+                  positionSummary.netPosition > 0 && 'text-emerald-400',
+                  positionSummary.netPosition < 0 && 'text-red-400',
+                  positionSummary.netPosition === 0 && 'text-gray-300'
+                )}
+              >
+                {positionSummary.netPosition > 0 ? '+' : ''}
+                {positionSummary.netPosition}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm tabular-nums">
+              <span className="text-gray-500">
+                Long{' '}
+                <span className="font-semibold text-emerald-400">
+                  {positionSummary.highestLong > 0 ? positionSummary.highestLong : '—'}
+                </span>
+              </span>
+              <span className="text-gray-600">+</span>
+              <span className="text-gray-500">
+                Short{' '}
+                <span className="font-semibold text-red-400">
+                  {positionSummary.highestShort < 0 ? positionSummary.highestShort : '—'}
+                </span>
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto pb-4">
+            <table className="min-w-[1000px] w-full text-sm">
+              <thead className="bg-zinc-900/80 text-gray-300">
+                <tr>
+                  <th className="w-8 px-1 py-3" aria-label="Reorder" />
+                  <th className="px-3 py-3 text-left font-medium">Entry Date</th>
+                  <th
+                    className="px-3 py-3 text-left font-medium w-20"
+                    title="Open long 1,2,3… / open short −1,−2,… — clears when sold"
+                  >
+                    Position
+                  </th>
+                  <th className="px-2 py-3 text-left font-medium w-[4.5rem]">Type</th>
+                  <th className="px-3 py-3 text-left font-medium w-20">Size</th>
+                  <th
+                    className={`py-3 text-left font-medium ${PRICE_COL}`}
+                    title="Positive = long entry. Negative = short entry."
+                  >
+                    Buy
+                  </th>
+                  <th className={`py-3 text-left font-medium ${PRICE_COL}`}>Sold</th>
+                  <th className={`py-3 text-left font-medium ${PRICE_COL}`}>Target</th>
+                  <th className={`py-3 text-left font-medium ${PRICE_COL}`}>Profit</th>
+                  <th className="px-3 py-3 text-left font-medium">Reason</th>
+                  <th className="px-3 py-3 text-left font-medium w-24">Rating</th>
+                  <th className="px-3 py-3 text-left font-medium w-20" />
+                </tr>
+              </thead>
+              <tbody>
+                {entries.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="px-4 py-10 text-center text-gray-400">
+                      No trades yet. Click &quot;Add Trade&quot; to start recording.
+                    </td>
+                  </tr>
+                ) : (
+                  entries.map((entry) => {
+                    const tradeNo = getTradeNumber(entries, entry.id)
+                    const isShort = isShortPosition(entry.buyPrice)
+                    const profit =
+                      entry.profit ??
+                      calcProfit(
+                        entry.buyPrice,
+                        entry.soldPrice,
+                        entry.instrumentType,
+                        entry.positionSize
+                      )
+                    return (
+                      <tr
+                        key={entry.id}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          if (draggedId && draggedId !== entry.id) {
+                            setDragOverId(entry.id)
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverId === entry.id) setDragOverId(null)
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          const fromId = e.dataTransfer.getData('text/plain') || draggedId
+                          if (fromId) moveEntry(fromId, entry.id)
+                          clearDragState()
+                        }}
+                        className={clsx(
+                          'border-t border-zinc-800/80 hover:bg-zinc-900/40',
+                          draggedId === entry.id && 'opacity-40',
+                          dragOverId === entry.id && 'bg-blue-500/10 ring-1 ring-inset ring-blue-500/40'
+                        )}
+                      >
+                        <td className="px-1 py-2 w-8">
+                          <span
+                            draggable
+                            onDragStart={(e) => {
+                              setDraggedId(entry.id)
+                              e.dataTransfer.setData('text/plain', entry.id)
+                              e.dataTransfer.effectAllowed = 'move'
+                            }}
+                            onDragEnd={clearDragState}
+                            className="inline-flex cursor-grab touch-none items-center justify-center rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 active:cursor-grabbing"
+                            title="Drag to reorder"
+                            aria-label="Drag to reorder"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </span>
+                        </td>
+                        <td className="px-2 py-2">
+                          <input
+                            type="date"
+                            value={entry.entryDate}
+                            onChange={(e) => updateEntry(entry.id, { entryDate: e.target.value })}
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-white"
+                          />
+                        </td>
+                        <td className="px-3 py-2 tabular-nums font-medium">
+                          {tradeNo == null ? (
+                            <span className="text-gray-500">—</span>
+                          ) : (
+                            <span className={isShort ? 'text-red-400' : 'text-emerald-400'}>
+                              {tradeNo}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-1 py-2 w-[4.5rem]">
+                          <select
+                            value={entry.instrumentType}
+                            onChange={(e) =>
+                              updateEntry(entry.id, {
+                                instrumentType: e.target.value as InstrumentType,
+                              })
+                            }
+                            title={
+                              INSTRUMENT_OPTIONS.find((o) => o.value === entry.instrumentType)
+                                ?.label
+                            }
+                            className="w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 py-1.5 text-xs text-white"
+                          >
+                            {INSTRUMENT_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value} title={option.label}>
+                                {option.shortLabel}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-2 py-2">
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={entry.positionSize}
+                            onChange={(e) => {
+                              const parsed = parseNumber(e.target.value)
+                              updateEntry(entry.id, {
+                                positionSize: parsed != null && parsed > 0 ? Math.floor(parsed) : 1,
+                              })
+                            }}
+                            title={
+                              INSTRUMENT_OPTIONS.find((o) => o.value === entry.instrumentType)
+                                ?.sizeLabel
+                            }
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-white"
+                          />
+                        </td>
+                        <td className={`py-2 ${PRICE_COL}`}>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={formatNumber(entry.buyPrice)}
+                            onChange={(e) =>
+                              updateEntry(entry.id, { buyPrice: parseNumber(e.target.value) })
+                            }
+                            title="Positive = long. Negative = short."
+                            placeholder="±price"
+                            className={clsx(
+                              PRICE_INPUT,
+                              isShort && 'text-red-400',
+                              entry.buyPrice != null && entry.buyPrice > 0 && 'text-emerald-400'
+                            )}
+                          />
+                        </td>
+                        <td className={`py-2 ${PRICE_COL}`}>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={formatNumber(entry.soldPrice)}
+                            onChange={(e) =>
+                              updateEntry(entry.id, { soldPrice: parseNumber(e.target.value) })
+                            }
+                            className={PRICE_INPUT}
+                          />
+                        </td>
+                        <td className={`py-2 ${PRICE_COL}`}>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={formatNumber(entry.targetPrice)}
+                            onChange={(e) =>
+                              updateEntry(entry.id, { targetPrice: parseNumber(e.target.value) })
+                            }
+                            className={PRICE_INPUT}
+                          />
+                        </td>
+                        <td className={`py-2 text-xs tabular-nums ${PRICE_COL}`}>
+                          <span
+                            className={
+                              profit == null
+                                ? 'text-gray-500'
+                                : profit >= 0
+                                  ? 'text-emerald-400'
+                                  : 'text-red-400'
+                            }
+                          >
+                            {profit == null ? '—' : profit.toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2">
+                          <input
+                            type="text"
+                            value={entry.reason}
+                            onChange={(e) => updateEntry(entry.id, { reason: e.target.value })}
+                            className="w-full min-w-[180px] rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-white"
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <input
+                            type="text"
+                            value={entry.rating}
+                            onChange={(e) => updateEntry(entry.id, { rating: e.target.value })}
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-white"
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <button
+                            type="button"
+                            onClick={() => removeEntry(entry.id)}
+                            className="rounded-md px-2 py-1 text-red-400 hover:bg-red-500/10"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
