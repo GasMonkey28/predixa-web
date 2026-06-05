@@ -45,27 +45,37 @@ interface CalendarEvent {
 // Investing.com now serves the calendar as a Next.js app. The event data is
 // embedded in a <script id="__NEXT_DATA__"> JSON blob rather than an HTML table.
 // Shape: props.pageProps.state.economicCalendarStore.calendarEventsByDate[date] = Event[]
-function parseNextData(html: string, requestedDate: string): CalendarEvent[] {
+type ParseResult = {
+  events: CalendarEvent[]
+  embeddedDate: string | null
+  isAheadOfRequested: boolean
+}
+
+function parseNextData(html: string, requestedDate: string): ParseResult {
+  const empty: ParseResult = { events: [], embeddedDate: null, isAheadOfRequested: false }
   const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
   if (!match || !match[1]) {
-    return []
+    return empty
   }
 
   let json: any
   try {
     json = JSON.parse(match[1])
   } catch {
-    return []
+    return empty
   }
 
   const byDate = json?.props?.pageProps?.state?.economicCalendarStore?.calendarEventsByDate
   if (!byDate || typeof byDate !== 'object') {
-    return []
+    return empty
   }
 
-  const { events: rawEvents, embeddedDate } = resolveRawEvents(byDate, requestedDate)
+  const { events: rawEvents, embeddedDate, isAheadOfRequested } = resolveRawEvents(
+    byDate,
+    requestedDate
+  )
   if (rawEvents.length === 0) {
-    return []
+    return empty
   }
 
   const normalizeValue = (val: any): string | null => {
@@ -114,28 +124,37 @@ function parseNextData(html: string, requestedDate: string): CalendarEvent[] {
     })
   })
 
-  return events
+  return { events, embeddedDate, isAheadOfRequested }
 }
 
 /** Pick the Investing.com day bucket closest to the requested Central calendar date. */
 function resolveRawEvents(
   byDate: Record<string, any[]>,
   requestedDate: string
-): { events: any[]; embeddedDate: string | null } {
+): { events: any[]; embeddedDate: string | null; isAheadOfRequested: boolean } {
   const keys = Object.keys(byDate).sort()
   if (keys.length === 0) {
-    return { events: [], embeddedDate: null }
+    return { events: [], embeddedDate: null, isAheadOfRequested: false }
   }
 
   if (Array.isArray(byDate[requestedDate])) {
-    return { events: byDate[requestedDate], embeddedDate: requestedDate }
+    return {
+      events: byDate[requestedDate],
+      embeddedDate: requestedDate,
+      isAheadOfRequested: false,
+    }
   }
 
   // Prefer the newest embedded day that is still on or before the requested date.
   const onOrBefore = keys.filter((k) => k <= requestedDate)
   if (onOrBefore.length === 0) {
-    // SSR only has a future day (e.g. UTC ahead of Central) — avoid showing tomorrow.
-    return { events: [], embeddedDate: keys[0] ?? null }
+    // Investing.com SSR is already on the next calendar day (common late CT / UTC rollover).
+    const pickKey = keys[0]
+    return {
+      events: byDate[pickKey] || [],
+      embeddedDate: pickKey,
+      isAheadOfRequested: pickKey > requestedDate,
+    }
   }
 
   const pickKey = onOrBefore[onOrBefore.length - 1]
@@ -144,6 +163,7 @@ function resolveRawEvents(
   return {
     events: onRequested.length > 0 ? onRequested : bucket,
     embeddedDate: pickKey,
+    isAheadOfRequested: false,
   }
 }
 
@@ -266,9 +286,13 @@ export async function GET(request: Request) {
     fetchMethod = method
 
     // Parse the embedded __NEXT_DATA__ JSON (the new site structure).
-    const allEvents = parseNextData(html, date)
+    const parsed = parseNextData(html, date)
+    const { events: allEvents, embeddedDate, isAheadOfRequested } = parsed
+    const calendarDay = embeddedDate || date
     console.log('[ECONOMIC CALENDAR] Parsed events from __NEXT_DATA__:', allEvents.length, {
       requestedDate: date,
+      calendarDay,
+      isAheadOfRequested,
     })
 
     if (allEvents.length === 0) {
@@ -282,7 +306,9 @@ export async function GET(request: Request) {
           events: [],
           count: 0,
           source: 'investing.com',
-          date,
+          date: calendarDay,
+          requestedDate: date,
+          isAheadOfRequested,
           isScraped: false,
           fetchMethod,
           note: 'Could not parse economic calendar data from Investing.com (blocked or structure changed).'
@@ -336,7 +362,9 @@ export async function GET(request: Request) {
         events: usaEvents.slice(0, 20),
         count: usaEvents.length,
         source: 'investing.com',
-        date,
+        date: calendarDay,
+        requestedDate: date,
+        isAheadOfRequested,
         timezone: ECONOMIC_CALENDAR_TIMEZONE,
         isScraped: true,
         fetchMethod,

@@ -28,6 +28,8 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
   const [error, setError] = useState<string | null>(null)
   const [selectedImpact, setSelectedImpact] = useState(minImpact)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [calendarDay, setCalendarDay] = useState<string | null>(null)
+  const [isAheadOfRequested, setIsAheadOfRequested] = useState(false)
 
   useEffect(() => {
     async function fetchEvents() {
@@ -35,6 +37,8 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
         console.log('Fetching Investing.com economic calendar data from API...')
         const calendarDate = getEconomicCalendarDate()
         const data = await fetchEconomicCalendarInvesting(calendarDate)
+        setCalendarDay(data.date || calendarDate)
+        setIsAheadOfRequested(Boolean(data.isAheadOfRequested))
         console.log('Investing.com economic calendar data received:', data, 'date:', calendarDate)
         
         // Handle different possible API response structures
@@ -141,6 +145,8 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
       console.log('Refreshing Investing.com economic calendar data...')
       const calendarDate = getEconomicCalendarDate()
       const data = await fetchEconomicCalendarInvesting(calendarDate)
+      setCalendarDay(data.date || calendarDate)
+      setIsAheadOfRequested(Boolean(data.isAheadOfRequested))
       console.log('Refreshed Investing.com economic calendar data:', data, 'date:', calendarDate)
       
       // Handle different possible API response structures
@@ -376,7 +382,9 @@ export default function EconomicCalendarInvesting({ minImpact = 2 }: EconomicCal
         <div>
           <h2 className="text-lg font-semibold text-white mb-1">Economic Calendar</h2>
           <p className="text-xs text-gray-500">
-            Today ({ECONOMIC_CALENDAR_TIMEZONE.replace('America/', '')}): {getEconomicCalendarDate()}
+            {isAheadOfRequested && calendarDay
+              ? `Releases for ${calendarDay} (Investing.com — ahead of Central today ${getEconomicCalendarDate()})`
+              : `Today (Central): ${calendarDay || getEconomicCalendarDate()}`}
           </p>
           {lastUpdated && (
             <p className="text-xs text-gray-400">
