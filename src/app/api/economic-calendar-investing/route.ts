@@ -309,7 +309,7 @@ function parseLegacyTheDayIso(html: string): string | null {
   return getDateStringInTimeZone(ECONOMIC_CALENDAR_TIMEZONE, d)
 }
 
-function normalizeLegacyCell($: cheerio.CheerioAPI, $row: cheerio.Cheerio<any>, prefix: string): string | null {
+function normalizeLegacyCell($row: cheerio.Cheerio, prefix: string): string | null {
   const cell = $row.find(`[id^="${prefix}"]`).first()
   if (!cell.length) return null
   const text = cell.find('span').first().text().trim() || cell.text().trim()
@@ -364,9 +364,9 @@ function parseLegacyCalendarApi(body: string, requestedDate: string): ParseResul
       impact,
       country: 'United States',
       currency: 'USD',
-      actual: normalizeLegacyCell($, $row, 'eventActual_'),
-      forecast: normalizeLegacyCell($, $row, 'eventForecast_'),
-      previous: normalizeLegacyCell($, $row, 'eventPrevious_'),
+      actual: normalizeLegacyCell($row, 'eventActual_'),
+      forecast: normalizeLegacyCell($row, 'eventForecast_'),
+      previous: normalizeLegacyCell($row, 'eventPrevious_'),
     })
   })
 
