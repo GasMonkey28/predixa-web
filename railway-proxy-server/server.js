@@ -66,6 +66,21 @@ app.get('/', async (req, res) => {
       validateStatus: () => true // Accept all status codes
     });
 
+    const body =
+      typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '');
+    const cloudflare =
+      body.includes('Just a moment') || body.includes('cf-browser-verification');
+
+    if (cloudflare) {
+      console.warn('Cloudflare challenge from Investing.com for:', targetUrl);
+      return res.status(503).json({
+        error: 'cloudflare_blocked',
+        message:
+          'Investing.com returned a Cloudflare challenge. Railway/datacenter IPs are blocked; use SCRAPER_API_KEY on Vercel.',
+        targetUrl,
+      });
+    }
+
     res.status(response.status);
     res.set('Content-Type', response.headers['content-type'] || 'text/html');
     res.send(response.data);

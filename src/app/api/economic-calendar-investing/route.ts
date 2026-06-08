@@ -192,13 +192,49 @@ const LEGACY_HEADERS = {
 
 type FetchAttempt = { method: string; url: string; headers: Record<string, string> }
 
+type FetchAttemptOptions = {
+  preferDirectFirst?: boolean
+  /** On Vercel, Railway/datacenter IPs are often Cloudflare-blocked; try ScraperAPI first. */
+  preferScraperFirst?: boolean
+  /** HTML fallback may need JS render; legacy XHR JSON does not. */
+  scraperRender?: boolean
+}
+
+function isCloudflareChallenge(body: string): boolean {
+  return (
+    body.includes('Just a moment') ||
+    body.includes('cf-browser-verification') ||
+    body.includes('challenge-platform')
+  )
+}
+
+function buildScraperApiUrl(
+  apiKey: string,
+  targetUrl: string,
+  options: { render?: boolean } = {}
+): string {
+  const params = new URLSearchParams({
+    api_key: apiKey,
+    url: targetUrl,
+  })
+  // Residential IPs help when Investing.com / Cloudflare block Vercel & Railway.
+  if (process.env.VERCEL) {
+    params.set('premium', 'true')
+  }
+  if (options.render) {
+    params.set('render', 'true')
+  }
+  return `http://api.scraperapi.com?${params.toString()}`
+}
+
 function buildFetchAttempts(
   targetUrl: string,
   customProxyUrl: string | null,
   scraperApiKey: string | null,
   directHeaders: Record<string, string>,
-  preferDirectFirst = false
+  options: FetchAttemptOptions = {}
 ): FetchAttempt[] {
+  const { preferDirectFirst = false, preferScraperFirst = false, scraperRender = false } = options
   const attempts: FetchAttempt[] = []
 
   const directAttempt: FetchAttempt = {
@@ -207,28 +243,36 @@ function buildFetchAttempts(
     headers: directHeaders,
   }
 
+  const scraperAttempt: FetchAttempt | null = scraperApiKey
+    ? {
+        method: 'scraperapi',
+        url: buildScraperApiUrl(scraperApiKey, targetUrl, { render: scraperRender }),
+        headers: directHeaders,
+      }
+    : null
+
+  const proxyAttempt: FetchAttempt | null = customProxyUrl
+    ? {
+        method: 'custom_proxy',
+        url: `${(customProxyUrl.startsWith('http://') || customProxyUrl.startsWith('https://') ? customProxyUrl : `https://${customProxyUrl}`).replace(/\/$/, '')}?url=${encodeURIComponent(targetUrl)}`,
+        headers: directHeaders,
+      }
+    : null
+
   if (preferDirectFirst) {
     attempts.push(directAttempt)
   }
 
-  if (customProxyUrl) {
-    const proxyBase =
-      customProxyUrl.startsWith('http://') || customProxyUrl.startsWith('https://')
-        ? customProxyUrl
-        : `https://${customProxyUrl}`
-    attempts.push({
-      method: 'custom_proxy',
-      url: `${proxyBase}?url=${encodeURIComponent(targetUrl)}`,
-      headers: directHeaders,
-    })
+  if (preferScraperFirst && scraperAttempt) {
+    attempts.push(scraperAttempt)
   }
 
-  if (scraperApiKey) {
-    attempts.push({
-      method: 'scraperapi',
-      url: `http://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}`,
-      headers: directHeaders,
-    })
+  if (proxyAttempt) {
+    attempts.push(proxyAttempt)
+  }
+
+  if (!preferScraperFirst && scraperAttempt) {
+    attempts.push(scraperAttempt)
   }
 
   if (!preferDirectFirst) {
@@ -245,23 +289,24 @@ async function fetchWithAttempts(
   directHeaders: Record<string, string>,
   validate: (data: unknown) => boolean,
   label: string,
-  preferDirectFirst = false
+  options: FetchAttemptOptions = {}
 ): Promise<{ body: string; method: string }> {
   const attempts = buildFetchAttempts(
     targetUrl,
     customProxyUrl,
     scraperApiKey,
     directHeaders,
-    preferDirectFirst
+    options
   )
   const errors: string[] = []
+  let sawCloudflare = false
 
   for (const attempt of attempts) {
     try {
       console.log(`[ECONOMIC CALENDAR] Trying ${label}:`, attempt.method, attempt.url.slice(0, 120))
       const response = await axios.get(attempt.url, {
         headers: attempt.headers,
-        timeout: 30000,
+        timeout: 45000,
         maxRedirects: 5,
         validateStatus: (status) => status < 500,
       })
@@ -274,6 +319,7 @@ async function fetchWithAttempts(
         method: attempt.method,
         status: response.status,
         length: body.length,
+        cloudflare: isCloudflareChallenge(body),
       })
 
       if (response.status === 403 || response.status === 429) {
@@ -282,6 +328,11 @@ async function fetchWithAttempts(
       }
       if (response.status >= 400) {
         errors.push(`${attempt.method}: HTTP ${response.status}`)
+        continue
+      }
+      if (isCloudflareChallenge(body)) {
+        sawCloudflare = true
+        errors.push(`${attempt.method}: cloudflare_challenge`)
         continue
       }
       if (!validate(body)) {
@@ -295,7 +346,8 @@ async function fetchWithAttempts(
     }
   }
 
-  throw new Error(`${label} failed (${errors.join('; ') || 'no methods'})`)
+  const suffix = sawCloudflare ? '; cloudflare_blocked' : ''
+  throw new Error(`${label} failed (${errors.join('; ') || 'no methods'})${suffix}`)
 }
 
 function parseLegacyTheDayIso(html: string): string | null {
@@ -378,8 +430,7 @@ async function fetchLegacyCalendar(
   customProxyUrl: string | null,
   scraperApiKey: string | null
 ): Promise<{ body: string; method: string }> {
-  // Vercel IPs are blocked direct; local dev can hit Investing.com directly first.
-  const preferDirectFirst = !process.env.VERCEL
+  const onVercel = !!process.env.VERCEL
   return fetchWithAttempts(
     LEGACY_CALENDAR_API_URL,
     customProxyUrl,
@@ -387,7 +438,10 @@ async function fetchLegacyCalendar(
     LEGACY_HEADERS,
     (data) => typeof data === 'string' && data.includes('"data"') && data.includes('eventRowId'),
     'legacy-api',
-    preferDirectFirst
+    {
+      preferDirectFirst: !onVercel,
+      preferScraperFirst: onVercel && !!scraperApiKey,
+    }
   )
 }
 
@@ -395,6 +449,7 @@ async function fetchNextCalendarHtml(
   customProxyUrl: string | null,
   scraperApiKey: string | null
 ): Promise<{ html: string; method: string }> {
+  const onVercel = !!process.env.VERCEL
   const result = await fetchWithAttempts(
     INVESTING_PAGE_URL,
     customProxyUrl,
@@ -405,7 +460,11 @@ async function fetchNextCalendarHtml(
       data.length > 10_000 &&
       data.includes('__NEXT_DATA__') &&
       data.includes('calendarEventsByDate'),
-    'next-page'
+    'next-page',
+    {
+      preferScraperFirst: onVercel && !!scraperApiKey,
+      scraperRender: true,
+    }
   )
   return { html: result.body, method: result.method }
 }
@@ -555,6 +614,15 @@ export async function GET(request: Request) {
       hasScraperApi: !!scraperApiKey,
     })
 
+    const cloudflareBlocked = String(error.message).includes('cloudflare_blocked')
+    const hint = scraperApiKey
+      ? 'ScraperAPI is configured but all fetch methods failed. Check ScraperAPI dashboard credits and Vercel logs.'
+      : cloudflareBlocked
+        ? 'Investing.com is blocking Vercel and Railway (Cloudflare). Add SCRAPER_API_KEY in Vercel (see SCRAPERAPI_SETUP.md) and redeploy.'
+        : customProxyUrl
+          ? 'Railway proxy may be offline or blocked. Add SCRAPER_API_KEY in Vercel, or redeploy Railway.'
+          : 'Add SCRAPER_API_KEY in Vercel if Investing.com blocks direct requests.'
+
     return NextResponse.json(
       {
         events: [],
@@ -564,9 +632,10 @@ export async function GET(request: Request) {
         isScraped: false,
         error: 'Failed to fetch Investing.com economic calendar data',
         details: error.message,
-        hint: customProxyUrl
-          ? 'Remove stale CUSTOM_PROXY_URL from Vercel if Railway proxy is offline, or add SCRAPER_API_KEY.'
-          : 'Add SCRAPER_API_KEY in Vercel if Investing.com blocks direct requests.',
+        cloudflareBlocked,
+        hasCustomProxy: !!customProxyUrl,
+        hasScraperApi: !!scraperApiKey,
+        hint,
       },
       {
         status: 200,
