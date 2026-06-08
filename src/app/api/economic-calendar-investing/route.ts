@@ -308,7 +308,8 @@ async function fetchWithAttempts(
         headers: attempt.headers,
         timeout: 45000,
         maxRedirects: 5,
-        validateStatus: (status) => status < 500,
+        // Accept all statuses so Railway/ScraperAPI responses reach our validators (503 used to abort the chain).
+        validateStatus: () => true,
       })
 
       const body =
@@ -618,10 +619,10 @@ export async function GET(request: Request) {
     const hint = scraperApiKey
       ? 'ScraperAPI is configured but all fetch methods failed. Check ScraperAPI dashboard credits and Vercel logs.'
       : cloudflareBlocked
-        ? 'Investing.com is blocking Vercel and Railway (Cloudflare). Add SCRAPER_API_KEY in Vercel (see SCRAPERAPI_SETUP.md) and redeploy.'
+        ? 'Investing.com is serving Cloudflare challenges to Railway/Vercel IPs. Redeploy Railway (latest proxy + session warmup), or add SCRAPER_API_KEY as fallback.'
         : customProxyUrl
-          ? 'Railway proxy may be offline or blocked. Add SCRAPER_API_KEY in Vercel, or redeploy Railway.'
-          : 'Add SCRAPER_API_KEY in Vercel if Investing.com blocks direct requests.'
+          ? 'Railway proxy returned no usable calendar data. Redeploy Railway from latest master, then redeploy Vercel.'
+          : 'Add CUSTOM_PROXY_URL (Railway) or SCRAPER_API_KEY in Vercel if Investing.com blocks direct requests.'
 
     return NextResponse.json(
       {
