@@ -14,6 +14,8 @@ export interface TradeJournalEntry {
   profit: number | null
   reason: string
   rating: string
+  source?: 'manual' | 'tradestation'
+  externalId?: string | null
 }
 
 /** Manual profit line assigned to a month (carry-over, corrections, etc.). */
@@ -321,6 +323,8 @@ export function normalizeEntry(entry: Partial<TradeJournalEntry>, index: number)
     profit: null,
     reason: typeof entry.reason === 'string' ? entry.reason : '',
     rating: typeof entry.rating === 'string' ? entry.rating : '',
+    source: entry.source === 'tradestation' ? 'tradestation' : 'manual',
+    externalId: typeof entry.externalId === 'string' ? entry.externalId : null,
   }
 
   return withRecalculatedProfit(normalized)

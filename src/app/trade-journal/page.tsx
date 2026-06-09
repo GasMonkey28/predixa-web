@@ -22,6 +22,8 @@ import {
   withRecalculatedProfit,
 } from '@/lib/trade-journal-types'
 import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
+import { mergeSyncedPositions } from '@/lib/tradestation-map'
+import { fetchAuthSession } from 'aws-amplify/auth'
 
 function parseNumber(value: string): number | null {
   if (value.trim() === '') return null
@@ -48,6 +50,49 @@ export default function TradeJournalPage() {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [tsConnected, setTsConnected] = useState(false)
+  const [tsLoading, setTsLoading] = useState(false)
+  const [tsSyncing, setTsSyncing] = useState(false)
+  const [tsMessage, setTsMessage] = useState<string | null>(null)
+  const [tsAccounts, setTsAccounts] = useState<{ id: string; type?: string; alias?: string }[]>([])
+
+  async function authHeaders(): Promise<HeadersInit> {
+    const headers: HeadersInit = { 'Content-Type': 'application/json' }
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
+    if (idToken) headers.Authorization = `Bearer ${idToken}`
+    return headers
+  }
+
+  const refreshTradeStationStatus = useCallback(async () => {
+    if (!isAuthenticated) {
+      setTsConnected(false)
+      setTsAccounts([])
+      return
+    }
+    setTsLoading(true)
+    try {
+      const response = await fetch('/api/tradestation/status', {
+        headers: await authHeaders(),
+        credentials: 'include',
+        cache: 'no-store',
+      })
+      if (!response.ok) {
+        setTsConnected(false)
+        return
+      }
+      const data = (await response.json()) as {
+        connected?: boolean
+        accounts?: { id: string; type?: string; alias?: string }[]
+      }
+      setTsConnected(Boolean(data.connected))
+      setTsAccounts(data.accounts ?? [])
+    } catch {
+      setTsConnected(false)
+    } finally {
+      setTsLoading(false)
+    }
+  }, [isAuthenticated])
 
   useEffect(() => {
     let cancelled = false
@@ -65,6 +110,27 @@ export default function TradeJournalPage() {
       cancelled = true
     }
   }, [user?.userId])
+
+  useEffect(() => {
+    if (!isLoaded) return
+    void refreshTradeStationStatus()
+  }, [isLoaded, refreshTradeStationStatus])
+
+  useEffect(() => {
+    if (!isLoaded || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const ts = params.get('ts')
+    if (!ts) return
+
+    if (ts === 'connected') setTsMessage('TradeStation connected.')
+    else if (ts === 'denied') setTsMessage('TradeStation authorization was declined.')
+    else setTsMessage('TradeStation connection failed. Check callback URL settings.')
+
+    params.delete('ts')
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`
+    window.history.replaceState({}, '', next)
+    void refreshTradeStationStatus()
+  }, [isLoaded, refreshTradeStationStatus])
 
   useEffect(() => {
     if (!isLoaded) return
@@ -146,6 +212,59 @@ export default function TradeJournalPage() {
     setDragOverId(null)
   }
 
+  const connectTradeStation = () => {
+    window.location.href = '/api/tradestation/connect'
+  }
+
+  const disconnectTradeStation = async () => {
+    setTsLoading(true)
+    try {
+      await fetch('/api/tradestation/disconnect', {
+        method: 'POST',
+        headers: await authHeaders(),
+        credentials: 'include',
+      })
+      setTsConnected(false)
+      setTsAccounts([])
+      setTsMessage('TradeStation disconnected.')
+    } finally {
+      setTsLoading(false)
+    }
+  }
+
+  const syncTradeStationPositions = async () => {
+    setTsSyncing(true)
+    setTsMessage(null)
+    try {
+      const response = await fetch('/api/tradestation/sync-positions', {
+        method: 'POST',
+        headers: await authHeaders(),
+        credentials: 'include',
+      })
+      const data = (await response.json()) as {
+        error?: string
+        entries?: Partial<TradeJournalEntry>[]
+        count?: number
+      }
+      if (!response.ok) {
+        setTsMessage(data.error || 'Failed to sync positions.')
+        return
+      }
+      setEntries((prev) =>
+        renumberEntries(
+          mergeSyncedPositions(prev, data.entries ?? []).map((entry, index) =>
+            normalizeEntry(entry, index)
+          )
+        )
+      )
+      setTsMessage(`Synced ${data.count ?? 0} open position(s) from TradeStation.`)
+    } catch {
+      setTsMessage('Failed to sync positions.')
+    } finally {
+      setTsSyncing(false)
+    }
+  }
+
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center">
@@ -183,6 +302,54 @@ export default function TradeJournalPage() {
               {totalProfit.toFixed(2)}
             </span>
             <span>{isSaving ? 'Saving…' : lastSavedAt ? `Saved ${lastSavedAt}` : 'Ready'}</span>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-zinc-700/80 bg-zinc-900/50 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-white">TradeStation</h3>
+                <p className="text-xs text-gray-400">
+                  {tsConnected
+                    ? `Connected${tsAccounts[0]?.alias ? ` · ${tsAccounts[0].alias}` : ''}`
+                    : 'Connect to import open positions into the journal'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {!tsConnected ? (
+                  <button
+                    type="button"
+                    onClick={connectTradeStation}
+                    disabled={!isAuthenticated || tsLoading}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    {tsLoading ? 'Checking…' : 'Connect TradeStation'}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={syncTradeStationPositions}
+                      disabled={tsSyncing}
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                    >
+                      {tsSyncing ? 'Syncing…' : 'Sync open positions'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={disconnectTradeStation}
+                      disabled={tsLoading}
+                      className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-gray-300 hover:bg-zinc-800 disabled:opacity-50"
+                    >
+                      Disconnect
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            {!isAuthenticated && (
+              <p className="mt-2 text-xs text-amber-400">Sign in to Predixa to connect TradeStation.</p>
+            )}
+            {tsMessage && <p className="mt-2 text-xs text-gray-300">{tsMessage}</p>}
           </div>
         </motion.div>
 
