@@ -1079,12 +1079,12 @@ export default function TradeJournalPage() {
                   <th className={`py-3 text-left font-medium ${PRICE_COL}`}>Target</th>
                   <th className={`py-3 text-left font-medium ${PRICE_COL}`}>Profit</th>
                   <th
-                    className="px-2 py-3 text-left font-medium w-[8.5rem]"
+                    className="px-1 py-3 text-left font-medium w-[6.5rem]"
                     title="Count this trade's profit in a different month (blank = entry date month)"
                   >
                     P&L Month
                   </th>
-                  <th className="px-3 py-3 text-left font-medium min-w-[16rem]">Reason</th>
+                  <th className="px-3 py-3 text-left font-medium min-w-[22rem]">Reason</th>
                   <th className="px-3 py-3 text-left font-medium w-20" />
                 </tr>
               </thead>
@@ -1301,7 +1301,7 @@ export default function TradeJournalPage() {
                             {profit == null ? '—' : profit.toFixed(2)}
                           </span>
                         </td>
-                        <td className="px-1 py-2 w-[8.5rem]">
+                        <td className="px-1 py-2 w-[6.5rem]">
                           <input
                             type="month"
                             value={entry.profitMonth ?? ''}
@@ -1311,10 +1311,10 @@ export default function TradeJournalPage() {
                               })
                             }
                             title="Leave blank to use entry date month"
-                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-1 py-1.5 text-xs text-white"
+                            className="w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 py-1.5 text-xs text-white"
                           />
                         </td>
-                        <td className="px-2 py-2 min-w-[16rem]">
+                        <td className="px-2 py-2 min-w-[22rem]">
                           <input
                             type="text"
                             value={entry.reason}
