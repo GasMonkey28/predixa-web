@@ -110,25 +110,47 @@ export function calcProfit(
   return points * size * getPointMultiplier(instrumentType)
 }
 
-/** Open longs: 1, 2, 3… Open shorts: −1, −2, −3… Cleared once sold is filled. */
+function compareEntryDateOrder(
+  a: TradeJournalEntry,
+  b: TradeJournalEntry,
+  indexA: number,
+  indexB: number
+): number {
+  const dateCmp = (a.entryDate || '9999-12-31').localeCompare(b.entryDate || '9999-12-31')
+  if (dateCmp !== 0) return dateCmp
+  return indexA - indexB
+}
+
+function sortedOpenPositionsByEntryDate(
+  entries: TradeJournalEntry[],
+  side: 'long' | 'short'
+): TradeJournalEntry[] {
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => {
+      if (!isOpenPosition(entry)) return false
+      const buy = entry.buyPrice!
+      return side === 'long' ? buy > 0 : buy < 0
+    })
+    .sort((a, b) => compareEntryDateOrder(a.entry, b.entry, a.index, b.index))
+    .map(({ entry }) => entry)
+}
+
+/** Open longs: 1, 2, 3… Open shorts: −1, −2, −3… by entry date (earliest = 1). */
 export function getTradeNumber(entries: TradeJournalEntry[], entryId: string): number | null {
   const target = entries.find((entry) => entry.id === entryId)
   if (!target || !isOpenPosition(target)) return null
 
-  let longCount = 0
-  let shortCount = 0
-  for (const entry of entries) {
-    if (!isOpenPosition(entry)) continue
-    const buy = entry.buyPrice!
-    if (buy < 0) {
-      shortCount += 1
-      if (entry.id === entryId) return -shortCount
-    } else if (buy > 0) {
-      longCount += 1
-      if (entry.id === entryId) return longCount
-    }
-  }
-  return null
+  const buy = target.buyPrice!
+  if (buy === 0) return null
+
+  const side: 'long' | 'short' = buy < 0 ? 'short' : 'long'
+  const sorted = sortedOpenPositionsByEntryDate(entries, side)
+  const index = sorted.findIndex((entry) => entry.id === entryId)
+  if (index < 0) return null
+
+  const number = index + 1
+  return side === 'short' ? -number : number
 }
 
 export function renumberEntries(entries: TradeJournalEntry[]): TradeJournalEntry[] {
