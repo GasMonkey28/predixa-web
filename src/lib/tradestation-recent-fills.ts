@@ -209,3 +209,27 @@ export function getUsedTradeStationFillIds(
 }
 
 export const TS_FILL_DRAG_TYPE = 'application/x-predixa-ts-fill'
+
+const DISMISSED_FILLS_KEY = 'predixa-ts-dismissed-fills'
+
+function dismissedStorageKey(userId?: string | null): string {
+  return userId ? `${DISMISSED_FILLS_KEY}:${userId}` : DISMISSED_FILLS_KEY
+}
+
+export function loadDismissedTsFillIds(userId?: string | null): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(dismissedStorageKey(userId))
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw) as unknown
+    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+export function saveDismissedTsFillIds(ids: Set<string>, userId?: string | null): void {
+  if (typeof window === 'undefined') return
+  const list = [...ids].slice(-200)
+  localStorage.setItem(dismissedStorageKey(userId), JSON.stringify(list))
+}

@@ -26,6 +26,8 @@ import { mergeTradeStationEntries } from '@/lib/tradestation-map'
 import {
   createJournalEntryFromFill,
   getUsedTradeStationFillIds,
+  loadDismissedTsFillIds,
+  saveDismissedTsFillIds,
   TS_FILL_DRAG_TYPE,
   TradeStationRecentFill,
 } from '@/lib/tradestation-recent-fills'
@@ -66,11 +68,17 @@ export default function TradeJournalPage() {
   )
   const [tsMessage, setTsMessage] = useState<string | null>(null)
   const [tsAccounts, setTsAccounts] = useState<{ id: string; type?: string; alias?: string }[]>([])
+  const [dismissedTsFillIds, setDismissedTsFillIds] = useState<Set<string>>(new Set())
 
   const visibleTsFills = useMemo(() => {
     const used = getUsedTradeStationFillIds(entries)
-    return tsRecentFills.filter((fill) => !used.has(fill.id))
-  }, [entries, tsRecentFills])
+    return tsRecentFills.filter((fill) => !used.has(fill.id) && !dismissedTsFillIds.has(fill.id))
+  }, [entries, tsRecentFills, dismissedTsFillIds])
+
+  useEffect(() => {
+    if (!isLoaded) return
+    setDismissedTsFillIds(loadDismissedTsFillIds(user?.userId))
+  }, [isLoaded, user?.userId])
 
   async function authHeaders(): Promise<HeadersInit> {
     const headers: HeadersInit = { 'Content-Type': 'application/json' }
@@ -352,6 +360,18 @@ export default function TradeJournalPage() {
     setTsMessage(`Added new row: ${fill.label}`)
   }, [])
 
+  const removeTsFillFromList = useCallback(
+    (fillId: string) => {
+      setDismissedTsFillIds((prev) => {
+        const next = new Set(prev).add(fillId)
+        saveDismissedTsFillIds(next, user?.userId)
+        return next
+      })
+      setTsMessage('Removed fill from recent list.')
+    },
+    [user?.userId]
+  )
+
   const handleTsFillDrop = useCallback(
     (entryId: string, field: 'buy' | 'sold', e: React.DragEvent) => {
       e.preventDefault()
@@ -523,6 +543,14 @@ export default function TradeJournalPage() {
                           className="shrink-0 rounded border border-zinc-600 px-2 py-0.5 text-[10px] font-medium text-blue-300 hover:border-blue-500/50 hover:bg-blue-500/10"
                         >
                           Add row
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeTsFillFromList(fill.id)}
+                          title="Hide from recent fills list"
+                          className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/10"
+                        >
+                          Remove
                         </button>
                       </li>
                     ))}
