@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { GripVertical } from 'lucide-react'
+import { ChevronDown, GripVertical } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '@/lib/auth-store'
 import {
@@ -25,11 +25,13 @@ import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
 import { mergeTradeStationEntries } from '@/lib/tradestation-map'
 import {
   createJournalEntryFromFill,
+  getJournalTargetsForFillAction,
   getUsedTradeStationFillIds,
   loadDismissedTsFillIds,
   saveDismissedTsFillIds,
   TS_FILL_DRAG_TYPE,
   TradeStationRecentFill,
+  type TsFillJournalAction,
 } from '@/lib/tradestation-recent-fills'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
@@ -69,6 +71,10 @@ export default function TradeJournalPage() {
   const [tsMessage, setTsMessage] = useState<string | null>(null)
   const [tsAccounts, setTsAccounts] = useState<{ id: string; type?: string; alias?: string }[]>([])
   const [dismissedTsFillIds, setDismissedTsFillIds] = useState<Set<string>>(new Set())
+  const [tsFillActionMenu, setTsFillActionMenu] = useState<{
+    fillId: string
+    action: TsFillJournalAction
+  } | null>(null)
 
   const usedTsFillIds = useMemo(() => getUsedTradeStationFillIds(entries), [entries])
 
@@ -86,6 +92,13 @@ export default function TradeJournalPage() {
     if (!isLoaded) return
     setDismissedTsFillIds(loadDismissedTsFillIds(user?.userId))
   }, [isLoaded, user?.userId])
+
+  useEffect(() => {
+    if (!tsFillActionMenu) return
+    const close = () => setTsFillActionMenu(null)
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [tsFillActionMenu])
 
   async function authHeaders(): Promise<HeadersInit> {
     const headers: HeadersInit = { 'Content-Type': 'application/json' }
@@ -329,7 +342,12 @@ export default function TradeJournalPage() {
   }, [tsConnected, isLoaded, loadRecentTradeStationFills])
 
   const applyTsFillToEntry = useCallback(
-    (entryId: string, field: 'buy' | 'sold', fill: TradeStationRecentFill) => {
+    (
+      entryId: string,
+      field: 'buy' | 'sold',
+      fill: TradeStationRecentFill,
+      options?: { takeProfit?: boolean }
+    ) => {
       if (field === 'buy') {
         if (fill.buyValue == null) {
           setTsMessage('Close fill — drop on Sold, not Buy.')
@@ -350,15 +368,52 @@ export default function TradeJournalPage() {
         setTsMessage('Open fill — drop on Buy, not Sold.')
         return
       }
+
+      const target = entries.find((entry) => entry.id === entryId)
+      const reasonPatch =
+        options?.takeProfit && target
+          ? {
+              reason: target.reason
+                ? `${target.reason} · Take profit`
+                : `Take profit · ${fill.symbol}`,
+            }
+          : {}
+
       updateEntry(entryId, {
         soldPrice: fill.soldValue,
         instrumentType: fill.instrumentType,
         positionSize: fill.quantity,
         tradestationSoldFillId: fill.id,
+        ...reasonPatch,
       })
-      setTsMessage(`Set Sold from ${fill.label}`)
+      setTsMessage(
+        options?.takeProfit
+          ? `Take profit logged on position ${getTradeNumber(entries, entryId) ?? '—'}`
+          : `Set Sold from ${fill.label}`
+      )
     },
-    [updateEntry]
+    [entries, updateEntry]
+  )
+
+  const applyTsFillFromMenu = useCallback(
+    (entryId: string, fill: TradeStationRecentFill, action: TsFillJournalAction) => {
+      setTsFillActionMenu(null)
+      if (action === 'buy' || action === 'sell') {
+        applyTsFillToEntry(entryId, 'buy', fill)
+        return
+      }
+      applyTsFillToEntry(entryId, 'sold', fill, { takeProfit: action === 'takeProfit' })
+    },
+    [applyTsFillToEntry]
+  )
+
+  const toggleTsFillActionMenu = useCallback(
+    (fillId: string, action: TsFillJournalAction) => {
+      setTsFillActionMenu((prev) =>
+        prev?.fillId === fillId && prev.action === action ? null : { fillId, action }
+      )
+    },
+    []
   )
 
   const addFillAsJournalEntry = useCallback((fill: TradeStationRecentFill) => {
@@ -500,7 +555,8 @@ export default function TradeJournalPage() {
               <div className="mt-3 rounded-lg border border-zinc-700/60 bg-zinc-950/80 p-3">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs font-medium text-gray-300">
-                    Drag onto journal <strong>Buy</strong> or <strong>Sold</strong>, or use Add row.
+                    Drag onto journal <strong>Buy</strong> or <strong>Sold</strong>, use dropdowns on each
+                    action, or <strong>Take profit</strong> to close an open position.
                   </p>
                   {dismissedTsFillCount > 0 && (
                     <button
@@ -522,75 +578,164 @@ export default function TradeJournalPage() {
                   <ul className="space-y-1">
                     {visibleTsFills.map((fill) => {
                       const inJournal = usedTsFillIds.has(fill.id)
+                      const isCloseFill = fill.openOrClose === 'close'
+                      const isLongOpen = fill.openOrClose === 'open' && fill.buyOrSell === 'buy'
+                      const isShortOpen = fill.openOrClose === 'open' && fill.buyOrSell === 'sell'
+
+                      const renderFillActionMenu = (
+                        action: TsFillJournalAction,
+                        label: string,
+                        className: string
+                      ) => {
+                        const isOpen =
+                          tsFillActionMenu?.fillId === fill.id &&
+                          tsFillActionMenu.action === action
+                        const targets = getJournalTargetsForFillAction(fill, entries, action)
+
+                        return (
+                          <div className="relative shrink-0">
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={() => toggleTsFillActionMenu(fill.id, action)}
+                              disabled={inJournal}
+                              title={`Pick a journal row for ${label}`}
+                              className={clsx(
+                                'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium disabled:cursor-not-allowed disabled:opacity-40',
+                                className
+                              )}
+                            >
+                              {label}
+                              <ChevronDown
+                                className={clsx('h-3 w-3 transition-transform', isOpen && 'rotate-180')}
+                              />
+                            </button>
+                            {isOpen && (
+                              <ul
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className="absolute right-0 top-full z-30 mt-1 max-h-48 min-w-[15rem] overflow-y-auto rounded-md border border-zinc-600 bg-zinc-900 py-1 shadow-lg"
+                              >
+                                {targets.length === 0 ? (
+                                  <li className="px-3 py-2 text-[10px] text-gray-500">
+                                    {action === 'buy' || action === 'sell'
+                                      ? 'No empty Buy rows for this instrument.'
+                                      : 'No matching open positions.'}
+                                  </li>
+                                ) : (
+                                  targets.map(({ entry, tradeNo, projectedProfit }) => (
+                                    <li key={entry.id}>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          applyTsFillFromMenu(entry.id, fill, action)
+                                        }
+                                        className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-zinc-800"
+                                      >
+                                        <span className="text-[10px] font-medium text-white">
+                                          {tradeNo != null ? (
+                                            <span
+                                              className={
+                                                tradeNo < 0 ? 'text-red-400' : 'text-emerald-400'
+                                              }
+                                            >
+                                              #{tradeNo}
+                                            </span>
+                                          ) : (
+                                            <span className="text-gray-400">Row</span>
+                                          )}
+                                          {' · '}
+                                          <span className="text-gray-300">{entry.entryDate}</span>
+                                          {entry.buyPrice != null && (
+                                            <>
+                                              {' · '}
+                                              <span className="tabular-nums text-gray-400">
+                                                Buy {entry.buyPrice}
+                                              </span>
+                                            </>
+                                          )}
+                                        </span>
+                                        {projectedProfit != null && (
+                                          <span
+                                            className={clsx(
+                                              'text-[10px] tabular-nums',
+                                              projectedProfit >= 0
+                                                ? 'text-emerald-400'
+                                                : 'text-red-400'
+                                            )}
+                                          >
+                                            P&L {projectedProfit >= 0 ? '+' : ''}
+                                            {projectedProfit.toFixed(2)}
+                                          </span>
+                                        )}
+                                      </button>
+                                    </li>
+                                  ))
+                                )}
+                              </ul>
+                            )}
+                          </div>
+                        )
+                      }
+
                       return (
-                      <li
-                        key={fill.id}
-                        draggable={!inJournal}
-                        onDragStart={(e) => {
-                          if (inJournal) return
-                          e.dataTransfer.setData(TS_FILL_DRAG_TYPE, JSON.stringify(fill))
-                          e.dataTransfer.effectAllowed = 'copy'
-                        }}
-                        className={clsx(
-                          'flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs',
-                          inJournal
-                            ? 'border-zinc-800/80 bg-zinc-900/40 opacity-70'
-                            : 'cursor-grab border-zinc-700/80 bg-zinc-900/80 active:cursor-grabbing'
-                        )}
-                      >
-                        <GripVertical className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-                        <span className="shrink-0 tabular-nums text-gray-500">
-                          {fill.date} {fill.time}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-white">{fill.label}</span>
-                        <span
-                          title={
-                            fill.openOrClose === 'open' && fill.buyOrSell === 'sell'
-                              ? 'Short open — drop on Buy (saved as negative price)'
-                              : fill.openOrClose === 'open'
-                                ? 'Long open — drop on Buy'
-                                : 'Close — drop on Sold'
-                          }
+                        <li
+                          key={fill.id}
+                          draggable={!inJournal}
+                          onDragStart={(e) => {
+                            if (inJournal) return
+                            e.dataTransfer.setData(TS_FILL_DRAG_TYPE, JSON.stringify(fill))
+                            e.dataTransfer.effectAllowed = 'copy'
+                          }}
                           className={clsx(
-                            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
-                            fill.openOrClose === 'close' && 'bg-amber-500/20 text-amber-300',
-                            fill.openOrClose === 'open' &&
-                              fill.buyOrSell === 'buy' &&
-                              'bg-emerald-500/20 text-emerald-400',
-                            fill.openOrClose === 'open' &&
-                              fill.buyOrSell === 'sell' &&
-                              'bg-red-500/20 text-red-400'
+                            'flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs',
+                            inJournal
+                              ? 'border-zinc-800/80 bg-zinc-900/40 opacity-70'
+                              : 'cursor-grab border-zinc-700/80 bg-zinc-900/80 active:cursor-grabbing'
                           )}
                         >
-                          {fill.openOrClose === 'close'
-                            ? '→ Sold'
-                            : fill.buyOrSell === 'sell'
-                              ? '→ Sell'
-                              : '→ Buy'}
-                        </span>
-                        {inJournal ? (
-                          <span className="shrink-0 rounded bg-zinc-700/60 px-2 py-0.5 text-[10px] text-gray-400">
-                            In journal
+                          <GripVertical className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                          <span className="shrink-0 tabular-nums text-gray-500">
+                            {fill.date} {fill.time}
                           </span>
-                        ) : (
+                          <span className="min-w-0 flex-1 truncate text-white">{fill.label}</span>
+                          {isLongOpen &&
+                            renderFillActionMenu('buy', '→ Buy', 'bg-emerald-500/20 text-emerald-400')}
+                          {isShortOpen &&
+                            renderFillActionMenu('sell', '→ Sell', 'bg-red-500/20 text-red-400')}
+                          {isCloseFill &&
+                            renderFillActionMenu('sold', '→ Sold', 'bg-amber-500/20 text-amber-300')}
+                          {inJournal ? (
+                            <span className="shrink-0 rounded bg-zinc-700/60 px-2 py-0.5 text-[10px] text-gray-400">
+                              In journal
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => addFillAsJournalEntry(fill)}
+                                className="shrink-0 rounded border border-zinc-600 px-2 py-0.5 text-[10px] font-medium text-blue-300 hover:border-blue-500/50 hover:bg-blue-500/10"
+                              >
+                                Add row
+                              </button>
+                              {isCloseFill &&
+                                renderFillActionMenu(
+                                  'takeProfit',
+                                  'Take profit',
+                                  'border border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                )}
+                            </>
+                          )}
                           <button
                             type="button"
-                            onClick={() => addFillAsJournalEntry(fill)}
-                            className="shrink-0 rounded border border-zinc-600 px-2 py-0.5 text-[10px] font-medium text-blue-300 hover:border-blue-500/50 hover:bg-blue-500/10"
+                            onClick={() => removeTsFillFromList(fill.id)}
+                            title="Hide from recent fills list"
+                            className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/10"
                           >
-                            Add row
+                            Remove
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => removeTsFillFromList(fill.id)}
-                          title="Hide from recent fills list"
-                          className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/10"
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    )})}
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </div>

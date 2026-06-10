@@ -1,4 +1,12 @@
-import { InstrumentType, TradeJournalEntry } from '@/lib/trade-journal-types'
+import {
+  InstrumentType,
+  TradeJournalEntry,
+  calcProfit,
+  getTradeNumber,
+  isLongPosition,
+  isOpenPosition,
+  isShortPosition,
+} from '@/lib/trade-journal-types'
 import type { TradeStationOrder } from '@/lib/server/tradestation-client'
 import { mapSymbolToInstrument } from '@/lib/tradestation-map'
 
@@ -209,6 +217,81 @@ export function getUsedTradeStationFillIds(
 }
 
 export const TS_FILL_DRAG_TYPE = 'application/x-predixa-ts-fill'
+
+export type TsFillJournalAction = 'buy' | 'sell' | 'sold' | 'takeProfit'
+
+export interface TsFillJournalTarget {
+  entry: TradeJournalEntry
+  tradeNo: number | null
+  projectedProfit: number | null
+}
+
+function matchesFillInstrument(entry: TradeJournalEntry, fill: TradeStationRecentFill): boolean {
+  return entry.instrumentType === fill.instrumentType
+}
+
+/** Journal rows eligible for Buy / Sell / Take profit from a recent fill. */
+export function getJournalTargetsForFillAction(
+  fill: TradeStationRecentFill,
+  entries: TradeJournalEntry[],
+  action: TsFillJournalAction
+): TsFillJournalTarget[] {
+  const exitPrice = fill.soldValue ?? fill.price
+
+  if (action === 'buy') {
+    if (fill.openOrClose !== 'open' || fill.buyOrSell !== 'buy') return []
+    return entries
+      .filter(
+        (entry) =>
+          matchesFillInstrument(entry, fill) &&
+          (entry.buyPrice == null || entry.buyPrice === 0)
+      )
+      .map((entry) => ({
+        entry,
+        tradeNo: getTradeNumber(entries, entry.id),
+        projectedProfit: null,
+      }))
+  }
+
+  if (action === 'sell') {
+    if (fill.openOrClose !== 'open' || fill.buyOrSell !== 'sell') return []
+    return entries
+      .filter(
+        (entry) =>
+          matchesFillInstrument(entry, fill) &&
+          (entry.buyPrice == null || entry.buyPrice === 0)
+      )
+      .map((entry) => ({
+        entry,
+        tradeNo: getTradeNumber(entries, entry.id),
+        projectedProfit: null,
+      }))
+  }
+
+  if (action !== 'sold' && action !== 'takeProfit') return []
+  if (fill.openOrClose !== 'close' || fill.soldValue == null) return []
+
+  const closingShort = fill.buyOrSell === 'buy'
+  const closingLong = fill.buyOrSell === 'sell'
+
+  return entries
+    .filter((entry) => {
+      if (!isOpenPosition(entry) || !matchesFillInstrument(entry, fill)) return false
+      if (closingShort) return isShortPosition(entry.buyPrice)
+      if (closingLong) return isLongPosition(entry.buyPrice)
+      return false
+    })
+    .map((entry) => ({
+      entry,
+      tradeNo: getTradeNumber(entries, entry.id),
+      projectedProfit: calcProfit(
+        entry.buyPrice,
+        exitPrice,
+        entry.instrumentType,
+        entry.positionSize
+      ),
+    }))
+}
 
 const DISMISSED_FILLS_KEY = 'predixa-ts-dismissed-fills'
 
