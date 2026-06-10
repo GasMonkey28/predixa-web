@@ -95,9 +95,27 @@ export default function TradeJournalPage() {
 
   useEffect(() => {
     if (!tsFillActionMenu) return
-    const close = () => setTsFillActionMenu(null)
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
+
+    const isInsideTsFillMenu = (event: Event) => {
+      const nodes = 'composedPath' in event ? event.composedPath() : [event.target]
+      return nodes.some(
+        (node) => node instanceof Element && node.closest('[data-ts-fill-menu]') != null
+      )
+    }
+
+    const close = (event: MouseEvent) => {
+      if (isInsideTsFillMenu(event)) return
+      setTsFillActionMenu(null)
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      document.addEventListener('mousedown', close)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      document.removeEventListener('mousedown', close)
+    }
   }, [tsFillActionMenu])
 
   async function authHeaders(): Promise<HeadersInit> {
@@ -600,10 +618,15 @@ export default function TradeJournalPage() {
                         const targets = getJournalTargetsForFillAction(fill, entries, action)
 
                         return (
-                          <div className="relative shrink-0">
+                          <div
+                            data-ts-fill-menu
+                            className="relative shrink-0"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onDragStart={(e) => e.preventDefault()}
+                          >
                             <button
                               type="button"
-                              onMouseDown={(e) => e.stopPropagation()}
                               onClick={() => toggleTsFillActionMenu(fill.id, action)}
                               disabled={inJournal}
                               title={`Pick a journal row for ${label}`}
@@ -619,8 +642,8 @@ export default function TradeJournalPage() {
                             </button>
                             {isOpen && (
                               <ul
-                                onMouseDown={(e) => e.stopPropagation()}
-                                className="absolute right-0 top-full z-30 mt-1 max-h-48 min-w-[15rem] overflow-y-auto rounded-md border border-zinc-600 bg-zinc-900 py-1 shadow-lg"
+                                data-ts-fill-menu
+                                className="absolute right-0 top-full z-30 mt-1 max-h-48 min-w-[15rem] overflow-y-auto overscroll-contain rounded-md border border-zinc-600 bg-zinc-900 py-1 shadow-lg [scrollbar-gutter:stable]"
                               >
                                 {targets.length === 0 ? (
                                   <li className="px-3 py-2 text-[10px] text-gray-500">
@@ -687,9 +710,9 @@ export default function TradeJournalPage() {
                       return (
                         <li
                           key={fill.id}
-                          draggable={!inJournal}
+                          draggable={!inJournal && !tsFillActionMenu}
                           onDragStart={(e) => {
-                            if (inJournal) return
+                            if (inJournal || tsFillActionMenu) return
                             e.dataTransfer.setData(TS_FILL_DRAG_TYPE, JSON.stringify(fill))
                             e.dataTransfer.effectAllowed = 'copy'
                           }}
