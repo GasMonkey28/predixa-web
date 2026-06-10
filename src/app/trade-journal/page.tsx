@@ -80,7 +80,7 @@ export default function TradeJournalPage() {
   const [tsPositionSummary, setTsPositionSummary] = useState<OpenPositionSummary | null>(null)
   const [tsPositionLines, setTsPositionLines] = useState<TradeStationPositionLine[]>([])
   const [tsLoadingPositions, setTsLoadingPositions] = useState(false)
-  const [entryDateSort, setEntryDateSort] = useState<'asc' | 'desc' | null>('asc')
+  const [entryDateSort, setEntryDateSort] = useState<'asc' | 'desc' | null>('desc')
   const [addingEntry, setAddingEntry] = useState(false)
 
   const usedTsFillIds = useMemo(() => getUsedTradeStationFillIds(entries), [entries])
@@ -1052,7 +1052,7 @@ export default function TradeJournalPage() {
                           prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc'
                         )
                       }
-                      title="Sort by entry date (oldest first, newest first, or manual order)"
+                      title="Sort by entry date (newest first, oldest first, or manual order)"
                       className="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-zinc-800 hover:text-white"
                     >
                       Entry Date
