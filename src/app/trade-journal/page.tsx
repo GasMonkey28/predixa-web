@@ -223,13 +223,9 @@ export default function TradeJournalPage() {
   }, [entries, monthlyProfitEntries])
 
   const positionSummary = useMemo(() => calcOpenPositionSummary(entries), [entries])
-  const positionsMatch = useMemo(() => {
+  const positionsNetMatch = useMemo(() => {
     if (!tsPositionSummary) return null
-    return (
-      tsPositionSummary.netPosition === positionSummary.netPosition &&
-      tsPositionSummary.highestLong === positionSummary.highestLong &&
-      tsPositionSummary.highestShort === positionSummary.highestShort
-    )
+    return tsPositionSummary.netPosition === positionSummary.netPosition
   }, [tsPositionSummary, positionSummary])
   const monthlySummaries = useMemo(
     () => calcMonthlyProfitSummaries(entries, monthlyProfitEntries),
@@ -897,16 +893,17 @@ export default function TradeJournalPage() {
                   ) : (
                     <span className="text-sm text-gray-500">—</span>
                   )}
-                  {positionsMatch != null && (
+                  {positionsNetMatch != null && (
                     <span
+                      title="Compared on net only. Journal Long/Short count open trade rows; TradeStation shows net contracts."
                       className={clsx(
                         'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                        positionsMatch
+                        positionsNetMatch
                           ? 'bg-emerald-500/15 text-emerald-300'
                           : 'bg-amber-500/15 text-amber-300'
                       )}
                     >
-                      {positionsMatch ? 'Match' : 'Mismatch'}
+                      {positionsNetMatch ? 'Match' : 'Mismatch'}
                     </span>
                   )}
                 </div>
