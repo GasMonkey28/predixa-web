@@ -9,15 +9,17 @@ export interface TradeStationRecentFill {
   instrumentType: InstrumentType
   label: string
   date: string
+  time: string
+  timestampMs: number
   quantity: number
   price: number
   openOrClose: 'open' | 'close'
   buyOrSell: 'buy' | 'sell'
-  /** Signed value for the Buy column (open fills only). */
   buyValue: number | null
-  /** Exit price for the Sold column (close fills only). */
   soldValue: number | null
 }
+
+const FILLED_STATUSES = new Set(['FLL', 'FPR', 'FLP', 'OUT', 'CLS'])
 
 function parsePrice(value: string | undefined): number | null {
   if (!value) return null
@@ -31,11 +33,43 @@ function parseQuantity(value: string | undefined): number {
   return Math.abs(Math.floor(parsed))
 }
 
-function toDate(timestamp?: string): string {
-  if (!timestamp) return new Date().toISOString().slice(0, 10)
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10)
-  return date.toISOString().slice(0, 10)
+function orderTimestampMs(order: TradeStationOrder): number {
+  const value = order.ClosedDateTime || order.OpenedDateTime
+  if (!value) return 0
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function toEtDateTime(timestamp?: string): { date: string; time: string; timestampMs: number } {
+  if (!timestamp) {
+    const now = new Date()
+    return {
+      date: now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
+      time: now.toLocaleTimeString('en-US', {
+        timeZone: 'America/New_York',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }),
+      timestampMs: now.getTime(),
+    }
+  }
+
+  const parsed = new Date(timestamp)
+  if (Number.isNaN(parsed.getTime())) {
+    return toEtDateTime(undefined)
+  }
+
+  return {
+    date: parsed.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
+    time: parsed.toLocaleTimeString('en-US', {
+      timeZone: 'America/New_York',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }),
+    timestampMs: parsed.getTime(),
+  }
 }
 
 function legQuantity(
@@ -44,7 +78,17 @@ function legQuantity(
 ): number {
   const executed = Number(leg.ExecQuantity)
   if (Number.isFinite(executed) && executed > 0) return Math.abs(Math.floor(executed))
-  if (order.Status?.toUpperCase() === 'FLL') return parseQuantity(leg.QuantityOrdered)
+
+  const status = order.Status?.toUpperCase() ?? ''
+  if (FILLED_STATUSES.has(status)) {
+    const remaining = Number(leg.QuantityRemaining)
+    const ordered = parseQuantity(leg.QuantityOrdered)
+    if (Number.isFinite(remaining) && ordered > remaining && ordered - remaining > 0) {
+      return Math.floor(ordered - remaining)
+    }
+    return ordered
+  }
+
   return 0
 }
 
@@ -77,7 +121,12 @@ export function extractRecentFillsFromOrders(
   const fills: TradeStationRecentFill[] = []
 
   for (const order of orders) {
-    const date = toDate(order.ClosedDateTime || order.OpenedDateTime)
+    const status = order.Status?.toUpperCase() ?? ''
+    const hasExecution = (order.Legs ?? []).some((leg) => Number(leg.ExecQuantity) > 0)
+    if (!hasExecution && !FILLED_STATUSES.has(status)) continue
+
+    const ts = toEtDateTime(order.ClosedDateTime || order.OpenedDateTime)
+    const orderTs = orderTimestampMs(order) || ts.timestampMs
 
     for (let legIndex = 0; legIndex < (order.Legs?.length ?? 0); legIndex++) {
       const leg = order.Legs![legIndex]
@@ -109,7 +158,9 @@ export function extractRecentFillsFromOrders(
         symbol,
         instrumentType: mapSymbolToInstrument(symbol),
         label: formatLabel(symbol, openOrClose, buyOrSell, absPrice, qty),
-        date,
+        date: ts.date,
+        time: ts.time,
+        timestampMs: orderTs,
         quantity: qty,
         price: absPrice,
         openOrClose,
@@ -120,9 +171,7 @@ export function extractRecentFillsFromOrders(
     }
   }
 
-  return fills
-    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
-    .slice(0, limit)
+  return fills.sort((a, b) => b.timestampMs - a.timestampMs).slice(0, limit)
 }
 
 export function getUsedTradeStationFillIds(

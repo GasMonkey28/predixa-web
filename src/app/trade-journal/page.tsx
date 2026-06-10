@@ -481,7 +481,9 @@ export default function TradeJournalPage() {
                         className="flex cursor-grab items-center gap-2 rounded-md border border-zinc-700/80 bg-zinc-900/80 px-2 py-1.5 text-xs active:cursor-grabbing"
                       >
                         <GripVertical className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-                        <span className="tabular-nums text-gray-500">{fill.date}</span>
+                        <span className="shrink-0 tabular-nums text-gray-500">
+                          {fill.date} {fill.time}
+                        </span>
                         <span className="min-w-0 flex-1 truncate text-white">{fill.label}</span>
                         <span
                           className={clsx(

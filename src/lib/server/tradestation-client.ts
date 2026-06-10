@@ -144,3 +144,44 @@ export async function fetchTradeStationHistoricalOrders(
 
   return orders
 }
+
+/** Today's and still-open orders (not in historical until closed/moved). */
+export async function fetchTradeStationCurrentOrders(
+  accessToken: string,
+  accountIds: string[]
+): Promise<TradeStationOrder[]> {
+  if (accountIds.length === 0) return []
+
+  const orders: TradeStationOrder[] = []
+  let nextToken: string | undefined
+
+  do {
+    const params = new URLSearchParams()
+    if (nextToken) params.set('nextToken', nextToken)
+
+    const query = params.toString()
+    const path = `/brokerage/accounts/${accountIds.join(',')}/orders${query ? `?${query}` : ''}`
+
+    const data = await tradeStationFetch<{
+      Orders?: TradeStationOrder[]
+      NextToken?: string
+    }>(accessToken, path)
+
+    orders.push(...(data.Orders ?? []))
+    nextToken = data.NextToken
+  } while (nextToken)
+
+  return orders
+}
+
+export function mergeTradeStationOrders(
+  ...lists: TradeStationOrder[][]
+): TradeStationOrder[] {
+  const byId = new Map<string, TradeStationOrder>()
+  for (const list of lists) {
+    for (const order of list) {
+      byId.set(order.OrderID, order)
+    }
+  }
+  return Array.from(byId.values())
+}

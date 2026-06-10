@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { requireUserId } from '@/lib/server/cognito-request-auth'
 import {
+  fetchTradeStationCurrentOrders,
   fetchTradeStationHistoricalOrders,
   getValidAccessToken,
   historicalOrdersSinceDate,
+  mergeTradeStationOrders,
 } from '@/lib/server/tradestation-client'
 import { extractRecentFillsFromOrders } from '@/lib/tradestation-recent-fills'
 
@@ -21,12 +23,19 @@ export async function GET(request: NextRequest) {
 
   try {
     const { accessToken, connection } = await getValidAccessToken(userId)
-    const accountIds = connection.selectedAccountId
-      ? [connection.selectedAccountId]
-      : connection.accountIds
+    const accountIds =
+      connection.accountIds.length > 0
+        ? connection.accountIds
+        : connection.selectedAccountId
+          ? [connection.selectedAccountId]
+          : []
 
     const since = historicalOrdersSinceDate(days)
-    const orders = await fetchTradeStationHistoricalOrders(accessToken, accountIds, since)
+    const [currentOrders, historicalOrders] = await Promise.all([
+      fetchTradeStationCurrentOrders(accessToken, accountIds),
+      fetchTradeStationHistoricalOrders(accessToken, accountIds, since),
+    ])
+    const orders = mergeTradeStationOrders(currentOrders, historicalOrders)
     const fills = extractRecentFillsFromOrders(orders, limit)
 
     return NextResponse.json({
@@ -35,6 +44,8 @@ export async function GET(request: NextRequest) {
       limit,
       fills,
       orderCount: orders.length,
+      currentOrderCount: currentOrders.length,
+      historicalOrderCount: historicalOrders.length,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load recent fills'
