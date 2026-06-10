@@ -24,7 +24,7 @@ import {
   withRecalculatedProfit,
 } from '@/lib/trade-journal-types'
 import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
-import { mergeTradeStationEntries, type TradeStationPositionLine } from '@/lib/tradestation-map'
+import { type TradeStationPositionLine } from '@/lib/tradestation-map'
 import {
   createJournalEntryFromFill,
   getJournalTargetsForFillAction,
@@ -64,7 +64,6 @@ export default function TradeJournalPage() {
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [tsConnected, setTsConnected] = useState(false)
   const [tsLoading, setTsLoading] = useState(false)
-  const [tsSyncing, setTsSyncing] = useState(false)
   const [tsLoadingFills, setTsLoadingFills] = useState(false)
   const [tsRecentFills, setTsRecentFills] = useState<TradeStationRecentFill[]>([])
   const [tsDropTarget, setTsDropTarget] = useState<{ entryId: string; field: 'buy' | 'sold' } | null>(
@@ -350,40 +349,6 @@ export default function TradeJournalPage() {
     }
   }, [isAuthenticated])
 
-  const syncTradeStationPositions = async () => {
-    setTsSyncing(true)
-    setTsMessage(null)
-    try {
-      const response = await fetch('/api/tradestation/sync-positions', {
-        method: 'POST',
-        headers: await authHeaders(),
-        credentials: 'include',
-      })
-      const data = (await response.json()) as {
-        error?: string
-        entries?: Partial<TradeJournalEntry>[]
-        count?: number
-      }
-      if (!response.ok) {
-        setTsMessage(data.error || 'Failed to sync positions.')
-        return
-      }
-      setEntries((prev) =>
-        renumberEntries(
-          mergeTradeStationEntries(prev, data.entries ?? []).map((entry, index) =>
-            normalizeEntry(entry, index)
-          )
-        )
-      )
-      setTsMessage(`Synced ${data.count ?? 0} open position(s) from TradeStation.`)
-      await loadTradeStationPositions()
-    } catch {
-      setTsMessage('Failed to sync positions.')
-    } finally {
-      setTsSyncing(false)
-    }
-  }
-
   const loadRecentTradeStationFills = useCallback(async () => {
     setTsLoadingFills(true)
     setTsMessage(null)
@@ -586,7 +551,7 @@ export default function TradeJournalPage() {
                 <p className="text-xs text-gray-400">
                   {tsConnected
                     ? `Connected${tsAccounts[0]?.alias ? ` · ${tsAccounts[0].alias}` : ''}`
-                    : 'Connect to import open positions into the journal'}
+                    : 'Connect to load recent fills and compare net position'}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -611,14 +576,6 @@ export default function TradeJournalPage() {
                       className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
                     >
                       {tsLoadingFills ? 'Loading…' : 'Refresh recent fills'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={syncTradeStationPositions}
-                      disabled={tsSyncing}
-                      className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs font-medium text-gray-200 hover:bg-zinc-800 disabled:opacity-50"
-                    >
-                      {tsSyncing ? 'Syncing…' : 'Sync open positions'}
                     </button>
                     <button
                       type="button"
