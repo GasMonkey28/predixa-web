@@ -1084,7 +1084,7 @@ export default function TradeJournalPage() {
                   >
                     P&L Month
                   </th>
-                  <th className="px-3 py-3 text-left font-medium min-w-[16rem]">Reason / Rating</th>
+                  <th className="px-3 py-3 text-left font-medium min-w-[16rem]">Reason</th>
                   <th className="px-3 py-3 text-left font-medium w-20" />
                 </tr>
               </thead>
@@ -1315,22 +1315,13 @@ export default function TradeJournalPage() {
                           />
                         </td>
                         <td className="px-2 py-2 min-w-[16rem]">
-                          <div className="flex flex-col gap-1">
-                            <input
-                              type="text"
-                              value={entry.reason}
-                              onChange={(e) => updateEntry(entry.id, { reason: e.target.value })}
-                              placeholder="Reason (model signals, notes…)"
-                              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white"
-                            />
-                            <input
-                              type="text"
-                              value={entry.rating}
-                              onChange={(e) => updateEntry(entry.id, { rating: e.target.value })}
-                              placeholder="Rating"
-                              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-gray-300"
-                            />
-                          </div>
+                          <input
+                            type="text"
+                            value={entry.reason}
+                            onChange={(e) => updateEntry(entry.id, { reason: e.target.value })}
+                            placeholder="Model signals, notes…"
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white"
+                          />
                         </td>
                         <td className="px-2 py-2">
                           <button
