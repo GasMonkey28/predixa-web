@@ -24,6 +24,27 @@ export interface TradeStationPosition {
   Timestamp?: string
 }
 
+export interface TradeStationOrderLeg {
+  Symbol: string
+  BuyOrSell?: string
+  OpenOrClose?: string
+  ExecutionPrice?: string
+  ExecQuantity?: string
+  QuantityOrdered?: string
+  AssetType?: string
+}
+
+export interface TradeStationOrder {
+  OrderID: string
+  AccountID?: string
+  OpenedDateTime?: string
+  ClosedDateTime?: string
+  Status?: string
+  FilledPrice?: string
+  PriceUsedForBuyingPower?: string
+  Legs?: TradeStationOrderLeg[]
+}
+
 async function tradeStationFetch<T>(
   accessToken: string,
   path: string
@@ -90,4 +111,36 @@ export async function fetchTradeStationPositions(
     `/brokerage/accounts/${accountIds.join(',')}/positions`
   )
   return data.Positions ?? []
+}
+
+export function historicalOrdersSinceDate(daysBack = 89): string {
+  const date = new Date()
+  date.setDate(date.getDate() - Math.min(Math.max(daysBack, 1), 89))
+  return date.toISOString().slice(0, 10)
+}
+
+export async function fetchTradeStationHistoricalOrders(
+  accessToken: string,
+  accountIds: string[],
+  since: string
+): Promise<TradeStationOrder[]> {
+  if (accountIds.length === 0) return []
+
+  const orders: TradeStationOrder[] = []
+  let nextToken: string | undefined
+
+  do {
+    const params = new URLSearchParams({ since, pageSize: '600' })
+    if (nextToken) params.set('nextToken', nextToken)
+
+    const data = await tradeStationFetch<{
+      Orders?: TradeStationOrder[]
+      NextToken?: string
+    }>(accessToken, `/brokerage/accounts/${accountIds.join(',')}/historicalorders?${params}`)
+
+    orders.push(...(data.Orders ?? []))
+    nextToken = data.NextToken
+  } while (nextToken)
+
+  return orders
 }

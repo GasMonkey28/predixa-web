@@ -1,5 +1,8 @@
 import { InstrumentType, TradeJournalEntry } from '@/lib/trade-journal-types'
-import type { TradeStationPosition } from '@/lib/server/tradestation-client'
+import type {
+  TradeStationOrder,
+  TradeStationPosition,
+} from '@/lib/server/tradestation-client'
 
 export function getFuturesRoot(symbol: string): string {
   const normalized = symbol.replace(/^@/, '').toUpperCase()
@@ -53,7 +56,126 @@ export function mapPositionToJournalEntry(position: TradeStationPosition): Parti
   }
 }
 
-export function mergeSyncedPositions(
+type OpenLot = {
+  symbol: string
+  isShort: boolean
+  price: number
+  size: number
+  entryDate: string
+  orderId: string
+}
+
+function queueKey(symbol: string, isShort: boolean): string {
+  return `${symbol}:${isShort ? 'short' : 'long'}`
+}
+
+function orderTimestamp(order: TradeStationOrder): number {
+  const value = order.OpenedDateTime || order.ClosedDateTime
+  if (!value) return 0
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function legFillPrice(
+  leg: NonNullable<TradeStationOrder['Legs']>[number],
+  order: TradeStationOrder
+): number | null {
+  return (
+    parsePrice(leg.ExecutionPrice) ??
+    parsePrice(order.FilledPrice) ??
+    parsePrice(order.PriceUsedForBuyingPower)
+  )
+}
+
+function legFillQuantity(
+  leg: NonNullable<TradeStationOrder['Legs']>[number],
+  order: TradeStationOrder
+): number {
+  const executed = Number(leg.ExecQuantity)
+  if (Number.isFinite(executed) && executed > 0) return Math.abs(Math.floor(executed))
+  if (order.Status?.toUpperCase() === 'FLL') {
+    return parseQuantity(leg.QuantityOrdered)
+  }
+  return 0
+}
+
+/** Pair open/close fills (FIFO) into closed journal rows. */
+export function mapHistoricalOrdersToJournalEntries(
+  orders: TradeStationOrder[]
+): Partial<TradeJournalEntry>[] {
+  const sorted = [...orders].sort((a, b) => orderTimestamp(a) - orderTimestamp(b))
+  const queues = new Map<string, OpenLot[]>()
+  const entries: Partial<TradeJournalEntry>[] = []
+
+  for (const order of sorted) {
+    const entryDate = toEntryDate(order.OpenedDateTime)
+
+    for (const leg of order.Legs ?? []) {
+      const symbol = leg.Symbol
+      if (!symbol) continue
+
+      const qty = legFillQuantity(leg, order)
+      if (qty <= 0) continue
+
+      const price = legFillPrice(leg, order)
+      if (price == null) continue
+
+      const openOrClose = leg.OpenOrClose?.toLowerCase()
+      const buyOrSell = leg.BuyOrSell?.toLowerCase()
+
+      if (openOrClose === 'open') {
+        const isShort = buyOrSell === 'sell'
+        const key = queueKey(symbol, isShort)
+        const queue = queues.get(key) ?? []
+        queue.push({
+          symbol,
+          isShort,
+          price: Math.abs(price),
+          size: qty,
+          entryDate,
+          orderId: order.OrderID,
+        })
+        queues.set(key, queue)
+        continue
+      }
+
+      if (openOrClose === 'close') {
+        const closesLong = buyOrSell === 'sell'
+        const isShort = !closesLong
+        const key = queueKey(symbol, isShort)
+        const queue = queues.get(key) ?? []
+        if (queue.length === 0) continue
+
+        const open = queue.shift()!
+        const size = Math.min(open.size, qty)
+        const buyPrice = open.isShort ? -open.price : open.price
+
+        entries.push({
+          entryDate: open.entryDate,
+          profitMonth: null,
+          instrumentType: mapSymbolToInstrument(symbol),
+          positionSize: size,
+          buyPrice,
+          soldPrice: Math.abs(price),
+          targetPrice: null,
+          reason: `TradeStation ${symbol}`,
+          rating: '',
+          source: 'tradestation',
+          externalId: `ts-trade-${open.orderId}-${order.OrderID}`,
+        })
+
+        if (open.size > size) {
+          queue.unshift({ ...open, size: open.size - size })
+        }
+        queues.set(key, queue)
+      }
+    }
+  }
+
+  return entries.sort((a, b) => (b.entryDate ?? '').localeCompare(a.entryDate ?? ''))
+}
+
+export function mergeTradeStationEntries(
   entries: TradeJournalEntry[],
   synced: Partial<TradeJournalEntry>[]
 ): TradeJournalEntry[] {
@@ -68,17 +190,20 @@ export function mergeSyncedPositions(
   for (const patch of synced) {
     if (!patch.externalId) continue
     const existing = byExternalId.get(patch.externalId)
+
     if (existing) {
       const index = next.findIndex((entry) => entry.id === existing.id)
       if (index >= 0) {
         next[index] = {
           ...existing,
-          entryDate: patch.entryDate ?? existing.entryDate,
+          entryDate: existing.entryDate || patch.entryDate || existing.entryDate,
           instrumentType: patch.instrumentType ?? existing.instrumentType,
           positionSize: patch.positionSize ?? existing.positionSize,
           buyPrice: patch.buyPrice ?? existing.buyPrice,
-          soldPrice: existing.soldPrice ?? null,
+          soldPrice: patch.soldPrice ?? existing.soldPrice ?? null,
           reason: existing.reason || patch.reason || '',
+          rating: existing.rating,
+          profitMonth: existing.profitMonth,
           source: 'tradestation',
           externalId: patch.externalId,
         }
@@ -86,23 +211,33 @@ export function mergeSyncedPositions(
       continue
     }
 
-    next.push({
+    const created: TradeJournalEntry = {
       id: crypto.randomUUID(),
       entryDate: patch.entryDate ?? new Date().toISOString().slice(0, 10),
-      profitMonth: null,
+      profitMonth: patch.profitMonth ?? null,
       no: 0,
       instrumentType: patch.instrumentType ?? 'mini_future',
       positionSize: patch.positionSize ?? 1,
       buyPrice: patch.buyPrice ?? null,
-      soldPrice: null,
-      targetPrice: null,
+      soldPrice: patch.soldPrice ?? null,
+      targetPrice: patch.targetPrice ?? null,
       profit: null,
       reason: patch.reason ?? '',
-      rating: '',
+      rating: patch.rating ?? '',
       source: 'tradestation',
       externalId: patch.externalId,
-    })
+    }
+    next.unshift(created)
+    byExternalId.set(patch.externalId, created)
   }
 
   return next
+}
+
+/** @deprecated Use mergeTradeStationEntries */
+export function mergeSyncedPositions(
+  entries: TradeJournalEntry[],
+  synced: Partial<TradeJournalEntry>[]
+): TradeJournalEntry[] {
+  return mergeTradeStationEntries(entries, synced)
 }

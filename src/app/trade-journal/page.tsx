@@ -22,7 +22,7 @@ import {
   withRecalculatedProfit,
 } from '@/lib/trade-journal-types'
 import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
-import { mergeSyncedPositions } from '@/lib/tradestation-map'
+import { mergeTradeStationEntries } from '@/lib/tradestation-map'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 function parseNumber(value: string): number | null {
@@ -53,6 +53,7 @@ export default function TradeJournalPage() {
   const [tsConnected, setTsConnected] = useState(false)
   const [tsLoading, setTsLoading] = useState(false)
   const [tsSyncing, setTsSyncing] = useState(false)
+  const [tsImporting, setTsImporting] = useState(false)
   const [tsMessage, setTsMessage] = useState<string | null>(null)
   const [tsAccounts, setTsAccounts] = useState<{ id: string; type?: string; alias?: string }[]>([])
 
@@ -252,7 +253,7 @@ export default function TradeJournalPage() {
       }
       setEntries((prev) =>
         renumberEntries(
-          mergeSyncedPositions(prev, data.entries ?? []).map((entry, index) =>
+          mergeTradeStationEntries(prev, data.entries ?? []).map((entry, index) =>
             normalizeEntry(entry, index)
           )
         )
@@ -262,6 +263,44 @@ export default function TradeJournalPage() {
       setTsMessage('Failed to sync positions.')
     } finally {
       setTsSyncing(false)
+    }
+  }
+
+  const importTradeStationTransactions = async () => {
+    setTsImporting(true)
+    setTsMessage(null)
+    try {
+      const response = await fetch('/api/tradestation/sync-transactions', {
+        method: 'POST',
+        headers: await authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ days: 89 }),
+      })
+      const data = (await response.json()) as {
+        error?: string
+        entries?: Partial<TradeJournalEntry>[]
+        tradeCount?: number
+        orderCount?: number
+        since?: string
+      }
+      if (!response.ok) {
+        setTsMessage(data.error || 'Failed to import transactions.')
+        return
+      }
+      setEntries((prev) =>
+        renumberEntries(
+          mergeTradeStationEntries(prev, data.entries ?? []).map((entry, index) =>
+            normalizeEntry(entry, index)
+          )
+        )
+      )
+      setTsMessage(
+        `Imported ${data.tradeCount ?? 0} closed trade(s) from ${data.orderCount ?? 0} orders since ${data.since ?? 'recent history'}.`
+      )
+    } catch {
+      setTsMessage('Failed to import transactions.')
+    } finally {
+      setTsImporting(false)
     }
   }
 
@@ -328,9 +367,17 @@ export default function TradeJournalPage() {
                   <>
                     <button
                       type="button"
+                      onClick={importTradeStationTransactions}
+                      disabled={tsImporting}
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                    >
+                      {tsImporting ? 'Importing…' : 'Import transactions (90d)'}
+                    </button>
+                    <button
+                      type="button"
                       onClick={syncTradeStationPositions}
                       disabled={tsSyncing}
-                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                      className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs font-medium text-gray-200 hover:bg-zinc-800 disabled:opacity-50"
                     >
                       {tsSyncing ? 'Syncing…' : 'Sync open positions'}
                     </button>
