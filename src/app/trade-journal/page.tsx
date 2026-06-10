@@ -70,10 +70,17 @@ export default function TradeJournalPage() {
   const [tsAccounts, setTsAccounts] = useState<{ id: string; type?: string; alias?: string }[]>([])
   const [dismissedTsFillIds, setDismissedTsFillIds] = useState<Set<string>>(new Set())
 
-  const visibleTsFills = useMemo(() => {
-    const used = getUsedTradeStationFillIds(entries)
-    return tsRecentFills.filter((fill) => !used.has(fill.id) && !dismissedTsFillIds.has(fill.id))
-  }, [entries, tsRecentFills, dismissedTsFillIds])
+  const usedTsFillIds = useMemo(() => getUsedTradeStationFillIds(entries), [entries])
+
+  const visibleTsFills = useMemo(
+    () => tsRecentFills.filter((fill) => !dismissedTsFillIds.has(fill.id)),
+    [tsRecentFills, dismissedTsFillIds]
+  )
+
+  const dismissedTsFillCount = useMemo(
+    () => tsRecentFills.filter((fill) => dismissedTsFillIds.has(fill.id)).length,
+    [tsRecentFills, dismissedTsFillIds]
+  )
 
   useEffect(() => {
     if (!isLoaded) return
@@ -372,6 +379,12 @@ export default function TradeJournalPage() {
     [user?.userId]
   )
 
+  const restoreRemovedTsFills = useCallback(() => {
+    setDismissedTsFillIds(new Set())
+    saveDismissedTsFillIds(new Set(), user?.userId)
+    setTsMessage('Restored removed fills.')
+  }, [user?.userId])
+
   const handleTsFillDrop = useCallback(
     (entryId: string, field: 'buy' | 'sold', e: React.DragEvent) => {
       e.preventDefault()
@@ -485,27 +498,45 @@ export default function TradeJournalPage() {
 
             {tsConnected && (
               <div className="mt-3 rounded-lg border border-zinc-700/60 bg-zinc-950/80 p-3">
-                <p className="mb-2 text-xs font-medium text-gray-300">
-                  Drag onto journal <strong>Buy</strong> (long open or short open as negative) or{' '}
-                  <strong>Sold</strong> (closes).
-                </p>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-gray-300">
+                    Drag onto journal <strong>Buy</strong> or <strong>Sold</strong>, or use Add row.
+                  </p>
+                  {dismissedTsFillCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={restoreRemovedTsFills}
+                      className="text-xs text-blue-300 hover:text-blue-200"
+                    >
+                      Restore removed ({dismissedTsFillCount})
+                    </button>
+                  )}
+                </div>
                 {visibleTsFills.length === 0 ? (
                   <p className="text-xs text-gray-500">
                     {tsRecentFills.length === 0
                       ? 'No fills loaded. Click Refresh recent fills.'
-                      : 'All loaded fills are already placed in the journal.'}
+                      : 'All fills were removed. Click Restore removed above.'}
                   </p>
                 ) : (
                   <ul className="space-y-1">
-                    {visibleTsFills.map((fill) => (
+                    {visibleTsFills.map((fill) => {
+                      const inJournal = usedTsFillIds.has(fill.id)
+                      return (
                       <li
                         key={fill.id}
-                        draggable
+                        draggable={!inJournal}
                         onDragStart={(e) => {
+                          if (inJournal) return
                           e.dataTransfer.setData(TS_FILL_DRAG_TYPE, JSON.stringify(fill))
                           e.dataTransfer.effectAllowed = 'copy'
                         }}
-                        className="flex cursor-grab items-center gap-2 rounded-md border border-zinc-700/80 bg-zinc-900/80 px-2 py-1.5 text-xs active:cursor-grabbing"
+                        className={clsx(
+                          'flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs',
+                          inJournal
+                            ? 'border-zinc-800/80 bg-zinc-900/40 opacity-70'
+                            : 'cursor-grab border-zinc-700/80 bg-zinc-900/80 active:cursor-grabbing'
+                        )}
                       >
                         <GripVertical className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
                         <span className="shrink-0 tabular-nums text-gray-500">
@@ -537,13 +568,19 @@ export default function TradeJournalPage() {
                               ? '→ Sell'
                               : '→ Buy'}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => addFillAsJournalEntry(fill)}
-                          className="shrink-0 rounded border border-zinc-600 px-2 py-0.5 text-[10px] font-medium text-blue-300 hover:border-blue-500/50 hover:bg-blue-500/10"
-                        >
-                          Add row
-                        </button>
+                        {inJournal ? (
+                          <span className="shrink-0 rounded bg-zinc-700/60 px-2 py-0.5 text-[10px] text-gray-400">
+                            In journal
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => addFillAsJournalEntry(fill)}
+                            className="shrink-0 rounded border border-zinc-600 px-2 py-0.5 text-[10px] font-medium text-blue-300 hover:border-blue-500/50 hover:bg-blue-500/10"
+                          >
+                            Add row
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => removeTsFillFromList(fill.id)}
@@ -553,7 +590,7 @@ export default function TradeJournalPage() {
                           Remove
                         </button>
                       </li>
-                    ))}
+                    )})}
                   </ul>
                 )}
               </div>
