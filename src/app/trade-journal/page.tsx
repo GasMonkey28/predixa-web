@@ -100,8 +100,13 @@ export default function TradeJournalPage() {
   useEffect(() => {
     if (!tsFillActionMenu) return
 
-    const isInsideTsFillMenu = (event: Event) => {
-      const nodes = 'composedPath' in event ? event.composedPath() : [event.target]
+    const isInsideTsFillMenu = (event: MouseEvent) => {
+      const nodes: EventTarget[] =
+        typeof event.composedPath === 'function'
+          ? event.composedPath()
+          : event.target != null
+            ? [event.target]
+            : []
       return nodes.some(
         (node) => node instanceof Element && node.closest('[data-ts-fill-menu]') != null
       )
@@ -326,8 +331,13 @@ export default function TradeJournalPage() {
         setTsPositionLines([])
         return
       }
-      const { lines = [], ...summary } = data.summary ?? {}
-      setTsPositionSummary(summary)
+      if (!data.summary) {
+        setTsPositionSummary(null)
+        setTsPositionLines([])
+        return
+      }
+      const { lines = [], highestLong, highestShort, netPosition } = data.summary
+      setTsPositionSummary({ highestLong, highestShort, netPosition })
       setTsPositionLines(lines)
     } catch {
       setTsPositionSummary(null)

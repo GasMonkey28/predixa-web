@@ -31,6 +31,7 @@ export interface TradeStationOrderLeg {
   ExecutionPrice?: string
   ExecQuantity?: string
   QuantityOrdered?: string
+  QuantityRemaining?: string
   AssetType?: string
 }
 
