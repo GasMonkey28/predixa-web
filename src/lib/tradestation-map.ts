@@ -1,4 +1,4 @@
-import { InstrumentType, TradeJournalEntry } from '@/lib/trade-journal-types'
+import { InstrumentType, OpenPositionSummary, TradeJournalEntry } from '@/lib/trade-journal-types'
 import type {
   TradeStationOrder,
   TradeStationPosition,
@@ -34,6 +34,56 @@ function toEntryDate(timestamp?: string): string {
   const date = new Date(timestamp)
   if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10)
   return date.toISOString().slice(0, 10)
+}
+
+export interface TradeStationPositionLine {
+  symbol: string
+  instrumentType: InstrumentType
+  quantity: number
+  longShort: 'Long' | 'Short'
+  signedQuantity: number
+}
+
+export function isJournalComparableSymbol(symbol: string): boolean {
+  const root = getFuturesRoot(symbol)
+  return root.startsWith('MES') || root.startsWith('ES')
+}
+
+/** Net long/short contract counts from TradeStation open positions (MES + ES). */
+export function calcTradeStationPositionSummary(
+  positions: Pick<TradeStationPosition, 'Symbol' | 'Quantity' | 'LongShort'>[]
+): OpenPositionSummary & { lines: TradeStationPositionLine[] } {
+  const lines: TradeStationPositionLine[] = []
+  let longContracts = 0
+  let shortContracts = 0
+
+  for (const position of positions) {
+    if (!isJournalComparableSymbol(position.Symbol)) continue
+
+    const quantity = parseQuantity(position.Quantity)
+    const isShort = position.LongShort?.toLowerCase() === 'short'
+    const signedQuantity = isShort ? -quantity : quantity
+
+    lines.push({
+      symbol: position.Symbol,
+      instrumentType: mapSymbolToInstrument(position.Symbol),
+      quantity,
+      longShort: isShort ? 'Short' : 'Long',
+      signedQuantity,
+    })
+
+    if (isShort) shortContracts += quantity
+    else longContracts += quantity
+  }
+
+  lines.sort((a, b) => a.symbol.localeCompare(b.symbol))
+
+  return {
+    highestLong: longContracts,
+    highestShort: shortContracts > 0 ? -shortContracts : 0,
+    netPosition: longContracts - shortContracts,
+    lines,
+  }
 }
 
 export function mapPositionToJournalEntry(position: TradeStationPosition): Partial<TradeJournalEntry> {

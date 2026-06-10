@@ -12,6 +12,7 @@ import {
   INSTRUMENT_OPTIONS,
   calcMonthlyProfitSummaries,
   calcOpenPositionSummary,
+  type OpenPositionSummary,
   createEmptyEntry,
   createMonthlyProfitEntry,
   getEntryProfit,
@@ -22,7 +23,7 @@ import {
   withRecalculatedProfit,
 } from '@/lib/trade-journal-types'
 import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
-import { mergeTradeStationEntries } from '@/lib/tradestation-map'
+import { mergeTradeStationEntries, type TradeStationPositionLine } from '@/lib/tradestation-map'
 import {
   createJournalEntryFromFill,
   getJournalTargetsForFillAction,
@@ -75,6 +76,9 @@ export default function TradeJournalPage() {
     fillId: string
     action: TsFillJournalAction
   } | null>(null)
+  const [tsPositionSummary, setTsPositionSummary] = useState<OpenPositionSummary | null>(null)
+  const [tsPositionLines, setTsPositionLines] = useState<TradeStationPositionLine[]>([])
+  const [tsLoadingPositions, setTsLoadingPositions] = useState(false)
 
   const usedTsFillIds = useMemo(() => getUsedTradeStationFillIds(entries), [entries])
 
@@ -214,6 +218,14 @@ export default function TradeJournalPage() {
   }, [entries, monthlyProfitEntries])
 
   const positionSummary = useMemo(() => calcOpenPositionSummary(entries), [entries])
+  const positionsMatch = useMemo(() => {
+    if (!tsPositionSummary) return null
+    return (
+      tsPositionSummary.netPosition === positionSummary.netPosition &&
+      tsPositionSummary.highestLong === positionSummary.highestLong &&
+      tsPositionSummary.highestShort === positionSummary.highestShort
+    )
+  }, [tsPositionSummary, positionSummary])
   const monthlySummaries = useMemo(
     () => calcMonthlyProfitSummaries(entries, monthlyProfitEntries),
     [entries, monthlyProfitEntries]
@@ -288,11 +300,42 @@ export default function TradeJournalPage() {
       })
       setTsConnected(false)
       setTsAccounts([])
+      setTsPositionSummary(null)
+      setTsPositionLines([])
       setTsMessage('TradeStation disconnected.')
     } finally {
       setTsLoading(false)
     }
   }
+
+  const loadTradeStationPositions = useCallback(async () => {
+    if (!isAuthenticated) return
+    setTsLoadingPositions(true)
+    try {
+      const response = await fetch('/api/tradestation/positions', {
+        headers: await authHeaders(),
+        credentials: 'include',
+        cache: 'no-store',
+      })
+      const data = (await response.json()) as {
+        error?: string
+        summary?: OpenPositionSummary & { lines?: TradeStationPositionLine[] }
+      }
+      if (!response.ok) {
+        setTsPositionSummary(null)
+        setTsPositionLines([])
+        return
+      }
+      const { lines = [], ...summary } = data.summary ?? {}
+      setTsPositionSummary(summary)
+      setTsPositionLines(lines)
+    } catch {
+      setTsPositionSummary(null)
+      setTsPositionLines([])
+    } finally {
+      setTsLoadingPositions(false)
+    }
+  }, [isAuthenticated])
 
   const syncTradeStationPositions = async () => {
     setTsSyncing(true)
@@ -320,6 +363,7 @@ export default function TradeJournalPage() {
         )
       )
       setTsMessage(`Synced ${data.count ?? 0} open position(s) from TradeStation.`)
+      await loadTradeStationPositions()
     } catch {
       setTsMessage('Failed to sync positions.')
     } finally {
@@ -356,8 +400,9 @@ export default function TradeJournalPage() {
   useEffect(() => {
     if (tsConnected && isLoaded) {
       void loadRecentTradeStationFills()
+      void loadTradeStationPositions()
     }
-  }, [tsConnected, isLoaded, loadRecentTradeStationFills])
+  }, [tsConnected, isLoaded, loadRecentTradeStationFills, loadTradeStationPositions])
 
   const applyTsFillToEntry = useCallback(
     (
@@ -545,7 +590,10 @@ export default function TradeJournalPage() {
                   <>
                     <button
                       type="button"
-                      onClick={loadRecentTradeStationFills}
+                      onClick={async () => {
+                        await loadRecentTradeStationFills()
+                        await loadTradeStationPositions()
+                      }}
                       disabled={tsLoadingFills}
                       className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
                     >
@@ -785,36 +833,124 @@ export default function TradeJournalPage() {
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-800/80 bg-zinc-900/50 px-4 py-3">
-            <div className="flex items-baseline gap-2">
-              <span className="text-sm font-medium text-gray-400">Net Position</span>
-              <span
-                className={clsx(
-                  'text-2xl font-bold tabular-nums',
-                  positionSummary.netPosition > 0 && 'text-emerald-400',
-                  positionSummary.netPosition < 0 && 'text-red-400',
-                  positionSummary.netPosition === 0 && 'text-gray-300'
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border-b border-zinc-800/80 bg-zinc-900/50 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-medium text-gray-400">Journal Net</span>
+                <span
+                  className={clsx(
+                    'text-2xl font-bold tabular-nums',
+                    positionSummary.netPosition > 0 && 'text-emerald-400',
+                    positionSummary.netPosition < 0 && 'text-red-400',
+                    positionSummary.netPosition === 0 && 'text-gray-300'
+                  )}
+                >
+                  {positionSummary.netPosition > 0 ? '+' : ''}
+                  {positionSummary.netPosition}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-sm tabular-nums">
+                <span className="text-gray-500">
+                  Long{' '}
+                  <span className="font-semibold text-emerald-400">
+                    {positionSummary.highestLong > 0 ? positionSummary.highestLong : '—'}
+                  </span>
+                </span>
+                <span className="text-gray-600">+</span>
+                <span className="text-gray-500">
+                  Short{' '}
+                  <span className="font-semibold text-red-400">
+                    {positionSummary.highestShort < 0 ? positionSummary.highestShort : '—'}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            {tsConnected && (
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-l border-zinc-700/80 pl-0 sm:pl-6">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm font-medium text-gray-400">TradeStation Net</span>
+                  {tsLoadingPositions && !tsPositionSummary ? (
+                    <span className="text-sm text-gray-500">Loading…</span>
+                  ) : tsPositionSummary ? (
+                    <span
+                      className={clsx(
+                        'text-2xl font-bold tabular-nums',
+                        tsPositionSummary.netPosition > 0 && 'text-emerald-400',
+                        tsPositionSummary.netPosition < 0 && 'text-red-400',
+                        tsPositionSummary.netPosition === 0 && 'text-gray-300'
+                      )}
+                    >
+                      {tsPositionSummary.netPosition > 0 ? '+' : ''}
+                      {tsPositionSummary.netPosition}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-500">—</span>
+                  )}
+                  {positionsMatch != null && (
+                    <span
+                      className={clsx(
+                        'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                        positionsMatch
+                          ? 'bg-emerald-500/15 text-emerald-300'
+                          : 'bg-amber-500/15 text-amber-300'
+                      )}
+                    >
+                      {positionsMatch ? 'Match' : 'Mismatch'}
+                    </span>
+                  )}
+                </div>
+                {tsPositionSummary && (
+                  <div className="flex flex-wrap items-center gap-3 text-sm tabular-nums">
+                    <span className="text-gray-500">
+                      Long{' '}
+                      <span className="font-semibold text-emerald-400">
+                        {tsPositionSummary.highestLong > 0 ? tsPositionSummary.highestLong : '—'}
+                      </span>
+                    </span>
+                    <span className="text-gray-600">+</span>
+                    <span className="text-gray-500">
+                      Short{' '}
+                      <span className="font-semibold text-red-400">
+                        {tsPositionSummary.highestShort < 0 ? tsPositionSummary.highestShort : '—'}
+                      </span>
+                    </span>
+                  </div>
                 )}
-              >
-                {positionSummary.netPosition > 0 ? '+' : ''}
-                {positionSummary.netPosition}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-sm tabular-nums">
-              <span className="text-gray-500">
-                Long{' '}
-                <span className="font-semibold text-emerald-400">
-                  {positionSummary.highestLong > 0 ? positionSummary.highestLong : '—'}
-                </span>
-              </span>
-              <span className="text-gray-600">+</span>
-              <span className="text-gray-500">
-                Short{' '}
-                <span className="font-semibold text-red-400">
-                  {positionSummary.highestShort < 0 ? positionSummary.highestShort : '—'}
-                </span>
-              </span>
-            </div>
+                {tsPositionLines.length > 0 && (
+                  <div className="flex flex-wrap gap-2 text-[10px] tabular-nums text-gray-500">
+                    {tsPositionLines.map((line) => (
+                      <span
+                        key={line.symbol}
+                        className="rounded border border-zinc-700/80 bg-zinc-900/60 px-2 py-0.5"
+                      >
+                        {line.symbol}{' '}
+                        <span
+                          className={
+                            line.signedQuantity > 0
+                              ? 'text-emerald-400'
+                              : line.signedQuantity < 0
+                                ? 'text-red-400'
+                                : 'text-gray-400'
+                          }
+                        >
+                          {line.signedQuantity > 0 ? '+' : ''}
+                          {line.signedQuantity}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void loadTradeStationPositions()}
+                  disabled={tsLoadingPositions}
+                  className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-gray-300 hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {tsLoadingPositions ? 'Refreshing…' : 'Refresh TS position'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="border-b border-zinc-800/80 px-4 py-3">
