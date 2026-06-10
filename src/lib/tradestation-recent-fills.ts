@@ -1,4 +1,4 @@
-import { InstrumentType } from '@/lib/trade-journal-types'
+import { InstrumentType, TradeJournalEntry } from '@/lib/trade-journal-types'
 import type { TradeStationOrder } from '@/lib/server/tradestation-client'
 import { mapSymbolToInstrument } from '@/lib/tradestation-map'
 
@@ -172,6 +172,29 @@ export function extractRecentFillsFromOrders(
   }
 
   return fills.sort((a, b) => b.timestampMs - a.timestampMs).slice(0, limit)
+}
+
+export function createJournalEntryFromFill(fill: TradeStationRecentFill): TradeJournalEntry {
+  const isOpen = fill.openOrClose === 'open'
+
+  return {
+    id: crypto.randomUUID(),
+    entryDate: fill.date,
+    profitMonth: null,
+    no: 0,
+    instrumentType: fill.instrumentType,
+    positionSize: fill.quantity,
+    buyPrice: isOpen ? fill.buyValue : null,
+    soldPrice: isOpen ? null : fill.soldValue,
+    targetPrice: null,
+    profit: null,
+    reason: `TradeStation ${fill.symbol}`,
+    rating: '',
+    source: 'tradestation',
+    externalId: null,
+    tradestationBuyFillId: isOpen ? fill.id : null,
+    tradestationSoldFillId: isOpen ? null : fill.id,
+  }
 }
 
 export function getUsedTradeStationFillIds(

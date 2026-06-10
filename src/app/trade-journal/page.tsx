@@ -24,6 +24,7 @@ import {
 import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
 import { mergeTradeStationEntries } from '@/lib/tradestation-map'
 import {
+  createJournalEntryFromFill,
   getUsedTradeStationFillIds,
   TS_FILL_DRAG_TYPE,
   TradeStationRecentFill,
@@ -345,6 +346,12 @@ export default function TradeJournalPage() {
     [updateEntry]
   )
 
+  const addFillAsJournalEntry = useCallback((fill: TradeStationRecentFill) => {
+    const entry = withRecalculatedProfit(createJournalEntryFromFill(fill))
+    setEntries((prev) => renumberEntries([entry, ...prev]))
+    setTsMessage(`Added new row: ${fill.label}`)
+  }, [])
+
   const handleTsFillDrop = useCallback(
     (entryId: string, field: 'buy' | 'sold', e: React.DragEvent) => {
       e.preventDefault()
@@ -510,6 +517,13 @@ export default function TradeJournalPage() {
                               ? '→ Sell'
                               : '→ Buy'}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => addFillAsJournalEntry(fill)}
+                          className="shrink-0 rounded border border-zinc-600 px-2 py-0.5 text-[10px] font-medium text-blue-300 hover:border-blue-500/50 hover:bg-blue-500/10"
+                        >
+                          Add row
+                        </button>
                       </li>
                     ))}
                   </ul>
