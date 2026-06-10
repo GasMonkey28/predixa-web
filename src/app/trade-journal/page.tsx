@@ -459,8 +459,8 @@ export default function TradeJournalPage() {
             {tsConnected && (
               <div className="mt-3 rounded-lg border border-zinc-700/60 bg-zinc-950/80 p-3">
                 <p className="mb-2 text-xs font-medium text-gray-300">
-                  Recent TradeStation fills — drag onto a journal row&apos;s <strong>Buy</strong> or{' '}
-                  <strong>Sold</strong> cell
+                  Drag onto journal <strong>Buy</strong> (long open or short open as negative) or{' '}
+                  <strong>Sold</strong> (closes).
                 </p>
                 {visibleTsFills.length === 0 ? (
                   <p className="text-xs text-gray-500">
@@ -486,14 +486,29 @@ export default function TradeJournalPage() {
                         </span>
                         <span className="min-w-0 flex-1 truncate text-white">{fill.label}</span>
                         <span
+                          title={
+                            fill.openOrClose === 'open' && fill.buyOrSell === 'sell'
+                              ? 'Short open — drop on Buy (saved as negative price)'
+                              : fill.openOrClose === 'open'
+                                ? 'Long open — drop on Buy'
+                                : 'Close — drop on Sold'
+                          }
                           className={clsx(
                             'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
-                            fill.openOrClose === 'open'
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : 'bg-amber-500/20 text-amber-300'
+                            fill.openOrClose === 'close' && 'bg-amber-500/20 text-amber-300',
+                            fill.openOrClose === 'open' &&
+                              fill.buyOrSell === 'buy' &&
+                              'bg-emerald-500/20 text-emerald-400',
+                            fill.openOrClose === 'open' &&
+                              fill.buyOrSell === 'sell' &&
+                              'bg-red-500/20 text-red-400'
                           )}
                         >
-                          {fill.openOrClose === 'open' ? '→ Buy' : '→ Sold'}
+                          {fill.openOrClose === 'close'
+                            ? '→ Sold'
+                            : fill.buyOrSell === 'sell'
+                              ? '→ Sell'
+                              : '→ Buy'}
                         </span>
                       </li>
                     ))}
