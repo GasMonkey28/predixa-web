@@ -24,6 +24,7 @@ import {
   withRecalculatedProfit,
 } from '@/lib/trade-journal-types'
 import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
+import { fetchTradeJournalReason } from '@/lib/trade-journal-reason'
 import { type TradeStationPositionLine } from '@/lib/tradestation-map'
 import {
   createJournalEntryFromFill,
@@ -80,6 +81,7 @@ export default function TradeJournalPage() {
   const [tsPositionLines, setTsPositionLines] = useState<TradeStationPositionLine[]>([])
   const [tsLoadingPositions, setTsLoadingPositions] = useState(false)
   const [entryDateSort, setEntryDateSort] = useState<'asc' | 'desc' | null>('asc')
+  const [addingEntry, setAddingEntry] = useState(false)
 
   const usedTsFillIds = useMemo(() => getUsedTradeStationFillIds(entries), [entries])
 
@@ -267,8 +269,17 @@ export default function TradeJournalPage() {
     )
   }, [])
 
-  const addEntry = () => {
-    setEntries((prev) => renumberEntries([...prev, createEmptyEntry(prev.length + 1)]))
+  const addEntry = async () => {
+    setAddingEntry(true)
+    try {
+      const entry = createEmptyEntry(entries.length + 1)
+      const reason = await fetchTradeJournalReason(entry.entryDate)
+      setEntries((prev) =>
+        renumberEntries([...prev, reason ? { ...entry, reason } : entry])
+      )
+    } finally {
+      setAddingEntry(false)
+    }
   }
 
   const removeEntry = (id: string) => {
@@ -464,8 +475,13 @@ export default function TradeJournalPage() {
     []
   )
 
-  const addFillAsJournalEntry = useCallback((fill: TradeStationRecentFill) => {
-    const entry = withRecalculatedProfit(createJournalEntryFromFill(fill))
+  const addFillAsJournalEntry = useCallback(async (fill: TradeStationRecentFill) => {
+    const modelReason = await fetchTradeJournalReason(fill.date)
+    const base = createJournalEntryFromFill(fill)
+    const entry = withRecalculatedProfit({
+      ...base,
+      reason: modelReason || base.reason,
+    })
     setEntries((prev) => renumberEntries([entry, ...prev]))
     setTsMessage(`Added new row: ${fill.label}`)
   }, [])
@@ -760,7 +776,7 @@ export default function TradeJournalPage() {
                             <>
                               <button
                                 type="button"
-                                onClick={() => addFillAsJournalEntry(fill)}
+                                onClick={() => void addFillAsJournalEntry(fill)}
                                 className="shrink-0 rounded border border-zinc-600 px-2 py-0.5 text-[10px] font-medium text-blue-300 hover:border-blue-500/50 hover:bg-blue-500/10"
                               >
                                 Add row
@@ -796,10 +812,11 @@ export default function TradeJournalPage() {
             <h2 className="text-lg font-semibold text-white">Trades</h2>
             <button
               type="button"
-              onClick={addEntry}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
+              onClick={() => void addEntry()}
+              disabled={addingEntry}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors disabled:opacity-50"
             >
-              Add Trade
+              {addingEntry ? 'Adding…' : 'Add Trade'}
             </button>
           </div>
 
