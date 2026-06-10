@@ -153,6 +153,16 @@ export function getTradeNumber(entries: TradeJournalEntry[], entryId: string): n
   return side === 'short' ? -number : number
 }
 
+export function sortEntriesByEntryDate(
+  entries: TradeJournalEntry[],
+  direction: 'asc' | 'desc'
+): TradeJournalEntry[] {
+  return [...entries].sort((a, b) => {
+    const cmp = (a.entryDate || '9999-12-31').localeCompare(b.entryDate || '9999-12-31')
+    return direction === 'asc' ? cmp : -cmp
+  })
+}
+
 export function renumberEntries(entries: TradeJournalEntry[]): TradeJournalEntry[] {
   return entries.map((entry) => {
     const no = getTradeNumber(entries, entry.id) ?? 0

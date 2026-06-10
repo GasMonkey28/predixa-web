@@ -20,6 +20,7 @@ import {
   getTradeNumber,
   isShortPosition,
   renumberEntries,
+  sortEntriesByEntryDate,
   withRecalculatedProfit,
 } from '@/lib/trade-journal-types'
 import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
@@ -79,6 +80,7 @@ export default function TradeJournalPage() {
   const [tsPositionSummary, setTsPositionSummary] = useState<OpenPositionSummary | null>(null)
   const [tsPositionLines, setTsPositionLines] = useState<TradeStationPositionLine[]>([])
   const [tsLoadingPositions, setTsLoadingPositions] = useState(false)
+  const [entryDateSort, setEntryDateSort] = useState<'asc' | 'desc' | null>('asc')
 
   const usedTsFillIds = useMemo(() => getUsedTradeStationFillIds(entries), [entries])
 
@@ -221,6 +223,11 @@ export default function TradeJournalPage() {
     const manualTotal = monthlyProfitEntries.reduce((sum, line) => sum + line.amount, 0)
     return tradeTotal + manualTotal
   }, [entries, monthlyProfitEntries])
+
+  const displayEntries = useMemo(() => {
+    if (!entryDateSort) return entries
+    return sortEntriesByEntryDate(entries, entryDateSort)
+  }, [entries, entryDateSort])
 
   const positionSummary = useMemo(() => calcOpenPositionSummary(entries), [entries])
   const positionsNetMatch = useMemo(() => {
@@ -1063,7 +1070,23 @@ export default function TradeJournalPage() {
               <thead className="bg-zinc-900/80 text-gray-300">
                 <tr>
                   <th className="w-8 px-1 py-3" aria-label="Reorder" />
-                  <th className="px-3 py-3 text-left font-medium">Entry Date</th>
+                  <th className="px-3 py-3 text-left font-medium">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEntryDateSort((prev) =>
+                          prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc'
+                        )
+                      }
+                      title="Sort by entry date (oldest first, newest first, or manual order)"
+                      className="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-zinc-800 hover:text-white"
+                    >
+                      Entry Date
+                      <span className="text-[10px] text-blue-300 tabular-nums">
+                        {entryDateSort === 'asc' ? '↑' : entryDateSort === 'desc' ? '↓' : '↕'}
+                      </span>
+                    </button>
+                  </th>
                   <th
                     className="px-3 py-3 text-left font-medium w-20"
                     title="Open long 1,2,3… / open short −1,−2,… — clears when sold"
@@ -1100,7 +1123,7 @@ export default function TradeJournalPage() {
                     </td>
                   </tr>
                 ) : (
-                  entries.map((entry) => {
+                  displayEntries.map((entry) => {
                     const tradeNo = getTradeNumber(entries, entry.id)
                     const isShort = isShortPosition(entry.buyPrice)
                     const profit = getEntryProfit(entry)
@@ -1108,6 +1131,7 @@ export default function TradeJournalPage() {
                       <tr
                         key={entry.id}
                         onDragOver={(e) => {
+                          if (entryDateSort) return
                           e.preventDefault()
                           if (draggedId && draggedId !== entry.id) {
                             setDragOverId(entry.id)
@@ -1117,6 +1141,7 @@ export default function TradeJournalPage() {
                           if (dragOverId === entry.id) setDragOverId(null)
                         }}
                         onDrop={(e) => {
+                          if (entryDateSort) return
                           e.preventDefault()
                           if (e.dataTransfer.types.includes(TS_FILL_DRAG_TYPE)) return
                           const fromId = e.dataTransfer.getData('text/plain') || draggedId
@@ -1131,15 +1156,25 @@ export default function TradeJournalPage() {
                       >
                         <td className="px-1 py-2 w-8">
                           <span
-                            draggable
+                            draggable={!entryDateSort}
                             onDragStart={(e) => {
+                              if (entryDateSort) return
                               setDraggedId(entry.id)
                               e.dataTransfer.setData('text/plain', entry.id)
                               e.dataTransfer.effectAllowed = 'move'
                             }}
                             onDragEnd={clearDragState}
-                            className="inline-flex cursor-grab touch-none items-center justify-center rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 active:cursor-grabbing"
-                            title="Drag to reorder"
+                            className={clsx(
+                              'inline-flex touch-none items-center justify-center rounded p-1 text-zinc-500',
+                              entryDateSort
+                                ? 'cursor-default opacity-30'
+                                : 'cursor-grab hover:bg-zinc-800 hover:text-zinc-300 active:cursor-grabbing'
+                            )}
+                            title={
+                              entryDateSort
+                                ? 'Clear date sort (↕) to drag rows'
+                                : 'Drag to reorder'
+                            }
                             aria-label="Drag to reorder"
                           >
                             <GripVertical className="h-4 w-4" />
