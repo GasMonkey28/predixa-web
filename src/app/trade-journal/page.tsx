@@ -23,6 +23,11 @@ import {
 } from '@/lib/trade-journal-types'
 import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
 import { mergeTradeStationEntries } from '@/lib/tradestation-map'
+import {
+  getUsedTradeStationFillIds,
+  TS_FILL_DRAG_TYPE,
+  TradeStationRecentFill,
+} from '@/lib/tradestation-recent-fills'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 function parseNumber(value: string): number | null {
@@ -53,9 +58,18 @@ export default function TradeJournalPage() {
   const [tsConnected, setTsConnected] = useState(false)
   const [tsLoading, setTsLoading] = useState(false)
   const [tsSyncing, setTsSyncing] = useState(false)
-  const [tsImporting, setTsImporting] = useState(false)
+  const [tsLoadingFills, setTsLoadingFills] = useState(false)
+  const [tsRecentFills, setTsRecentFills] = useState<TradeStationRecentFill[]>([])
+  const [tsDropTarget, setTsDropTarget] = useState<{ entryId: string; field: 'buy' | 'sold' } | null>(
+    null
+  )
   const [tsMessage, setTsMessage] = useState<string | null>(null)
   const [tsAccounts, setTsAccounts] = useState<{ id: string; type?: string; alias?: string }[]>([])
+
+  const visibleTsFills = useMemo(() => {
+    const used = getUsedTradeStationFillIds(entries)
+    return tsRecentFills.filter((fill) => !used.has(fill.id))
+  }, [entries, tsRecentFills])
 
   async function authHeaders(): Promise<HeadersInit> {
     const headers: HeadersInit = { 'Content-Type': 'application/json' }
@@ -266,43 +280,87 @@ export default function TradeJournalPage() {
     }
   }
 
-  const importTradeStationTransactions = async () => {
-    setTsImporting(true)
+  const loadRecentTradeStationFills = useCallback(async () => {
+    setTsLoadingFills(true)
     setTsMessage(null)
     try {
-      const response = await fetch('/api/tradestation/sync-transactions', {
-        method: 'POST',
+      const response = await fetch('/api/tradestation/recent-fills?limit=6&days=14', {
         headers: await authHeaders(),
         credentials: 'include',
-        body: JSON.stringify({ days: 89 }),
+        cache: 'no-store',
       })
       const data = (await response.json()) as {
         error?: string
-        entries?: Partial<TradeJournalEntry>[]
-        tradeCount?: number
-        orderCount?: number
-        since?: string
+        fills?: TradeStationRecentFill[]
       }
       if (!response.ok) {
-        setTsMessage(data.error || 'Failed to import transactions.')
+        setTsMessage(data.error || 'Failed to load recent fills.')
         return
       }
-      setEntries((prev) =>
-        renumberEntries(
-          mergeTradeStationEntries(prev, data.entries ?? []).map((entry, index) =>
-            normalizeEntry(entry, index)
-          )
-        )
-      )
-      setTsMessage(
-        `Imported ${data.tradeCount ?? 0} closed trade(s) from ${data.orderCount ?? 0} orders since ${data.since ?? 'recent history'}.`
-      )
+      setTsRecentFills(data.fills ?? [])
+      setTsMessage(`Loaded ${data.fills?.length ?? 0} recent fill(s). Drag onto Buy or Sold.`)
     } catch {
-      setTsMessage('Failed to import transactions.')
+      setTsMessage('Failed to load recent fills.')
     } finally {
-      setTsImporting(false)
+      setTsLoadingFills(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (tsConnected && isLoaded) {
+      void loadRecentTradeStationFills()
+    }
+  }, [tsConnected, isLoaded, loadRecentTradeStationFills])
+
+  const applyTsFillToEntry = useCallback(
+    (entryId: string, field: 'buy' | 'sold', fill: TradeStationRecentFill) => {
+      if (field === 'buy') {
+        if (fill.buyValue == null) {
+          setTsMessage('Close fill — drop on Sold, not Buy.')
+          return
+        }
+        updateEntry(entryId, {
+          buyPrice: fill.buyValue,
+          entryDate: fill.date,
+          instrumentType: fill.instrumentType,
+          positionSize: fill.quantity,
+          tradestationBuyFillId: fill.id,
+        })
+        setTsMessage(`Set Buy from ${fill.label}`)
+        return
+      }
+
+      if (fill.soldValue == null) {
+        setTsMessage('Open fill — drop on Buy, not Sold.')
+        return
+      }
+      updateEntry(entryId, {
+        soldPrice: fill.soldValue,
+        instrumentType: fill.instrumentType,
+        positionSize: fill.quantity,
+        tradestationSoldFillId: fill.id,
+      })
+      setTsMessage(`Set Sold from ${fill.label}`)
+    },
+    [updateEntry]
+  )
+
+  const handleTsFillDrop = useCallback(
+    (entryId: string, field: 'buy' | 'sold', e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setTsDropTarget(null)
+      const raw = e.dataTransfer.getData(TS_FILL_DRAG_TYPE)
+      if (!raw) return
+      try {
+        const fill = JSON.parse(raw) as TradeStationRecentFill
+        applyTsFillToEntry(entryId, field, fill)
+      } catch {
+        setTsMessage('Could not read dropped fill.')
+      }
+    },
+    [applyTsFillToEntry]
+  )
 
   if (!isLoaded) {
     return (
@@ -367,11 +425,11 @@ export default function TradeJournalPage() {
                   <>
                     <button
                       type="button"
-                      onClick={importTradeStationTransactions}
-                      disabled={tsImporting}
+                      onClick={loadRecentTradeStationFills}
+                      disabled={tsLoadingFills}
                       className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
                     >
-                      {tsImporting ? 'Importing…' : 'Import transactions (90d)'}
+                      {tsLoadingFills ? 'Loading…' : 'Refresh recent fills'}
                     </button>
                     <button
                       type="button"
@@ -397,6 +455,50 @@ export default function TradeJournalPage() {
               <p className="mt-2 text-xs text-amber-400">Sign in to Predixa to connect TradeStation.</p>
             )}
             {tsMessage && <p className="mt-2 text-xs text-gray-300">{tsMessage}</p>}
+
+            {tsConnected && (
+              <div className="mt-3 rounded-lg border border-zinc-700/60 bg-zinc-950/80 p-3">
+                <p className="mb-2 text-xs font-medium text-gray-300">
+                  Recent TradeStation fills — drag onto a journal row&apos;s <strong>Buy</strong> or{' '}
+                  <strong>Sold</strong> cell
+                </p>
+                {visibleTsFills.length === 0 ? (
+                  <p className="text-xs text-gray-500">
+                    {tsRecentFills.length === 0
+                      ? 'No fills loaded. Click Refresh recent fills.'
+                      : 'All loaded fills are already placed in the journal.'}
+                  </p>
+                ) : (
+                  <ul className="space-y-1">
+                    {visibleTsFills.map((fill) => (
+                      <li
+                        key={fill.id}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(TS_FILL_DRAG_TYPE, JSON.stringify(fill))
+                          e.dataTransfer.effectAllowed = 'copy'
+                        }}
+                        className="flex cursor-grab items-center gap-2 rounded-md border border-zinc-700/80 bg-zinc-900/80 px-2 py-1.5 text-xs active:cursor-grabbing"
+                      >
+                        <GripVertical className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                        <span className="tabular-nums text-gray-500">{fill.date}</span>
+                        <span className="min-w-0 flex-1 truncate text-white">{fill.label}</span>
+                        <span
+                          className={clsx(
+                            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
+                            fill.openOrClose === 'open'
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : 'bg-amber-500/20 text-amber-300'
+                          )}
+                        >
+                          {fill.openOrClose === 'open' ? '→ Buy' : '→ Sold'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         </motion.div>
 
@@ -602,6 +704,7 @@ export default function TradeJournalPage() {
                         }}
                         onDrop={(e) => {
                           e.preventDefault()
+                          if (e.dataTransfer.types.includes(TS_FILL_DRAG_TYPE)) return
                           const fromId = e.dataTransfer.getData('text/plain') || draggedId
                           if (fromId) moveEntry(fromId, entry.id)
                           clearDragState()
@@ -685,7 +788,26 @@ export default function TradeJournalPage() {
                             className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-white"
                           />
                         </td>
-                        <td className={`py-2 ${PRICE_COL}`}>
+                        <td
+                          className={clsx(
+                            `py-2 ${PRICE_COL}`,
+                            tsDropTarget?.entryId === entry.id &&
+                              tsDropTarget.field === 'buy' &&
+                              'bg-emerald-500/15 ring-1 ring-inset ring-emerald-500/50'
+                          )}
+                          onDragOver={(e) => {
+                            if (!e.dataTransfer.types.includes(TS_FILL_DRAG_TYPE)) return
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setTsDropTarget({ entryId: entry.id, field: 'buy' })
+                          }}
+                          onDragLeave={() => {
+                            if (tsDropTarget?.entryId === entry.id && tsDropTarget.field === 'buy') {
+                              setTsDropTarget(null)
+                            }
+                          }}
+                          onDrop={(e) => handleTsFillDrop(entry.id, 'buy', e)}
+                        >
                           <input
                             type="number"
                             step="0.01"
@@ -693,7 +815,7 @@ export default function TradeJournalPage() {
                             onChange={(e) =>
                               updateEntry(entry.id, { buyPrice: parseNumber(e.target.value) })
                             }
-                            title="Positive = long. Negative = short."
+                            title="Drop an open fill here, or type price. Positive = long, negative = short."
                             placeholder="±price"
                             className={clsx(
                               PRICE_INPUT,
@@ -702,7 +824,26 @@ export default function TradeJournalPage() {
                             )}
                           />
                         </td>
-                        <td className={`py-2 ${PRICE_COL}`}>
+                        <td
+                          className={clsx(
+                            `py-2 ${PRICE_COL}`,
+                            tsDropTarget?.entryId === entry.id &&
+                              tsDropTarget.field === 'sold' &&
+                              'bg-amber-500/15 ring-1 ring-inset ring-amber-500/50'
+                          )}
+                          onDragOver={(e) => {
+                            if (!e.dataTransfer.types.includes(TS_FILL_DRAG_TYPE)) return
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setTsDropTarget({ entryId: entry.id, field: 'sold' })
+                          }}
+                          onDragLeave={() => {
+                            if (tsDropTarget?.entryId === entry.id && tsDropTarget.field === 'sold') {
+                              setTsDropTarget(null)
+                            }
+                          }}
+                          onDrop={(e) => handleTsFillDrop(entry.id, 'sold', e)}
+                        >
                           <input
                             type="number"
                             step="0.01"
@@ -710,6 +851,7 @@ export default function TradeJournalPage() {
                             onChange={(e) =>
                               updateEntry(entry.id, { soldPrice: parseNumber(e.target.value) })
                             }
+                            title="Drop a close fill here, or type price."
                             className={PRICE_INPUT}
                           />
                         </td>

@@ -16,6 +16,8 @@ export interface TradeJournalEntry {
   rating: string
   source?: 'manual' | 'tradestation'
   externalId?: string | null
+  tradestationBuyFillId?: string | null
+  tradestationSoldFillId?: string | null
 }
 
 /** Manual profit line assigned to a month (carry-over, corrections, etc.). */
@@ -325,6 +327,10 @@ export function normalizeEntry(entry: Partial<TradeJournalEntry>, index: number)
     rating: typeof entry.rating === 'string' ? entry.rating : '',
     source: entry.source === 'tradestation' ? 'tradestation' : 'manual',
     externalId: typeof entry.externalId === 'string' ? entry.externalId : null,
+    tradestationBuyFillId:
+      typeof entry.tradestationBuyFillId === 'string' ? entry.tradestationBuyFillId : null,
+    tradestationSoldFillId:
+      typeof entry.tradestationSoldFillId === 'string' ? entry.tradestationSoldFillId : null,
   }
 
   return withRecalculatedProfit(normalized)
