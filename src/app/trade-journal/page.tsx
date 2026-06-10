@@ -364,7 +364,10 @@ export default function TradeJournalPage() {
         return
       }
 
-      if (fill.soldValue == null) {
+      const soldPrice =
+        fill.soldValue ??
+        (fill.openOrClose === 'open' && fill.buyOrSell === 'sell' ? fill.price : null)
+      if (soldPrice == null) {
         setTsMessage('Open fill — drop on Buy, not Sold.')
         return
       }
@@ -380,7 +383,7 @@ export default function TradeJournalPage() {
           : {}
 
       updateEntry(entryId, {
-        soldPrice: fill.soldValue,
+        soldPrice,
         instrumentType: fill.instrumentType,
         positionSize: fill.quantity,
         tradestationSoldFillId: fill.id,
@@ -398,8 +401,12 @@ export default function TradeJournalPage() {
   const applyTsFillFromMenu = useCallback(
     (entryId: string, fill: TradeStationRecentFill, action: TsFillJournalAction) => {
       setTsFillActionMenu(null)
-      if (action === 'buy' || action === 'sell') {
+      if (action === 'buy') {
         applyTsFillToEntry(entryId, 'buy', fill)
+        return
+      }
+      if (action === 'sell') {
+        applyTsFillToEntry(entryId, 'sold', fill, { takeProfit: true })
         return
       }
       applyTsFillToEntry(entryId, 'sold', fill, { takeProfit: action === 'takeProfit' })
@@ -617,7 +624,7 @@ export default function TradeJournalPage() {
                               >
                                 {targets.length === 0 ? (
                                   <li className="px-3 py-2 text-[10px] text-gray-500">
-                                    {action === 'buy' || action === 'sell'
+                                    {action === 'buy'
                                       ? 'No empty Buy rows for this instrument.'
                                       : 'No matching open positions.'}
                                   </li>

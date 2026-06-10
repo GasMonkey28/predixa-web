@@ -255,16 +255,21 @@ export function getJournalTargetsForFillAction(
 
   if (action === 'sell') {
     if (fill.openOrClose !== 'open' || fill.buyOrSell !== 'sell') return []
+    // Sell fill → pick an open long (buy filled, sold empty) to log take profit / exit.
     return entries
-      .filter(
-        (entry) =>
-          matchesFillInstrument(entry, fill) &&
-          (entry.buyPrice == null || entry.buyPrice === 0)
-      )
+      .filter((entry) => {
+        if (!isOpenPosition(entry) || !matchesFillInstrument(entry, fill)) return false
+        return isLongPosition(entry.buyPrice)
+      })
       .map((entry) => ({
         entry,
         tradeNo: getTradeNumber(entries, entry.id),
-        projectedProfit: null,
+        projectedProfit: calcProfit(
+          entry.buyPrice,
+          exitPrice,
+          entry.instrumentType,
+          entry.positionSize
+        ),
       }))
   }
 
