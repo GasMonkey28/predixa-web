@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { ChevronDown, GripVertical } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -13,15 +13,18 @@ import {
   calcMonthlyProfitSummaries,
   calcOpenPositionSummary,
   type OpenPositionSummary,
+  applyRollOverDiff,
   createEmptyEntry,
   createMonthlyProfitEntry,
   getEntryProfit,
+  isOpenPosition,
   normalizeEntry,
   getTradeNumber,
   isShortPosition,
   renumberEntries,
   sortEntriesByEntryDate,
   withRecalculatedProfit,
+  type TradeJournalData,
 } from '@/lib/trade-journal-types'
 import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
 import { fetchTradeJournalReason } from '@/lib/trade-journal-reason'
@@ -54,6 +57,8 @@ const PRICE_COL = 'w-[10ch] min-w-[10ch] max-w-[10ch] px-1'
 const PRICE_INPUT =
   'w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 py-1.5 text-xs tabular-nums text-white'
 
+const UNDO_STACK_LIMIT = 50
+
 export default function TradeJournalPage() {
   const { user, isAuthenticated } = useAuthStore()
   const [entries, setEntries] = useState<TradeJournalEntry[]>([])
@@ -82,6 +87,34 @@ export default function TradeJournalPage() {
   const [tsLoadingPositions, setTsLoadingPositions] = useState(false)
   const [entryDateSort, setEntryDateSort] = useState<'asc' | 'desc' | null>('desc')
   const [addingEntry, setAddingEntry] = useState(false)
+  const [rollOverDiffInput, setRollOverDiffInput] = useState('')
+  const [undoCount, setUndoCount] = useState(0)
+  const undoStackRef = useRef<TradeJournalData[]>([])
+
+  const pushUndoSnapshot = useCallback(() => {
+    undoStackRef.current.push({
+      entries: JSON.parse(JSON.stringify(entries)) as TradeJournalEntry[],
+      monthlyProfitEntries: JSON.parse(JSON.stringify(monthlyProfitEntries)),
+    })
+    if (undoStackRef.current.length > UNDO_STACK_LIMIT) {
+      undoStackRef.current.shift()
+    }
+    setUndoCount(undoStackRef.current.length)
+  }, [entries, monthlyProfitEntries])
+
+  const undoLastAction = useCallback(() => {
+    const snapshot = undoStackRef.current.pop()
+    if (!snapshot) return
+    setEntries(snapshot.entries)
+    setMonthlyProfitEntries(snapshot.monthlyProfitEntries)
+    setUndoCount(undoStackRef.current.length)
+    setTsMessage('Undid last action.')
+  }, [])
+
+  const openPositionCount = useMemo(
+    () => entries.filter((entry) => isOpenPosition(entry)).length,
+    [entries]
+  )
 
   const usedTsFillIds = useMemo(() => getUsedTradeStationFillIds(entries), [entries])
 
@@ -177,6 +210,8 @@ export default function TradeJournalPage() {
           renumberEntries(loaded.entries.map((entry, index) => normalizeEntry(entry, index)))
         )
         setMonthlyProfitEntries(loaded.monthlyProfitEntries)
+        undoStackRef.current = []
+        setUndoCount(0)
         setIsLoaded(true)
       }
     })()
@@ -241,6 +276,7 @@ export default function TradeJournalPage() {
   )
 
   const addMonthlyProfitEntry = () => {
+    pushUndoSnapshot()
     setMonthlyProfitEntries((prev) => [...prev, createMonthlyProfitEntry()])
   }
 
@@ -251,6 +287,7 @@ export default function TradeJournalPage() {
   }
 
   const removeMonthlyProfitEntry = (id: string) => {
+    pushUndoSnapshot()
     setMonthlyProfitEntries((prev) => prev.filter((line) => line.id !== id))
   }
 
@@ -272,6 +309,7 @@ export default function TradeJournalPage() {
   const addEntry = async () => {
     setAddingEntry(true)
     try {
+      pushUndoSnapshot()
       const entry = createEmptyEntry(entries.length + 1)
       const reason = await fetchTradeJournalReason(entry.entryDate)
       setEntries((prev) =>
@@ -283,21 +321,43 @@ export default function TradeJournalPage() {
   }
 
   const removeEntry = (id: string) => {
+    pushUndoSnapshot()
     setEntries((prev) => renumberEntries(prev.filter((entry) => entry.id !== id)))
   }
 
-  const moveEntry = useCallback((fromId: string, toId: string) => {
-    if (fromId === toId) return
-    setEntries((prev) => {
-      const fromIndex = prev.findIndex((entry) => entry.id === fromId)
-      const toIndex = prev.findIndex((entry) => entry.id === toId)
-      if (fromIndex < 0 || toIndex < 0) return prev
-      const next = [...prev]
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, moved)
-      return renumberEntries(next)
-    })
-  }, [])
+  const moveEntry = useCallback(
+    (fromId: string, toId: string) => {
+      if (fromId === toId) return
+      pushUndoSnapshot()
+      setEntries((prev) => {
+        const fromIndex = prev.findIndex((entry) => entry.id === fromId)
+        const toIndex = prev.findIndex((entry) => entry.id === toId)
+        if (fromIndex < 0 || toIndex < 0) return prev
+        const next = [...prev]
+        const [moved] = next.splice(fromIndex, 1)
+        next.splice(toIndex, 0, moved)
+        return renumberEntries(next)
+      })
+    },
+    [pushUndoSnapshot]
+  )
+
+  const applyRollOver = () => {
+    const rollDiff = parseNumber(rollOverDiffInput)
+    if (rollDiff == null || rollDiff === 0) {
+      setTsMessage('Enter a non-zero roll over difference.')
+      return
+    }
+    if (openPositionCount === 0) {
+      setTsMessage('No open positions to roll over.')
+      return
+    }
+    pushUndoSnapshot()
+    setEntries((prev) => applyRollOverDiff(prev, rollDiff))
+    setTsMessage(
+      `Rolled ${openPositionCount} open position(s): long +${rollDiff}, short −${rollDiff} on Buy.`
+    )
+  }
 
   const clearDragState = () => {
     setDraggedId(null)
@@ -405,6 +465,7 @@ export default function TradeJournalPage() {
           setTsMessage('Close fill — drop on Sold, not Buy.')
           return
         }
+        pushUndoSnapshot()
         updateEntry(entryId, {
           buyPrice: fill.buyValue,
           entryDate: fill.date,
@@ -434,6 +495,7 @@ export default function TradeJournalPage() {
             }
           : {}
 
+      pushUndoSnapshot()
       updateEntry(entryId, {
         soldPrice,
         closeDate: fill.date,
@@ -448,7 +510,7 @@ export default function TradeJournalPage() {
           : `Set Sold from ${fill.label}`
       )
     },
-    [entries, updateEntry]
+    [entries, updateEntry, pushUndoSnapshot]
   )
 
   const applyTsFillFromMenu = useCallback(
@@ -477,6 +539,7 @@ export default function TradeJournalPage() {
   )
 
   const addFillAsJournalEntry = useCallback(async (fill: TradeStationRecentFill) => {
+    pushUndoSnapshot()
     const modelReason = await fetchTradeJournalReason(fill.date)
     const base = createJournalEntryFromFill(fill)
     const entry = withRecalculatedProfit({
@@ -485,7 +548,7 @@ export default function TradeJournalPage() {
     })
     setEntries((prev) => renumberEntries([entry, ...prev]))
     setTsMessage(`Added new row: ${fill.label}`)
-  }, [])
+  }, [pushUndoSnapshot])
 
   const removeTsFillFromList = useCallback(
     (fillId: string) => {
@@ -811,14 +874,46 @@ export default function TradeJournalPage() {
         <div className="rounded-2xl border border-zinc-800/60 bg-zinc-950/70 backdrop-blur-sm overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
             <h2 className="text-lg font-semibold text-white">Trades</h2>
-            <button
-              type="button"
-              onClick={() => void addEntry()}
-              disabled={addingEntry}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors disabled:opacity-50"
-            >
-              {addingEntry ? 'Adding…' : 'Add Trade'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs text-gray-400">
+                Roll diff
+                <input
+                  type="number"
+                  step="0.25"
+                  value={rollOverDiffInput}
+                  onChange={(e) => setRollOverDiffInput(e.target.value)}
+                  placeholder="±pts"
+                  title="Futures roll spread: added to long Buy, subtracted from short Buy"
+                  className="w-[7ch] rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs tabular-nums text-white"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={applyRollOver}
+                disabled={openPositionCount === 0}
+                title={`Adjust ${openPositionCount} open position(s) for contract roll`}
+                className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-40"
+              >
+                Roll over
+              </button>
+              <button
+                type="button"
+                onClick={undoLastAction}
+                disabled={undoCount === 0}
+                title="Undo last journal action (roll over, add, delete, fill, reorder)"
+                className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs font-medium text-gray-300 hover:bg-zinc-800 disabled:opacity-40"
+              >
+                Undo{undoCount > 0 ? ` (${undoCount})` : ''}
+              </button>
+              <button
+                type="button"
+                onClick={() => void addEntry()}
+                disabled={addingEntry}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors disabled:opacity-50"
+              >
+                {addingEntry ? 'Adding…' : 'Add Trade'}
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border-b border-zinc-800/80 bg-zinc-900/50 px-4 py-3">

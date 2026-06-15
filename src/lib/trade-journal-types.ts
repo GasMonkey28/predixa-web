@@ -165,6 +165,23 @@ export function sortEntriesByEntryDate(
   })
 }
 
+/** Apply futures roll diff to all open positions: long += diff, short -= diff. */
+export function applyRollOverDiff(
+  entries: TradeJournalEntry[],
+  rollDiff: number
+): TradeJournalEntry[] {
+  return renumberEntries(
+    entries.map((entry) => {
+      if (!isOpenPosition(entry) || entry.buyPrice == null || entry.buyPrice === 0) {
+        return entry
+      }
+      const buy = entry.buyPrice
+      const newBuy = buy > 0 ? buy + rollDiff : buy - rollDiff
+      return withRecalculatedProfit({ ...entry, buyPrice: newBuy })
+    })
+  )
+}
+
 export function renumberEntries(entries: TradeJournalEntry[]): TradeJournalEntry[] {
   return entries.map((entry) => {
     const no = getTradeNumber(entries, entry.id) ?? 0
