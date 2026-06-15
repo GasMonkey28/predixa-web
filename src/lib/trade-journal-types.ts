@@ -14,7 +14,10 @@ export interface TradeJournalEntry {
   soldPrice: number | null
   targetPrice: number | null
   profit: number | null
+  /** M1/M2 signals for entry (open) day. */
   reason: string
+  /** M1/M2 signals for close (take profit) day. */
+  closeReason: string | null
   rating: string
   source?: 'manual' | 'tradestation'
   externalId?: string | null
@@ -379,6 +382,7 @@ export function normalizeEntry(entry: Partial<TradeJournalEntry>, index: number)
     targetPrice: coerceNumber(entry.targetPrice),
     profit: null,
     reason: typeof entry.reason === 'string' ? entry.reason : '',
+    closeReason: typeof entry.closeReason === 'string' ? entry.closeReason : null,
     rating: typeof entry.rating === 'string' ? entry.rating : '',
     source: entry.source === 'tradestation' ? 'tradestation' : 'manual',
     externalId: typeof entry.externalId === 'string' ? entry.externalId : null,
@@ -405,6 +409,7 @@ export function createEmptyEntry(no: number): TradeJournalEntry {
       soldPrice: null,
       targetPrice: null,
       reason: '',
+      closeReason: null,
       rating: '',
     },
     no - 1

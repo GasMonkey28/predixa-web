@@ -454,11 +454,11 @@ export default function TradeJournalPage() {
   }, [tsConnected, isLoaded, loadRecentTradeStationFills, loadTradeStationPositions])
 
   const applyTsFillToEntry = useCallback(
-    (
+    async (
       entryId: string,
       field: 'buy' | 'sold',
       fill: TradeStationRecentFill,
-      options?: { takeProfit?: boolean }
+      _options?: { takeProfit?: boolean }
     ) => {
       if (field === 'buy') {
         if (fill.buyValue == null) {
@@ -466,12 +466,15 @@ export default function TradeJournalPage() {
           return
         }
         pushUndoSnapshot()
+        const openReason = await fetchTradeJournalReason(fill.date)
+        const target = entries.find((entry) => entry.id === entryId)
         updateEntry(entryId, {
           buyPrice: fill.buyValue,
           entryDate: fill.date,
           instrumentType: fill.instrumentType,
           positionSize: fill.quantity,
           tradestationBuyFillId: fill.id,
+          ...(openReason && !target?.reason ? { reason: openReason } : {}),
         })
         setTsMessage(`Set Buy from ${fill.label}`)
         return
@@ -485,27 +488,19 @@ export default function TradeJournalPage() {
         return
       }
 
-      const target = entries.find((entry) => entry.id === entryId)
-      const reasonPatch =
-        options?.takeProfit && target
-          ? {
-              reason: target.reason
-                ? `${target.reason} · Take profit`
-                : `Take profit · ${fill.symbol}`,
-            }
-          : {}
+      const closeReason = await fetchTradeJournalReason(fill.date)
 
       pushUndoSnapshot()
       updateEntry(entryId, {
         soldPrice,
         closeDate: fill.date,
+        closeReason: closeReason || null,
         instrumentType: fill.instrumentType,
         positionSize: fill.quantity,
         tradestationSoldFillId: fill.id,
-        ...reasonPatch,
       })
       setTsMessage(
-        options?.takeProfit
+        _options?.takeProfit
           ? `Take profit logged on position ${getTradeNumber(entries, entryId) ?? '—'}`
           : `Set Sold from ${fill.label}`
       )
@@ -517,14 +512,19 @@ export default function TradeJournalPage() {
     (entryId: string, fill: TradeStationRecentFill, action: TsFillJournalAction) => {
       setTsFillActionMenu(null)
       if (action === 'buy') {
-        applyTsFillToEntry(entryId, 'buy', fill)
+        void applyTsFillToEntry(entryId, 'buy', fill)
         return
       }
       if (action === 'sell') {
-        applyTsFillToEntry(entryId, 'sold', fill, { takeProfit: true })
+        void applyTsFillToEntry(entryId, 'sold', fill, { takeProfit: true })
         return
       }
-      applyTsFillToEntry(entryId, 'sold', fill, { takeProfit: action === 'takeProfit' })
+      void applyTsFillToEntry(
+        entryId,
+        'sold',
+        fill,
+        { takeProfit: action === 'takeProfit' }
+      )
     },
     [applyTsFillToEntry]
   )
@@ -542,9 +542,11 @@ export default function TradeJournalPage() {
     pushUndoSnapshot()
     const modelReason = await fetchTradeJournalReason(fill.date)
     const base = createJournalEntryFromFill(fill)
+    const isOpen = fill.openOrClose === 'open'
     const entry = withRecalculatedProfit({
       ...base,
-      reason: modelReason || base.reason,
+      reason: isOpen ? modelReason || base.reason : base.reason,
+      closeReason: isOpen ? null : modelReason || base.closeReason,
     })
     setEntries((prev) => renumberEntries([entry, ...prev]))
     setTsMessage(`Added new row: ${fill.label}`)
@@ -577,7 +579,9 @@ export default function TradeJournalPage() {
       if (!raw) return
       try {
         const fill = JSON.parse(raw) as TradeStationRecentFill
-        applyTsFillToEntry(entryId, field, fill)
+        void applyTsFillToEntry(entryId, field, fill, {
+          takeProfit: field === 'sold',
+        })
       } catch {
         setTsMessage('Could not read dropped fill.')
       }
@@ -1385,6 +1389,7 @@ export default function TradeJournalPage() {
                               const patch: Partial<TradeJournalEntry> = { soldPrice }
                               if (soldPrice == null) {
                                 patch.closeDate = null
+                                patch.closeReason = null
                               } else if (!entry.closeDate) {
                                 patch.closeDate = new Date().toISOString().slice(0, 10)
                               }
@@ -1432,13 +1437,28 @@ export default function TradeJournalPage() {
                           />
                         </td>
                         <td className="px-2 py-2 min-w-[22rem]">
-                          <input
-                            type="text"
-                            value={entry.reason}
-                            onChange={(e) => updateEntry(entry.id, { reason: e.target.value })}
-                            placeholder="Model signals, notes…"
-                            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white"
-                          />
+                          <div className="flex flex-col gap-1">
+                            <input
+                              type="text"
+                              value={entry.reason}
+                              onChange={(e) => updateEntry(entry.id, { reason: e.target.value })}
+                              placeholder="Open — M1/M2 entry day"
+                              title="Model 1 long/short tier and Model 2 signals for entry date"
+                              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white"
+                            />
+                            <input
+                              type="text"
+                              value={entry.closeReason ?? ''}
+                              onChange={(e) =>
+                                updateEntry(entry.id, {
+                                  closeReason: e.target.value || null,
+                                })
+                              }
+                              placeholder="Close — M1/M2 exit day"
+                              title="Model 1 long/short tier and Model 2 signals for close date (filled on take profit)"
+                              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-gray-300"
+                            />
+                          </div>
                         </td>
                         <td className="px-2 py-2">
                           <button
