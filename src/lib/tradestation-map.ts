@@ -202,6 +202,7 @@ export function mapHistoricalOrdersToJournalEntries(
 
         entries.push({
           entryDate: open.entryDate,
+          closeDate: toEntryDate(order.ClosedDateTime || order.OpenedDateTime),
           profitMonth: null,
           instrumentType: mapSymbolToInstrument(symbol),
           positionSize: size,
@@ -247,6 +248,7 @@ export function mergeTradeStationEntries(
         next[index] = {
           ...existing,
           entryDate: existing.entryDate || patch.entryDate || existing.entryDate,
+          closeDate: existing.closeDate ?? patch.closeDate ?? null,
           instrumentType: patch.instrumentType ?? existing.instrumentType,
           positionSize: patch.positionSize ?? existing.positionSize,
           buyPrice: patch.buyPrice ?? existing.buyPrice,
@@ -264,6 +266,7 @@ export function mergeTradeStationEntries(
     const created: TradeJournalEntry = {
       id: crypto.randomUUID(),
       entryDate: patch.entryDate ?? new Date().toISOString().slice(0, 10),
+      closeDate: patch.closeDate ?? null,
       profitMonth: patch.profitMonth ?? null,
       no: 0,
       instrumentType: patch.instrumentType ?? 'mini_future',
