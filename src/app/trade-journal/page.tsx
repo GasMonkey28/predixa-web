@@ -436,6 +436,7 @@ export default function TradeJournalPage() {
 
       updateEntry(entryId, {
         soldPrice,
+        closeDate: fill.date,
         instrumentType: fill.instrumentType,
         positionSize: fill.quantity,
         tradestationSoldFillId: fill.id,
@@ -1061,6 +1062,7 @@ export default function TradeJournalPage() {
                       </span>
                     </button>
                   </th>
+                  <th className="px-2 py-3 text-left font-medium w-[7.5rem]">Close Date</th>
                   <th
                     className="px-3 py-3 text-left font-medium w-20"
                     title="Open long 1,2,3… / open short −1,−2,… — clears when sold"
@@ -1091,7 +1093,7 @@ export default function TradeJournalPage() {
               <tbody>
                 {entries.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="px-4 py-10 text-center text-gray-400">
+                    <td colSpan={13} className="px-4 py-10 text-center text-gray-400">
                       No trades yet. Click &quot;Add Trade&quot; to start recording.
                     </td>
                   </tr>
@@ -1159,6 +1161,19 @@ export default function TradeJournalPage() {
                             value={entry.entryDate}
                             onChange={(e) => updateEntry(entry.id, { entryDate: e.target.value })}
                             className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-white"
+                          />
+                        </td>
+                        <td className="px-2 py-2 w-[7.5rem]">
+                          <input
+                            type="date"
+                            value={entry.closeDate ?? ''}
+                            onChange={(e) =>
+                              updateEntry(entry.id, {
+                                closeDate: e.target.value || null,
+                              })
+                            }
+                            title="Date position was closed (sold)"
+                            className="w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 py-1.5 text-xs text-white"
                           />
                         </td>
                         <td className="px-3 py-2 tabular-nums font-medium">
@@ -1270,9 +1285,16 @@ export default function TradeJournalPage() {
                             type="number"
                             step="0.01"
                             value={formatNumber(entry.soldPrice)}
-                            onChange={(e) =>
-                              updateEntry(entry.id, { soldPrice: parseNumber(e.target.value) })
-                            }
+                            onChange={(e) => {
+                              const soldPrice = parseNumber(e.target.value)
+                              const patch: Partial<TradeJournalEntry> = { soldPrice }
+                              if (soldPrice == null) {
+                                patch.closeDate = null
+                              } else if (!entry.closeDate) {
+                                patch.closeDate = new Date().toISOString().slice(0, 10)
+                              }
+                              updateEntry(entry.id, patch)
+                            }}
                             title="Drop a close fill here, or type price."
                             className={PRICE_INPUT}
                           />

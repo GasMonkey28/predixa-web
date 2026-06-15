@@ -188,6 +188,7 @@ export function createJournalEntryFromFill(fill: TradeStationRecentFill): TradeJ
   return {
     id: crypto.randomUUID(),
     entryDate: fill.date,
+    closeDate: isOpen ? null : fill.date,
     profitMonth: null,
     no: 0,
     instrumentType: fill.instrumentType,

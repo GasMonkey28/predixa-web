@@ -3,6 +3,8 @@ export type InstrumentType = 'stock' | 'future' | 'mini_future'
 export interface TradeJournalEntry {
   id: string
   entryDate: string
+  /** YYYY-MM-DD when position was closed (sold filled). */
+  closeDate: string | null
   /** Optional YYYY-MM bucket for monthly P&L (defaults to entry date month). */
   profitMonth: string | null
   no: number
@@ -347,6 +349,10 @@ export function normalizeEntry(entry: Partial<TradeJournalEntry>, index: number)
   const normalized: TradeJournalEntry = {
     id: typeof entry.id === 'string' && entry.id ? entry.id : `entry-${index}`,
     entryDate: typeof entry.entryDate === 'string' ? entry.entryDate : '',
+    closeDate:
+      typeof entry.closeDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.closeDate)
+        ? entry.closeDate
+        : null,
     profitMonth,
     no: typeof entry.no === 'number' ? entry.no : 0,
     instrumentType,
@@ -373,6 +379,7 @@ export function createEmptyEntry(no: number): TradeJournalEntry {
     {
       id: crypto.randomUUID(),
       entryDate: new Date().toISOString().slice(0, 10),
+      closeDate: null,
       profitMonth: null,
       no,
       instrumentType: DEFAULT_INSTRUMENT_TYPE,
