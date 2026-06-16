@@ -31,6 +31,82 @@ interface Model2ChartProps {
   maxDays?: number
 }
 
+function isNoSignalDownDay(day: TradingDay): boolean {
+  const signal = day.final_signal
+  if (signal && signal !== 'no_trade') return false
+  if (day.open_price == null || day.close_price == null) return false
+  return day.close_price < day.open_price
+}
+
+function getNoSignalDownStarPosition(x: number, highY: number): { x: number; y: number } {
+  return { x, y: highY - 18 }
+}
+
+function findOpenPriceTouchIndex(
+  days: TradingDay[],
+  startIndex: number,
+  openPrice: number
+): number | null {
+  for (let j = startIndex + 1; j < days.length; j++) {
+    const day = days[j]
+    if (day.low_price! <= openPrice && openPrice <= day.high_price!) {
+      return j
+    }
+  }
+  return null
+}
+
+function renderNoSignalDownStar(
+  x: number,
+  y: number,
+  recovered: boolean,
+  id: string
+) {
+  const starProps = {
+    x,
+    y,
+    textAnchor: 'middle' as const,
+    dominantBaseline: 'middle' as const,
+    fontSize: 18,
+  }
+
+  if (!recovered) {
+    return (
+      <text
+        {...starProps}
+        fill="#fbbf24"
+        stroke="#92400e"
+        strokeWidth={0.4}
+      >
+        ★
+      </text>
+    )
+  }
+
+  const clipId = `half-star-${id}`
+  return (
+    <g>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={x - 10} y={y - 10} width={10} height={20} />
+        </clipPath>
+      </defs>
+      <text {...starProps} fill="none" stroke="#fbbf24" strokeWidth={1}>
+        ★
+      </text>
+      <text
+        {...starProps}
+        fill="#fbbf24"
+        stroke="#92400e"
+        strokeWidth={0.4}
+        clipPath={`url(#${clipId})`}
+      >
+        ★
+      </text>
+    </g>
+  )
+}
+
 export default function Model2Chart({
   tradingDays,
   height = 400,
@@ -73,9 +149,9 @@ export default function Model2Chart({
   }, [chartDays])
 
   const chartDimensions = useMemo(() => {
-    if (!validDays.length) return { width: 0, height: 0, margin: { top: 20, right: 30, left: 50, bottom: 100 } }
+    if (!validDays.length) return { width: 0, height: 0, margin: { top: 40, right: 30, left: 50, bottom: 100 } }
     
-    const margin = { top: 20, right: 30, left: 50, bottom: 100 }
+    const margin = { top: 40, right: 30, left: 50, bottom: 100 }
     const chartWidth = containerWidth - margin.left - margin.right
     const chartHeight = height - margin.top - margin.bottom
     
@@ -99,6 +175,44 @@ export default function Model2Chart({
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  const renderOpenPriceRecoveryLines = () => {
+    const { xScale, yScale, maxPrice } = scales
+    const { width, margin } = chartDimensions
+    const lines = []
+
+    for (let i = 0; i < validDays.length; i++) {
+      const day = validDays[i]
+      if (!isNoSignalDownDay(day) || day.open_price == null) continue
+
+      const openPrice = day.open_price
+      const openY = margin.top + (maxPrice - openPrice) * yScale
+      const startX = margin.left + i * xScale + xScale / 2
+      const touchIndex = findOpenPriceTouchIndex(validDays, i, openPrice)
+      const endX =
+        touchIndex != null
+          ? margin.left + touchIndex * xScale + xScale / 2
+          : margin.left + width
+
+      if (endX <= startX) continue
+
+      lines.push(
+        <line
+          key={`open-recovery-${i}`}
+          x1={startX}
+          y1={openY}
+          x2={endX}
+          y2={openY}
+          stroke="#fbbf24"
+          strokeWidth={1.5}
+          strokeDasharray="6 4"
+          opacity={0.75}
+        />
+      )
+    }
+
+    return lines
   }
 
   const renderCandlestick = (day: TradingDay, index: number) => {
@@ -175,6 +289,14 @@ export default function Model2Chart({
             strokeWidth={1.5}
           />
         )}
+
+        {/* No-signal down day marker */}
+        {isNoSignalDownDay(day) && (() => {
+          const recovered =
+            findOpenPriceTouchIndex(validDays, index, day.open_price!) != null
+          const starPos = getNoSignalDownStarPosition(x, highY)
+          return renderNoSignalDownStar(starPos.x, starPos.y, recovered, `c-${index}`)
+        })()}
         
         {/* PnL marker */}
         {showPnl && day.pnl_value != null && (
@@ -221,6 +343,7 @@ export default function Model2Chart({
     
     const x = margin.left + index * xScale + xScale / 2
     const closeY = margin.top + (scales.maxPrice - day.close_price!) * yScale
+    const highY = margin.top + (scales.maxPrice - day.high_price!) * yScale
     
     return (
       <g key={index}>
@@ -257,6 +380,13 @@ export default function Model2Chart({
             strokeWidth={1.5}
           />
         )}
+
+        {isNoSignalDownDay(day) && (() => {
+          const recovered =
+            findOpenPriceTouchIndex(validDays, index, day.open_price!) != null
+          const starPos = getNoSignalDownStarPosition(x, highY)
+          return renderNoSignalDownStar(starPos.x, starPos.y, recovered, `l-${index}`)
+        })()}
         
         {/* PnL marker */}
         {showPnl && day.pnl_value != null && (
@@ -501,6 +631,13 @@ export default function Model2Chart({
           {day.position_size !== 0 && (
             <tspan fill="#f3f4f6"> ({day.position_size > 0 ? '+' : ''}{day.position_size})</tspan>
           )}
+          {isNoSignalDownDay(day) && (
+            <tspan fill="#fbbf24">
+              {findOpenPriceTouchIndex(validDays, hoveredIndex, day.open_price!) != null
+                ? ' ½★ down, no trade (open reached)'
+                : ' ★ down, no trade'}
+            </tspan>
+          )}
         </text>
         
         {showPnl && day.pnl_value != null && (
@@ -567,6 +704,7 @@ export default function Model2Chart({
       <div ref={containerRef} className="w-full">
         <svg width="100%" height={height}>
           {renderGrid()}
+          {renderOpenPriceRecoveryLines()}
           {chartType === 'candlestick'
             ? validDays.map((day, index) => renderCandlestick(day, index))
             : validDays.map((day, index) => renderLine(day, index))}
