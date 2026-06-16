@@ -260,7 +260,7 @@ export default function MarketInsightModelSignals({
               <p className="text-[10px] text-zinc-500 mb-2 px-1">Model 2 price action (recent)</p>
               <Model2Chart
                 tradingDays={model2.trading_days as never[]}
-                height={200}
+                height={400}
                 chartType="candlestick"
                 embedded
                 showPnlToggle={false}
