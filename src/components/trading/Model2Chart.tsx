@@ -180,7 +180,7 @@ export default function Model2Chart({
   const renderOpenPriceRecoveryLines = () => {
     const { xScale, yScale, maxPrice } = scales
     const { width, margin } = chartDimensions
-    const lines = []
+    const elements = []
 
     for (let i = 0; i < validDays.length; i++) {
       const day = validDays[i]
@@ -197,7 +197,7 @@ export default function Model2Chart({
 
       if (endX <= startX) continue
 
-      lines.push(
+      elements.push(
         <line
           key={`open-recovery-${i}`}
           x1={startX}
@@ -210,9 +210,25 @@ export default function Model2Chart({
           opacity={0.75}
         />
       )
+
+      if (touchIndex == null) {
+        elements.push(
+          <text
+            key={`open-recovery-label-${i}`}
+            x={margin.left + width - 2}
+            y={openY - 4}
+            textAnchor="end"
+            fontSize="10"
+            fill="#fbbf24"
+            fontWeight="bold"
+          >
+            {formatPrice(openPrice)}
+          </text>
+        )
+      }
     }
 
-    return lines
+    return elements
   }
 
   const renderCandlestick = (day: TradingDay, index: number) => {
