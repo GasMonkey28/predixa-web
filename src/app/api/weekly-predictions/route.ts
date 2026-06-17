@@ -77,17 +77,17 @@ async function fetchWeeklyPrediction(dateStr: string): Promise<WeeklyPrediction 
  */
 function getAllWeekDatesInRange(startDate: Date, endDate: Date): Date[] {
   const weekDates: Date[] = []
-  const start = new Date(startDate)
-  const end = new Date(endDate)
+  const start = parseDateYYYYMMDD(formatDateYYYYMMDD(startDate))
+  const end = parseDateYYYYMMDD(formatDateYYYYMMDD(endDate))
   
   // Start from the most recent Friday and work backwards
   let currentFriday = findLastFridayOrMonday(end)
-  const startDateStr = start.toISOString().split('T')[0]
+  const startDateStr = formatDateYYYYMMDD(start)
   
   // Go back until we're before the start date
   let iterations = 0
   while (currentFriday >= start && iterations < 20) {
-    const fridayDateStr = currentFriday.toISOString().split('T')[0]
+    const fridayDateStr = formatDateYYYYMMDD(currentFriday)
     
     // Only add if this Friday is on or after the start date
     if (fridayDateStr >= startDateStr) {
@@ -161,7 +161,10 @@ function classifyWeeklyPredictions(
   }
 
   if (!currentWeek && latestPublish && !nextWeek) {
-    currentWeek = latestPublish
+    const thisWeekFriday = findFridayOfWeekContaining(anchor)
+    if (fwdJoinOverlapsWeek(latestPublish.fwd_join_date, thisWeekFriday)) {
+      currentWeek = latestPublish
+    }
   }
   if (!previousWeek && previousPublish && previousPublish !== currentWeek && previousPublish !== nextWeek) {
     previousWeek = previousPublish
