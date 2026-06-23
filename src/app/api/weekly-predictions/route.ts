@@ -3,8 +3,10 @@ import axios from 'axios'
 import { config } from '@/lib/server/config'
 import {
   findFridayOfWeekContaining,
+  findLastCalendarFriday,
   findLastFridayOrMonday,
   findNextWeekFriday,
+  findPreviousWeekCalendarFriday,
   findPreviousWeekFriday,
   formatDateYYYYMMDD,
   fwdJoinOverlapsWeek,
@@ -39,6 +41,22 @@ interface WeeklyPredictionsResponse {
 /**
  * Fetch weekly prediction from S3
  */
+/** S3 keys use calendar Friday; fall back to Monday substitute when needed. */
+async function fetchWeeklyPredictionWithFallback(
+  primaryDate: Date,
+  fallbackDate?: Date
+): Promise<WeeklyPrediction | null> {
+  const primary = await fetchWeeklyPrediction(formatDateYYYYMMDD(primaryDate))
+  if (primary || !fallbackDate) {
+    return primary
+  }
+  const fallbackStr = formatDateYYYYMMDD(fallbackDate)
+  if (fallbackStr === formatDateYYYYMMDD(primaryDate)) {
+    return null
+  }
+  return fetchWeeklyPrediction(fallbackStr)
+}
+
 async function fetchWeeklyPrediction(dateStr: string): Promise<WeeklyPrediction | null> {
   const bucket = config.marketData.bucket
   const ticker = config.marketData.ticker || 'SPY'
@@ -184,10 +202,12 @@ export async function GET(request: Request) {
     const endDateStr = searchParams.get('endDate')
     const interval = searchParams.get('interval') || '15min'
     
-    // Find dates for current week and previous week
-    const currentWeekDate = findLastFridayOrMonday()
-    const previousWeekDate = findPreviousWeekFriday()
-    
+    // S3 keys use calendar Friday (e.g. 2026-06-19 on Juneteenth); fall back to Monday substitute.
+    const currentWeekDate = findLastCalendarFriday()
+    const currentWeekFallback = findLastFridayOrMonday()
+    const previousWeekDate = findPreviousWeekCalendarFriday()
+    const previousWeekFallback = findPreviousWeekFriday()
+
     const currentWeekDateStr = formatDateYYYYMMDD(currentWeekDate)
     const previousWeekDateStr = formatDateYYYYMMDD(previousWeekDate)
     
@@ -213,8 +233,8 @@ export async function GET(request: Request) {
     }
     
     const [latestPublish, previousPublish] = await Promise.all([
-      fetchWeeklyPrediction(currentWeekDateStr),
-      fetchWeeklyPrediction(previousWeekDateStr),
+      fetchWeeklyPredictionWithFallback(currentWeekDate, currentWeekFallback),
+      fetchWeeklyPredictionWithFallback(previousWeekDate, previousWeekFallback),
     ])
 
     const classified = classifyWeeklyPredictions(latestPublish, previousPublish)

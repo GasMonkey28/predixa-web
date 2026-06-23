@@ -190,6 +190,33 @@ export function getPreviousTradingDay(fromDate: Date = new Date()): Date {
 }
 
 /**
+ * Most recent calendar Friday (NYSE timezone), even when the exchange is closed.
+ * Weekly prediction files in S3 are keyed by this date (e.g. Juneteenth Friday).
+ */
+export function findLastCalendarFriday(fromDate: Date = new Date()): Date {
+  let dateStr = getDateStringInTimeZone(NYSE_TIMEZONE, fromDate)
+
+  for (let i = 0; i < 10; i++) {
+    if (getDayOfWeekFromDateStr(dateStr) === 5) {
+      return dateFromDateStr(dateStr)
+    }
+    dateStr = shiftDateStr(dateStr, -1)
+  }
+
+  return getPreviousTradingDay(fromDate)
+}
+
+/**
+ * Calendar Friday one week before findLastCalendarFriday(fromDate).
+ */
+export function findPreviousWeekCalendarFriday(fromDate: Date = new Date()): Date {
+  const lastFriday = findLastCalendarFriday(fromDate)
+  const previousWeek = new Date(lastFriday)
+  previousWeek.setDate(previousWeek.getDate() - 7)
+  return previousWeek
+}
+
+/**
  * Find the last Friday (or Monday if Friday is a holiday)
  * Works backwards from the given date
  */
