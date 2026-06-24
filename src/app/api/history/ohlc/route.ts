@@ -41,8 +41,23 @@ export async function GET() {
           
           // Convert to ET timezone to match S3 date format
           const etTimeZone = 'America/New_York'
-          const etDate = new Date(date.toLocaleString('en-US', { timeZone: etTimeZone }))
-          const dayOfWeek = etDate.getDay()
+          
+          // Use Intl.DateTimeFormat to get date components in ET timezone
+          const etFormatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: etTimeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          })
+          const dateStr = etFormatter.format(date) // YYYY-MM-DD format
+          
+          // Get day of week in ET timezone by creating a date object from ET date parts
+          const etDateParts = etFormatter.formatToParts(date)
+          const etYear = parseInt(etDateParts.find(p => p.type === 'year')!.value)
+          const etMonth = parseInt(etDateParts.find(p => p.type === 'month')!.value) - 1 // 0-indexed
+          const etDay = parseInt(etDateParts.find(p => p.type === 'day')!.value)
+          const etDateObj = new Date(etYear, etMonth, etDay)
+          const dayOfWeek = etDateObj.getDay()
           
           // Skip weekends (Saturday = 6, Sunday = 0)
           if (dayOfWeek === 0 || dayOfWeek === 6) {
@@ -53,8 +68,6 @@ export async function GET() {
           if (opens[i] == null || highs[i] == null || lows[i] == null || closes[i] == null) {
             continue
           }
-
-          const dateStr = etDate.toLocaleDateString('en-CA') // YYYY-MM-DD format
       
       ohlcData.push({
         date: dateStr,

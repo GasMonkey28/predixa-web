@@ -152,9 +152,24 @@ export default function HistoryPageContent() {
     return false
   }
 
+  // Helper function to format date string (YYYY-MM-DD) as ET date
+  // The date string represents a date in ET timezone
+  // We parse it and format with ET timezone to ensure correct display
+  const formatETDate = (dateStr: string, options: Intl.DateTimeFormatOptions): string => {
+    // Parse YYYY-MM-DD
+    const [year, month, day] = dateStr.split('-').map(Number)
+    // Create a date at noon UTC (safe time that avoids DST edge cases)
+    // Then format with ET timezone - the formatter will handle the conversion correctly
+    const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+    return date.toLocaleDateString('en-US', {
+      ...options,
+      timeZone: 'America/New_York'
+    })
+  }
+
   // Prepare chart data with tier information, prediction status, and compensation
   const chartData = data.map((item, index) => ({
-    time: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    time: formatETDate(item.date, { month: 'short', day: 'numeric' }),
     open: item.open,
     high: item.high,
     low: item.low,
@@ -268,8 +283,7 @@ export default function HistoryPageContent() {
               </thead>
               <tbody>
                 {data.map((item, index) => {
-                  const date = new Date(item.date)
-                  const dateStr = date.toLocaleDateString('en-US', { 
+                  const dateStr = formatETDate(item.date, { 
                     month: 'short', 
                     day: 'numeric',
                     year: 'numeric'

@@ -24,9 +24,20 @@ function getLast10TradingDays(): string[] {
   const etTimeZone = 'America/New_York'
   const tradingDays: string[] = []
   const today = new Date()
-  const etDate = new Date(today.toLocaleString('en-US', { timeZone: etTimeZone }))
   
-  let currentDate = new Date(etDate)
+  // Get today's date in ET timezone
+  const etFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: etTimeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+  const todayParts = etFormatter.formatToParts(today)
+  const todayYear = parseInt(todayParts.find(p => p.type === 'year')!.value)
+  const todayMonth = parseInt(todayParts.find(p => p.type === 'month')!.value) - 1
+  const todayDay = parseInt(todayParts.find(p => p.type === 'day')!.value)
+  let currentDate = new Date(todayYear, todayMonth, todayDay)
+  
   let daysBack = 0
   
   while (tradingDays.length < 10 && daysBack < 20) {
@@ -34,7 +45,7 @@ function getLast10TradingDays(): string[] {
     
     // Skip weekends
     if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      const dateStr = currentDate.toLocaleDateString('en-CA') // YYYY-MM-DD
+      const dateStr = etFormatter.format(currentDate) // YYYY-MM-DD
       tradingDays.push(dateStr)
     }
     
@@ -76,8 +87,23 @@ export async function GET() {
           
           // Convert to ET timezone to match S3 date format
           const etTimeZone = 'America/New_York'
-          const etDate = new Date(date.toLocaleString('en-US', { timeZone: etTimeZone }))
-          const dayOfWeek = etDate.getDay()
+          
+          // Use Intl.DateTimeFormat to get date components in ET timezone
+          const etFormatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: etTimeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          })
+          const dateStr = etFormatter.format(date) // YYYY-MM-DD format
+          
+          // Get day of week in ET timezone by creating a date object from ET date parts
+          const etDateParts = etFormatter.formatToParts(date)
+          const etYear = parseInt(etDateParts.find(p => p.type === 'year')!.value)
+          const etMonth = parseInt(etDateParts.find(p => p.type === 'month')!.value) - 1 // 0-indexed
+          const etDay = parseInt(etDateParts.find(p => p.type === 'day')!.value)
+          const etDateObj = new Date(etYear, etMonth, etDay)
+          const dayOfWeek = etDateObj.getDay()
           
           // Skip weekends
           if (dayOfWeek === 0 || dayOfWeek === 6) {
@@ -88,8 +114,6 @@ export async function GET() {
           if (opens[i] == null || highs[i] == null || lows[i] == null || closes[i] == null) {
             continue
           }
-
-          const dateStr = etDate.toLocaleDateString('en-CA') // YYYY-MM-DD format
           
           ohlcData.push({
             date: dateStr,
