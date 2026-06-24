@@ -19,6 +19,9 @@ export interface TradeJournalEntry {
   /** M1/M2 signals for close (take profit) day. */
   closeReason: string | null
   rating: string
+  /** Point P&L transferred to another position (excluded from monthly P&L). */
+  pointsContributed: number | null
+  contributedToEntryId: string | null
   source?: 'manual' | 'tradestation'
   externalId?: string | null
   tradestationBuyFillId?: string | null
@@ -219,10 +222,41 @@ export function calcOpenPositionSummary(entries: TradeJournalEntry[]): OpenPosit
 }
 
 export function getEntryProfit(entry: TradeJournalEntry): number | null {
+  if (entry.pointsContributed != null && entry.soldPrice != null) return 0
   return (
     entry.profit ??
     calcProfit(entry.buyPrice, entry.soldPrice, entry.instrumentType, entry.positionSize)
   )
+}
+
+/** Shift entry price by contributed points: long +pts, short −pts on signed Buy. */
+export function applyPointsToBuyPrice(buyPrice: number, points: number): number {
+  return buyPrice > 0 ? buyPrice + points : buyPrice - points
+}
+
+export interface ContributeRecipientTarget {
+  entry: TradeJournalEntry
+  tradeNo: number | null
+  newBuyPrice: number
+}
+
+export function getContributeRecipientTargets(
+  entries: TradeJournalEntry[],
+  sourceEntryId: string,
+  points: number,
+  instrumentType?: InstrumentType
+): ContributeRecipientTarget[] {
+  return entries
+    .filter((entry) => {
+      if (entry.id === sourceEntryId || !isOpenPosition(entry)) return false
+      if (instrumentType && entry.instrumentType !== instrumentType) return false
+      return entry.buyPrice != null && entry.buyPrice !== 0
+    })
+    .map((entry) => ({
+      entry,
+      tradeNo: getTradeNumber(entries, entry.id),
+      newBuyPrice: applyPointsToBuyPrice(entry.buyPrice!, points),
+    }))
 }
 
 export interface MonthlyProfitSummary {
@@ -383,6 +417,9 @@ export function normalizeEntry(entry: Partial<TradeJournalEntry>, index: number)
     profit: null,
     reason: typeof entry.reason === 'string' ? entry.reason : '',
     closeReason: typeof entry.closeReason === 'string' ? entry.closeReason : null,
+    pointsContributed: coerceNumber(entry.pointsContributed),
+    contributedToEntryId:
+      typeof entry.contributedToEntryId === 'string' ? entry.contributedToEntryId : null,
     rating: typeof entry.rating === 'string' ? entry.rating : '',
     source: entry.source === 'tradestation' ? 'tradestation' : 'manual',
     externalId: typeof entry.externalId === 'string' ? entry.externalId : null,
@@ -410,6 +447,8 @@ export function createEmptyEntry(no: number): TradeJournalEntry {
       targetPrice: null,
       reason: '',
       closeReason: null,
+      pointsContributed: null,
+      contributedToEntryId: null,
       rating: '',
     },
     no - 1

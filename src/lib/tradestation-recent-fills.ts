@@ -1,6 +1,7 @@
 import {
   InstrumentType,
   TradeJournalEntry,
+  calcPointPnL,
   calcProfit,
   getTradeNumber,
   isLongPosition,
@@ -199,6 +200,8 @@ export function createJournalEntryFromFill(fill: TradeStationRecentFill): TradeJ
     profit: null,
     reason: isOpen ? `TradeStation ${fill.symbol}` : '',
     closeReason: isOpen ? null : `TradeStation ${fill.symbol}`,
+    pointsContributed: null,
+    contributedToEntryId: null,
     rating: '',
     source: 'tradestation',
     externalId: null,
@@ -220,7 +223,25 @@ export function getUsedTradeStationFillIds(
 
 export const TS_FILL_DRAG_TYPE = 'application/x-predixa-ts-fill'
 
-export type TsFillJournalAction = 'buy' | 'sell' | 'sold' | 'takeProfit'
+export type TsFillJournalAction = 'buy' | 'sell' | 'sold' | 'takeProfit' | 'contribute'
+
+export function exitPriceFromFill(fill: TradeStationRecentFill): number {
+  return fill.soldValue ?? fill.price
+}
+
+/** Open positions this fill can close for take profit / contribute (step 1). */
+export function getContributeCloseTargets(
+  fill: TradeStationRecentFill,
+  entries: TradeJournalEntry[]
+): TsFillJournalTarget[] {
+  if (fill.openOrClose === 'close' && fill.soldValue != null) {
+    return getJournalTargetsForFillAction(fill, entries, 'takeProfit')
+  }
+  if (fill.openOrClose === 'open' && fill.buyOrSell === 'sell') {
+    return getJournalTargetsForFillAction(fill, entries, 'sell')
+  }
+  return []
+}
 
 export interface TsFillJournalTarget {
   entry: TradeJournalEntry

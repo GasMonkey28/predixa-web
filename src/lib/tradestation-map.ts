@@ -255,6 +255,9 @@ export function mergeTradeStationEntries(
           soldPrice: patch.soldPrice ?? existing.soldPrice ?? null,
           reason: existing.reason || patch.reason || '',
           closeReason: existing.closeReason ?? patch.closeReason ?? null,
+          pointsContributed: existing.pointsContributed ?? patch.pointsContributed ?? null,
+          contributedToEntryId:
+            existing.contributedToEntryId ?? patch.contributedToEntryId ?? null,
           rating: existing.rating,
           profitMonth: existing.profitMonth,
           source: 'tradestation',
@@ -278,6 +281,8 @@ export function mergeTradeStationEntries(
       profit: null,
       reason: patch.reason ?? '',
       closeReason: patch.closeReason ?? null,
+      pointsContributed: patch.pointsContributed ?? null,
+      contributedToEntryId: patch.contributedToEntryId ?? null,
       rating: patch.rating ?? '',
       source: 'tradestation',
       externalId: patch.externalId,

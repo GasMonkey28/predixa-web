@@ -12,6 +12,8 @@ import {
   INSTRUMENT_OPTIONS,
   calcMonthlyProfitSummaries,
   calcOpenPositionSummary,
+  calcPointPnL,
+  getContributeRecipientTargets,
   type OpenPositionSummary,
   applyRollOverDiff,
   createEmptyEntry,
@@ -31,6 +33,8 @@ import { fetchTradeJournalReason } from '@/lib/trade-journal-reason'
 import { type TradeStationPositionLine } from '@/lib/tradestation-map'
 import {
   createJournalEntryFromFill,
+  exitPriceFromFill,
+  getContributeCloseTargets,
   getJournalTargetsForFillAction,
   getUsedTradeStationFillIds,
   loadDismissedTsFillIds,
@@ -81,6 +85,7 @@ export default function TradeJournalPage() {
   const [tsFillActionMenu, setTsFillActionMenu] = useState<{
     fillId: string
     action: TsFillJournalAction
+    contributeSourceId?: string
   } | null>(null)
   const [tsPositionSummary, setTsPositionSummary] = useState<OpenPositionSummary | null>(null)
   const [tsPositionLines, setTsPositionLines] = useState<TradeStationPositionLine[]>([])
@@ -531,11 +536,81 @@ export default function TradeJournalPage() {
 
   const toggleTsFillActionMenu = useCallback(
     (fillId: string, action: TsFillJournalAction) => {
-      setTsFillActionMenu((prev) =>
-        prev?.fillId === fillId && prev.action === action ? null : { fillId, action }
-      )
+      setTsFillActionMenu((prev) => {
+        if (prev?.fillId === fillId && prev.action === action && !prev.contributeSourceId) {
+          return null
+        }
+        return { fillId, action }
+      })
     },
     []
+  )
+
+  const applyContributeFill = useCallback(
+    async (
+      fill: TradeStationRecentFill,
+      sourceEntryId: string,
+      recipientEntryId: string
+    ) => {
+      const source = entries.find((entry) => entry.id === sourceEntryId)
+      if (!source?.buyPrice) {
+        setTsMessage('Source position has no Buy price.')
+        return
+      }
+
+      const exitPrice = exitPriceFromFill(fill)
+      const points = calcPointPnL(source.buyPrice, exitPrice)
+      if (points == null || points === 0) {
+        setTsMessage('No point P&L to contribute from this close.')
+        return
+      }
+
+      const recipient = entries.find((entry) => entry.id === recipientEntryId)
+      if (!recipient || !isOpenPosition(recipient)) {
+        setTsMessage('Recipient position is not open.')
+        return
+      }
+
+      const recipientNo = getTradeNumber(entries, recipientEntryId)
+      const closeReasonBase = await fetchTradeJournalReason(fill.date)
+      const contribNote = `Contrib ${points > 0 ? '+' : ''}${points}pts → #${recipientNo ?? '—'}`
+      const closeReason = closeReasonBase
+        ? `${closeReasonBase} · ${contribNote}`
+        : contribNote
+
+      pushUndoSnapshot()
+      setEntries((prev) =>
+        renumberEntries(
+          prev.map((entry) => {
+            if (entry.id === sourceEntryId) {
+              return withRecalculatedProfit({
+                ...entry,
+                soldPrice: exitPrice,
+                closeDate: fill.date,
+                closeReason,
+                pointsContributed: points,
+                contributedToEntryId: recipientEntryId,
+                instrumentType: fill.instrumentType,
+                positionSize: fill.quantity,
+                tradestationSoldFillId: fill.id,
+                profit: 0,
+              })
+            }
+            if (entry.id === recipientEntryId && entry.buyPrice != null) {
+              const newBuy =
+                entry.buyPrice > 0 ? entry.buyPrice + points : entry.buyPrice - points
+              return withRecalculatedProfit({ ...entry, buyPrice: newBuy })
+            }
+            return entry
+          })
+        )
+      )
+      setTsFillActionMenu(null)
+      setTsMessage(
+        `Contributed ${points > 0 ? '+' : ''}${points} pts from #${getTradeNumber(entries, sourceEntryId) ?? '—'} to #${recipientNo ?? '—'}.`
+      )
+    },
+    [entries, pushUndoSnapshot]
   )
 
   const addFillAsJournalEntry = useCallback(async (fill: TradeStationRecentFill) => {
@@ -683,7 +758,8 @@ export default function TradeJournalPage() {
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs font-medium text-gray-300">
                     Drag onto journal <strong>Buy</strong> or <strong>Sold</strong>, use dropdowns on each
-                    action, or <strong>Take profit</strong> to close an open position.
+                    action, or <strong>Take profit</strong> / <strong>Contribute</strong> to close an open
+                    position.
                   </p>
                   {dismissedTsFillCount > 0 && (
                     <button
@@ -809,6 +885,194 @@ export default function TradeJournalPage() {
                         )
                       }
 
+                      const renderContributeMenu = () => {
+                        if (!isCloseFill && !isShortOpen) return null
+
+                        const isOpen =
+                          tsFillActionMenu?.fillId === fill.id &&
+                          tsFillActionMenu?.action === 'contribute'
+                        const sourceId = isOpen ? tsFillActionMenu?.contributeSourceId : undefined
+                        const exitPrice = exitPriceFromFill(fill)
+                        const sourceEntry = sourceId
+                          ? entries.find((entry) => entry.id === sourceId)
+                          : undefined
+                        const points =
+                          sourceEntry?.buyPrice != null
+                            ? calcPointPnL(sourceEntry.buyPrice, exitPrice)
+                            : null
+                        const closeTargets = !sourceId
+                          ? getContributeCloseTargets(fill, entries)
+                          : []
+                        const recipientTargets =
+                          sourceId && points != null
+                            ? getContributeRecipientTargets(
+                                entries,
+                                sourceId,
+                                points,
+                                fill.instrumentType
+                              )
+                            : []
+
+                        return (
+                          <div
+                            data-ts-fill-menu
+                            className="relative shrink-0"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onDragStart={(e) => e.preventDefault()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => toggleTsFillActionMenu(fill.id, 'contribute')}
+                              disabled={inJournal}
+                              title="Close a position and add points to another open entry"
+                              className="inline-flex items-center gap-0.5 rounded border border-purple-500/40 bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-200 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Contribute
+                              <ChevronDown
+                                className={clsx(
+                                  'h-3 w-3 transition-transform',
+                                  isOpen && 'rotate-180'
+                                )}
+                              />
+                            </button>
+                            {isOpen && (
+                              <ul
+                                data-ts-fill-menu
+                                className="absolute right-0 top-full z-30 mt-1 max-h-48 min-w-[16rem] overflow-y-auto overscroll-contain rounded-md border border-zinc-600 bg-zinc-900 py-1 shadow-lg [scrollbar-gutter:stable]"
+                              >
+                                {sourceId ? (
+                                  <>
+                                    <li className="border-b border-zinc-700/80 px-3 py-1.5 text-[10px] text-purple-300">
+                                      {points != null ? (
+                                        <>
+                                          {points > 0 ? '+' : ''}
+                                          {points} pts from #
+                                          {getTradeNumber(entries, sourceId) ?? '—'} → pick recipient
+                                        </>
+                                      ) : (
+                                        'No points to contribute'
+                                      )}
+                                    </li>
+                                    {recipientTargets.length === 0 ? (
+                                      <li className="px-3 py-2 text-[10px] text-gray-500">
+                                        No other open positions for this instrument.
+                                      </li>
+                                    ) : (
+                                      recipientTargets.map(
+                                        ({ entry, tradeNo, newBuyPrice }) => (
+                                          <li key={entry.id}>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                void applyContributeFill(
+                                                  fill,
+                                                  sourceId,
+                                                  entry.id
+                                                )
+                                              }
+                                              className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-zinc-800"
+                                            >
+                                              <span className="text-[10px] font-medium text-white">
+                                                {tradeNo != null ? (
+                                                  <span
+                                                    className={
+                                                      tradeNo < 0
+                                                        ? 'text-red-400'
+                                                        : 'text-emerald-400'
+                                                    }
+                                                  >
+                                                    #{tradeNo}
+                                                  </span>
+                                                ) : (
+                                                  <span className="text-gray-400">Row</span>
+                                                )}
+                                                {' · '}
+                                                <span className="text-gray-300">
+                                                  {entry.entryDate}
+                                                </span>
+                                              </span>
+                                              <span className="text-[10px] tabular-nums text-purple-300">
+                                                Buy {entry.buyPrice} → {newBuyPrice}
+                                              </span>
+                                            </button>
+                                          </li>
+                                        )
+                                      )
+                                    )}
+                                    <li className="border-t border-zinc-700/80">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setTsFillActionMenu({
+                                            fillId: fill.id,
+                                            action: 'contribute',
+                                          })
+                                        }
+                                        className="w-full px-3 py-1.5 text-left text-[10px] text-gray-400 hover:bg-zinc-800"
+                                      >
+                                        ← Back
+                                      </button>
+                                    </li>
+                                  </>
+                                ) : closeTargets.length === 0 ? (
+                                  <li className="px-3 py-2 text-[10px] text-gray-500">
+                                    No matching open positions to close.
+                                  </li>
+                                ) : (
+                                  closeTargets.map(({ entry, tradeNo, projectedProfit }) => (
+                                    <li key={entry.id}>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setTsFillActionMenu({
+                                            fillId: fill.id,
+                                            action: 'contribute',
+                                            contributeSourceId: entry.id,
+                                          })
+                                        }
+                                        className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-zinc-800"
+                                      >
+                                        <span className="text-[10px] font-medium text-white">
+                                          Close{' '}
+                                          {tradeNo != null ? (
+                                            <span
+                                              className={
+                                                tradeNo < 0 ? 'text-red-400' : 'text-emerald-400'
+                                              }
+                                            >
+                                              #{tradeNo}
+                                            </span>
+                                          ) : (
+                                            <span className="text-gray-400">row</span>
+                                          )}
+                                          {' · '}
+                                          <span className="text-gray-300">{entry.entryDate}</span>
+                                          {entry.buyPrice != null && (
+                                            <>
+                                              {' · '}
+                                              <span className="tabular-nums text-gray-400">
+                                                Buy {entry.buyPrice}
+                                              </span>
+                                            </>
+                                          )}
+                                        </span>
+                                        {projectedProfit != null && (
+                                          <span className="text-[10px] tabular-nums text-gray-500">
+                                            {calcPointPnL(entry.buyPrice, exitPrice) ?? 0} pts to
+                                            contribute
+                                          </span>
+                                        )}
+                                      </button>
+                                    </li>
+                                  ))
+                                )}
+                              </ul>
+                            )}
+                          </div>
+                        )
+                      }
+
                       return (
                         <li
                           key={fill.id}
@@ -834,6 +1098,7 @@ export default function TradeJournalPage() {
                             renderFillActionMenu('buy', '→ Buy', 'bg-emerald-500/20 text-emerald-400')}
                           {isShortOpen &&
                             renderFillActionMenu('sell', '→ Sell', 'bg-red-500/20 text-red-400')}
+                          {isShortOpen && !inJournal && renderContributeMenu()}
                           {isCloseFill &&
                             renderFillActionMenu('sold', '→ Sold', 'bg-amber-500/20 text-amber-300')}
                           {inJournal ? (
@@ -855,6 +1120,7 @@ export default function TradeJournalPage() {
                                   'Take profit',
                                   'border border-amber-500/40 bg-amber-500/10 text-amber-200'
                                 )}
+                              {isCloseFill && renderContributeMenu()}
                             </>
                           )}
                           <button
