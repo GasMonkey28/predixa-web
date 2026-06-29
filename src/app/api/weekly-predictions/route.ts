@@ -2,16 +2,11 @@ import { NextResponse } from 'next/server'
 import axios from 'axios'
 import { config } from '@/lib/server/config'
 import {
-  findFridayOfWeekContaining,
-  findLastCalendarFriday,
+  classifyWeeklyPredictionRole,
   findLastFridayOrMonday,
-  findNextWeekFriday,
-  findPreviousWeekCalendarFriday,
-  findPreviousWeekFriday,
   formatDateYYYYMMDD,
-  fwdJoinOverlapsWeek,
   getMarketAnchorDate,
-  getWeekDateRange,
+  getWeeklyPublishCandidateDates,
   isFridayAfterWeeklyPredictionCutoff,
   parseDateYYYYMMDD,
 } from '@/lib/trading-calendar'
@@ -38,25 +33,6 @@ interface WeeklyPredictionsResponse {
   publishReady?: boolean
 }
 
-/**
- * Fetch weekly prediction from S3
- */
-/** S3 keys use calendar Friday; fall back to Monday substitute when needed. */
-async function fetchWeeklyPredictionWithFallback(
-  primaryDate: Date,
-  fallbackDate?: Date
-): Promise<WeeklyPrediction | null> {
-  const primary = await fetchWeeklyPrediction(formatDateYYYYMMDD(primaryDate))
-  if (primary || !fallbackDate) {
-    return primary
-  }
-  const fallbackStr = formatDateYYYYMMDD(fallbackDate)
-  if (fallbackStr === formatDateYYYYMMDD(primaryDate)) {
-    return null
-  }
-  return fetchWeeklyPrediction(fallbackStr)
-}
-
 async function fetchWeeklyPrediction(dateStr: string): Promise<WeeklyPrediction | null> {
   const bucket = config.marketData.bucket
   const ticker = config.marketData.ticker || 'SPY'
@@ -79,15 +55,36 @@ async function fetchWeeklyPrediction(dateStr: string): Promise<WeeklyPrediction 
     
     return null
   } catch (error: any) {
-    // 404 is expected if prediction file doesn't exist yet
-    if (error.response?.status === 404) {
+    // Missing keys often return 404 or 403 on public S3 buckets
+    const status = error.response?.status
+    if (status === 404 || status === 403) {
       console.log(`Weekly prediction not found in S3: ${dateStr}/${s3Ticker}.json`)
       return null
     }
-    
+
     console.error(`Error fetching weekly prediction from S3: ${error.message}`)
     return null
   }
+}
+
+/** Load the newest distinct weekly publishes available in S3. */
+async function fetchRecentWeeklyPublishes(
+  referenceDate: Date = new Date(),
+  limit = 2
+): Promise<WeeklyPrediction[]> {
+  const candidateDates = getWeeklyPublishCandidateDates(referenceDate)
+  const results = await Promise.all(candidateDates.map((dateStr) => fetchWeeklyPrediction(dateStr)))
+
+  const byAsOfDate = new Map<string, WeeklyPrediction>()
+  for (const pred of results) {
+    if (pred && !byAsOfDate.has(pred.as_of_date)) {
+      byAsOfDate.set(pred.as_of_date, pred)
+    }
+  }
+
+  return [...byAsOfDate.values()]
+    .sort((a, b) => b.as_of_date.localeCompare(a.as_of_date))
+    .slice(0, limit)
 }
 
 /**
@@ -124,68 +121,26 @@ function getAllWeekDatesInRange(startDate: Date, endDate: Date): Date[] {
   return weekDates.reverse()
 }
 
-function isBeforePredictionWeek(pred: WeeklyPrediction, anchor: Date): boolean {
-  const predWeek = getWeekDateRange(parseDateYYYYMMDD(pred.fwd_join_date))
-  return formatDateYYYYMMDD(anchor) < formatDateYYYYMMDD(predWeek.monday)
-}
-
 function classifyWeeklyPredictions(
-  latestPublish: WeeklyPrediction | null,
-  previousPublish: WeeklyPrediction | null,
+  publishes: WeeklyPrediction[],
   referenceDate: Date = new Date()
 ): Pick<WeeklyPredictionsResponse, 'currentWeek' | 'previousWeek' | 'nextWeek' | 'publishReady'> {
   const anchor = getMarketAnchorDate(referenceDate)
-  const thisWeekFriday = findFridayOfWeekContaining(anchor)
-  const nextWeekFriday = findNextWeekFriday(anchor)
-  const previousWeekFriday = findPreviousWeekFriday(anchor)
-
   let currentWeek: WeeklyPrediction | null = null
   let previousWeek: WeeklyPrediction | null = null
   let nextWeek: WeeklyPrediction | null = null
 
-  const assign = (pred: WeeklyPrediction) => {
-    if (fwdJoinOverlapsWeek(pred.fwd_join_date, nextWeekFriday)) {
-      if (!nextWeek) nextWeek = pred
-      return
-    }
-    if (fwdJoinOverlapsWeek(pred.fwd_join_date, thisWeekFriday)) {
-      if (!currentWeek) currentWeek = pred
-      return
-    }
-    if (fwdJoinOverlapsWeek(pred.fwd_join_date, previousWeekFriday)) {
-      if (!previousWeek) previousWeek = pred
-    }
-  }
+  const sorted = [...publishes].sort((a, b) => b.as_of_date.localeCompare(a.as_of_date))
 
-  // Friday publish targets a week that has not started yet (e.g. holiday Monday)
-  if (latestPublish && isBeforePredictionWeek(latestPublish, anchor)) {
-    nextWeek = latestPublish
-  } else if (latestPublish) {
-    assign(latestPublish)
-  }
-
-  if (previousPublish) {
-    assign(previousPublish)
-  }
-
-  if (!nextWeek && latestPublish && fwdJoinOverlapsWeek(latestPublish.fwd_join_date, nextWeekFriday)) {
-    nextWeek = latestPublish
-  }
-  if (nextWeek && !currentWeek && previousPublish && fwdJoinOverlapsWeek(previousPublish.fwd_join_date, thisWeekFriday)) {
-    currentWeek = previousPublish
-  }
-  if (!previousWeek && previousPublish && fwdJoinOverlapsWeek(previousPublish.fwd_join_date, previousWeekFriday)) {
-    previousWeek = previousPublish
-  }
-
-  if (!currentWeek && latestPublish && !nextWeek) {
-    const thisWeekFriday = findFridayOfWeekContaining(anchor)
-    if (fwdJoinOverlapsWeek(latestPublish.fwd_join_date, thisWeekFriday)) {
-      currentWeek = latestPublish
+  for (const pred of sorted) {
+    const role = classifyWeeklyPredictionRole(pred.fwd_join_date, anchor)
+    if (role === 'next' && !nextWeek) {
+      nextWeek = pred
+    } else if (role === 'current' && !currentWeek) {
+      currentWeek = pred
+    } else if (role === 'previous' && !previousWeek) {
+      previousWeek = pred
     }
-  }
-  if (!previousWeek && previousPublish && previousPublish !== currentWeek && previousPublish !== nextWeek) {
-    previousWeek = previousPublish
   }
 
   const publishReady =
@@ -202,15 +157,9 @@ export async function GET(request: Request) {
     const endDateStr = searchParams.get('endDate')
     const interval = searchParams.get('interval') || '15min'
     
-    // S3 keys use calendar Friday (e.g. 2026-06-19 on Juneteenth); fall back to Monday substitute.
-    const currentWeekDate = findLastCalendarFriday()
-    const currentWeekFallback = findLastFridayOrMonday()
-    const previousWeekDate = findPreviousWeekCalendarFriday()
-    const previousWeekFallback = findPreviousWeekFriday()
+    const referenceDate = new Date()
+    const candidateDates = getWeeklyPublishCandidateDates(referenceDate)
 
-    const currentWeekDateStr = formatDateYYYYMMDD(currentWeekDate)
-    const previousWeekDateStr = formatDateYYYYMMDD(previousWeekDate)
-    
     // For 60min interval, fetch predictions for all weeks in the visible range
     let allWeeks: WeeklyPrediction[] = []
     if (interval === '60min' && startDateStr && endDateStr) {
@@ -232,16 +181,14 @@ export async function GET(request: Request) {
       allWeeks = weekResults.filter((pred): pred is WeeklyPrediction => pred !== null)
     }
     
-    const [latestPublish, previousPublish] = await Promise.all([
-      fetchWeeklyPredictionWithFallback(currentWeekDate, currentWeekFallback),
-      fetchWeeklyPredictionWithFallback(previousWeekDate, previousWeekFallback),
-    ])
-
-    const classified = classifyWeeklyPredictions(latestPublish, previousPublish)
+    const publishes = await fetchRecentWeeklyPublishes(referenceDate, 2)
+    const classified = classifyWeeklyPredictions(publishes, referenceDate)
 
     console.log('Fetching weekly predictions:', {
-      latestPublish: currentWeekDateStr,
-      previousPublish: previousWeekDateStr,
+      candidateDates,
+      publishAsOfDates: publishes.map((p) => p.as_of_date),
+      currentWeekAsOf: classified.currentWeek?.as_of_date ?? null,
+      currentWeekFwdJoin: classified.currentWeek?.fwd_join_date ?? null,
       allWeeksCount: allWeeks.length,
       nextWeekFwdJoin: classified.nextWeek?.fwd_join_date ?? null,
       publishReady: classified.publishReady,

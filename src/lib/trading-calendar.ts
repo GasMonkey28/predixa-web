@@ -217,6 +217,56 @@ export function findPreviousWeekCalendarFriday(fromDate: Date = new Date()): Dat
 }
 
 /**
+ * Candidate S3 keys for recent weekly publishes (calendar Friday + Monday substitute).
+ */
+export function getWeeklyPublishCandidateDates(fromDate: Date = new Date(), weeksBack = 5): string[] {
+  const seen = new Set<string>()
+  const dates: string[] = []
+  let friday = findLastCalendarFriday(fromDate)
+
+  for (let week = 0; week < weeksBack; week++) {
+    for (const candidate of [
+      formatDateYYYYMMDD(friday),
+      formatDateYYYYMMDD(findLastFridayOrMonday(friday)),
+    ]) {
+      if (!seen.has(candidate)) {
+        seen.add(candidate)
+        dates.push(candidate)
+      }
+    }
+    const previousWeek = new Date(friday)
+    previousWeek.setDate(previousWeek.getDate() - 7)
+    friday = previousWeek
+  }
+
+  return dates
+}
+
+export type WeeklyPredictionRole = 'next' | 'current' | 'previous'
+
+/** Classify which chart band a prediction belongs in for the anchor trading day. */
+export function classifyWeeklyPredictionRole(
+  fwdJoinDate: string,
+  anchor: Date
+): WeeklyPredictionRole | null {
+  const anchorStr = formatDateYYYYMMDD(anchor)
+  const { monday, friday } = getWeekDateRange(parseDateYYYYMMDD(fwdJoinDate))
+  const monStr = formatDateYYYYMMDD(monday)
+  const friStr = formatDateYYYYMMDD(friday)
+
+  if (anchorStr < monStr) {
+    return 'next'
+  }
+  if (anchorStr >= monStr && anchorStr <= friStr) {
+    return 'current'
+  }
+  if (anchorStr > friStr) {
+    return 'previous'
+  }
+  return null
+}
+
+/**
  * Find the last Friday (or Monday if Friday is a holiday)
  * Works backwards from the given date
  */
