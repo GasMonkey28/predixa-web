@@ -229,9 +229,9 @@ export function getEntryProfit(entry: TradeJournalEntry): number | null {
   )
 }
 
-/** Shift entry price by contributed points: long +pts, short −pts on signed Buy. */
+/** Shift entry by contributed points: long −pts (lower buy), short −pts (higher |entry|). */
 export function applyPointsToBuyPrice(buyPrice: number, points: number): number {
-  return buyPrice > 0 ? buyPrice + points : buyPrice - points
+  return buyPrice - points
 }
 
 export interface ContributeRecipientTarget {

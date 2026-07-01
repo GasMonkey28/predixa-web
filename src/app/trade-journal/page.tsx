@@ -597,9 +597,10 @@ export default function TradeJournalPage() {
               })
             }
             if (entry.id === recipientEntryId && entry.buyPrice != null) {
-              const newBuy =
-                entry.buyPrice > 0 ? entry.buyPrice + points : entry.buyPrice - points
-              return withRecalculatedProfit({ ...entry, buyPrice: newBuy })
+              return withRecalculatedProfit({
+                ...entry,
+                buyPrice: entry.buyPrice - points,
+              })
             }
             return entry
           })
