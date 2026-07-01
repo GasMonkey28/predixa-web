@@ -13,7 +13,10 @@ import {
   calcMonthlyProfitSummaries,
   calcOpenPositionSummary,
   calcPointPnL,
+  defaultProfitMonthOnClose,
+  ensureMonthsInSummaries,
   getContributeRecipientTargets,
+  getCurrentMonthKey,
   type OpenPositionSummary,
   applyRollOverDiff,
   createEmptyEntry,
@@ -275,10 +278,13 @@ export default function TradeJournalPage() {
     if (!tsPositionSummary) return null
     return tsPositionSummary.netPosition === positionSummary.netPosition
   }, [tsPositionSummary, positionSummary])
-  const monthlySummaries = useMemo(
-    () => calcMonthlyProfitSummaries(entries, monthlyProfitEntries),
-    [entries, monthlyProfitEntries]
-  )
+  const monthlySummaries = useMemo(() => {
+    const currentMonthKey = getCurrentMonthKey()
+    const summaries = calcMonthlyProfitSummaries(entries, monthlyProfitEntries)
+    return ensureMonthsInSummaries(summaries, [currentMonthKey])
+  }, [entries, monthlyProfitEntries])
+
+  const currentMonthKey = useMemo(() => getCurrentMonthKey(), [])
 
   const addMonthlyProfitEntry = () => {
     pushUndoSnapshot()
@@ -494,12 +500,18 @@ export default function TradeJournalPage() {
       }
 
       const closeReason = await fetchTradeJournalReason(fill.date)
+      const target = entries.find((entry) => entry.id === entryId)
+      const profitMonth = defaultProfitMonthOnClose({
+        profitMonth: target?.profitMonth ?? null,
+        closeDate: fill.date,
+      })
 
       pushUndoSnapshot()
       updateEntry(entryId, {
         soldPrice,
         closeDate: fill.date,
         closeReason: closeReason || null,
+        ...(profitMonth ? { profitMonth } : {}),
         instrumentType: fill.instrumentType,
         positionSize: fill.quantity,
         tradestationSoldFillId: fill.id,
@@ -583,11 +595,16 @@ export default function TradeJournalPage() {
         renumberEntries(
           prev.map((entry) => {
             if (entry.id === sourceEntryId) {
+              const profitMonth = defaultProfitMonthOnClose({
+                profitMonth: entry.profitMonth,
+                closeDate: fill.date,
+              })
               return withRecalculatedProfit({
                 ...entry,
                 soldPrice: exitPrice,
                 closeDate: fill.date,
                 closeReason,
+                ...(profitMonth ? { profitMonth } : {}),
                 pointsContributed: points,
                 contributedToEntryId: recipientEntryId,
                 instrumentType: fill.instrumentType,
@@ -687,8 +704,9 @@ export default function TradeJournalPage() {
             Trade Journal
           </h1>
           <p className="text-gray-300">
-            Buy: positive = long, negative = short. Position clears when sold. Use P&L Month to
-            count a trade in another month, or add manual month profit for carry-over/adjustments.
+            Buy: positive = long, negative = short. Position clears when sold. Closed trades count
+            in the close month (July closes → July). Override with P&L Month, or add manual month
+            profit for carry-over/adjustments.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-400">
             <span>
@@ -1325,9 +1343,21 @@ export default function TradeJournalPage() {
                 {monthlySummaries.map((month) => (
                   <div
                     key={month.monthKey}
-                    className="min-w-[8.5rem] rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3 py-2"
+                    className={clsx(
+                      'min-w-[8.5rem] rounded-lg border px-3 py-2',
+                      month.monthKey === currentMonthKey
+                        ? 'border-blue-500/50 bg-blue-950/30'
+                        : 'border-zinc-700/80 bg-zinc-900/60'
+                    )}
                   >
-                    <div className="text-xs text-gray-500">{month.label}</div>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      {month.label}
+                      {month.monthKey === currentMonthKey && (
+                        <span className="rounded bg-blue-500/20 px-1 text-[9px] text-blue-300">
+                          current
+                        </span>
+                      )}
+                    </div>
                     <div
                       className={clsx(
                         'text-sm font-semibold tabular-nums',
@@ -1448,7 +1478,7 @@ export default function TradeJournalPage() {
                   <th className={`py-3 text-left font-medium ${PRICE_COL}`}>Profit</th>
                   <th
                     className="px-1 py-3 text-left font-medium w-[6.5rem]"
-                    title="Count this trade's profit in a different month (blank = entry date month)"
+                    title="Count this trade's profit in a different month (defaults to close date month)"
                   >
                     P&L Month
                   </th>
@@ -1533,11 +1563,18 @@ export default function TradeJournalPage() {
                           <input
                             type="date"
                             value={entry.closeDate ?? ''}
-                            onChange={(e) =>
-                              updateEntry(entry.id, {
-                                closeDate: e.target.value || null,
-                              })
-                            }
+                            onChange={(e) => {
+                              const closeDate = e.target.value || null
+                              const patch: Partial<TradeJournalEntry> = { closeDate }
+                              if (entry.soldPrice != null) {
+                                const profitMonth = defaultProfitMonthOnClose({
+                                  profitMonth: entry.profitMonth,
+                                  closeDate,
+                                })
+                                if (profitMonth) patch.profitMonth = profitMonth
+                              }
+                              updateEntry(entry.id, patch)
+                            }}
                             title="Date position was closed (sold)"
                             className="w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 py-1.5 text-xs text-white"
                           />
@@ -1657,8 +1694,15 @@ export default function TradeJournalPage() {
                               if (soldPrice == null) {
                                 patch.closeDate = null
                                 patch.closeReason = null
-                              } else if (!entry.closeDate) {
-                                patch.closeDate = new Date().toISOString().slice(0, 10)
+                              } else {
+                                const closeDate =
+                                  entry.closeDate ?? new Date().toISOString().slice(0, 10)
+                                if (!entry.closeDate) patch.closeDate = closeDate
+                                const profitMonth = defaultProfitMonthOnClose({
+                                  profitMonth: entry.profitMonth,
+                                  closeDate: patch.closeDate ?? closeDate,
+                                })
+                                if (profitMonth) patch.profitMonth = profitMonth
                               }
                               updateEntry(entry.id, patch)
                             }}
@@ -1699,7 +1743,7 @@ export default function TradeJournalPage() {
                                 profitMonth: e.target.value || null,
                               })
                             }
-                            title="Leave blank to use entry date month"
+                            title="Leave blank to use close date month"
                             className="w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 py-1.5 text-xs text-white"
                           />
                         </td>

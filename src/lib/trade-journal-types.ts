@@ -273,10 +273,34 @@ function isValidMonthKey(value: string | null | undefined): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}$/.test(value)
 }
 
+export function getCurrentMonthKey(timeZone = 'America/New_York'): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone }).slice(0, 7)
+}
+
+export function monthKeyFromDate(date: string | null | undefined): string | null {
+  if (!date || !/^\d{4}-\d{2}-\d{2}/.test(date)) return null
+  const monthKey = date.slice(0, 7)
+  return isValidMonthKey(monthKey) ? monthKey : null
+}
+
 export function getProfitMonthKey(entry: TradeJournalEntry): string | null {
   if (isValidMonthKey(entry.profitMonth)) return entry.profitMonth
-  const fromDate = entry.entryDate?.slice(0, 7)
-  return isValidMonthKey(fromDate) ? fromDate : null
+
+  // Closed trades count in the close month (e.g. July take-profit → July P&L).
+  if (entry.soldPrice != null) {
+    const fromClose = monthKeyFromDate(entry.closeDate)
+    if (fromClose) return fromClose
+  }
+
+  return monthKeyFromDate(entry.entryDate)
+}
+
+/** Default P&L month when a trade is closed (blank profitMonth only). */
+export function defaultProfitMonthOnClose(
+  entry: Pick<TradeJournalEntry, 'profitMonth' | 'closeDate'>
+): string | null {
+  if (isValidMonthKey(entry.profitMonth)) return null
+  return monthKeyFromDate(entry.closeDate)
 }
 
 export function formatMonthLabel(monthKey: string): string {
@@ -348,6 +372,29 @@ export function calcMonthlyProfitSummaries(
     }))
 }
 
+/** Ensure month cards exist (e.g. current month at $0 next to prior months). */
+export function ensureMonthsInSummaries(
+  summaries: MonthlyProfitSummary[],
+  monthKeys: string[]
+): MonthlyProfitSummary[] {
+  const byKey = new Map(summaries.map((summary) => [summary.monthKey, summary]))
+
+  for (const monthKey of monthKeys) {
+    if (!isValidMonthKey(monthKey) || byKey.has(monthKey)) continue
+    byKey.set(monthKey, {
+      monthKey,
+      label: formatMonthLabel(monthKey),
+      tradeTotal: 0,
+      adjustmentTotal: 0,
+      total: 0,
+      tradeCount: 0,
+      adjustmentCount: 0,
+    })
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => b.monthKey.localeCompare(a.monthKey))
+}
+
 export function normalizeMonthlyProfitEntry(
   entry: Partial<MonthlyProfitEntry>,
   index: number
@@ -355,7 +402,7 @@ export function normalizeMonthlyProfitEntry(
   const monthKey =
     typeof entry.monthKey === 'string' && isValidMonthKey(entry.monthKey)
       ? entry.monthKey
-      : new Date().toISOString().slice(0, 7)
+      : getCurrentMonthKey()
 
   return {
     id: typeof entry.id === 'string' && entry.id ? entry.id : `month-profit-${index}`,
@@ -369,7 +416,7 @@ export function createMonthlyProfitEntry(monthKey?: string): MonthlyProfitEntry 
   return normalizeMonthlyProfitEntry(
     {
       id: crypto.randomUUID(),
-      monthKey: monthKey ?? new Date().toISOString().slice(0, 7),
+      monthKey: monthKey ?? getCurrentMonthKey(),
       amount: 0,
       note: '',
     },
