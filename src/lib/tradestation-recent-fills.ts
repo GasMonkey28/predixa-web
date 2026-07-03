@@ -36,6 +36,18 @@ function parsePrice(value: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+/** Real fills only — TradeStation sometimes emits $0 position-adjustment legs on close. */
+function isValidFillPrice(price: number | null): price is number {
+  return price != null && price > 0
+}
+
+function legHasExecutedQuantity(
+  leg: NonNullable<TradeStationOrder['Legs']>[number]
+): boolean {
+  const executed = Number(leg.ExecQuantity)
+  return Number.isFinite(executed) && executed > 0
+}
+
 function parseQuantity(value: string | undefined): number {
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed === 0) return 1
@@ -105,11 +117,16 @@ function legPrice(
   leg: NonNullable<TradeStationOrder['Legs']>[number],
   order: TradeStationOrder
 ): number | null {
-  return (
-    parsePrice(leg.ExecutionPrice) ??
-    parsePrice(order.FilledPrice) ??
-    parsePrice(order.PriceUsedForBuyingPower)
-  )
+  const executionPrice = parsePrice(leg.ExecutionPrice)
+  if (isValidFillPrice(executionPrice)) return executionPrice
+
+  const filledPrice = parsePrice(order.FilledPrice)
+  if (isValidFillPrice(filledPrice)) return filledPrice
+
+  const buyingPowerPrice = parsePrice(order.PriceUsedForBuyingPower)
+  if (isValidFillPrice(buyingPowerPrice)) return buyingPowerPrice
+
+  return null
 }
 
 function formatLabel(
@@ -146,7 +163,16 @@ export function extractRecentFillsFromOrders(
       if (qty <= 0) continue
 
       const price = legPrice(leg, order)
-      if (price == null) continue
+      if (!isValidFillPrice(price)) continue
+
+      // Skip phantom open legs with no executed quantity (common on position roll/close).
+      if (
+        leg.OpenOrClose?.toLowerCase() !== 'close' &&
+        !legHasExecutedQuantity(leg) &&
+        !isValidFillPrice(parsePrice(leg.ExecutionPrice))
+      ) {
+        continue
+      }
 
       const openOrClose = leg.OpenOrClose?.toLowerCase() === 'close' ? 'close' : 'open'
       const buyOrSell = leg.BuyOrSell?.toLowerCase() === 'sell' ? 'sell' : 'buy'
@@ -180,7 +206,10 @@ export function extractRecentFillsFromOrders(
     }
   }
 
-  return fills.sort((a, b) => b.timestampMs - a.timestampMs).slice(0, limit)
+  return fills
+    .filter((fill) => isValidFillPrice(fill.price))
+    .sort((a, b) => b.timestampMs - a.timestampMs)
+    .slice(0, limit)
 }
 
 export function createJournalEntryFromFill(fill: TradeStationRecentFill): TradeJournalEntry {
