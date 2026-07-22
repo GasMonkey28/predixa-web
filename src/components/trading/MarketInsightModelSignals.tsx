@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 
 import Model2Chart from '@/components/trading/Model2Chart'
+import SessionDateBadge from '@/components/trading/SessionDateBadge'
 import type { Direction, MarketInsightFacts } from '@/lib/server/market-insight-types'
 
 interface Model2Today {
@@ -181,6 +182,8 @@ export default function MarketInsightModelSignals({
 
   return (
     <div className="space-y-3">
+      {hasModel2 && today && <SessionDateBadge date={today.date} />}
+
       {hasModel1 && facts.model1 && (
         <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3">
           <div className="flex items-center justify-between gap-2 mb-2">
@@ -268,8 +271,6 @@ export default function MarketInsightModelSignals({
               />
             </div>
           )}
-
-          <p className="text-[10px] text-zinc-500">Session date: {today.date}</p>
         </>
       )}
 

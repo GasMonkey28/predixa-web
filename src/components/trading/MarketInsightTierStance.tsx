@@ -10,6 +10,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 
+import SessionDateBadge from '@/components/trading/SessionDateBadge'
 import { getDominantSignal, getTierConfig } from '@/lib/tier-display'
 
 interface OpposingStrengthWarning {
@@ -170,6 +171,8 @@ export default function MarketInsightTierStance({ fallbackText }: { fallbackText
 
   return (
     <div className="space-y-3">
+      <SessionDateBadge date={data.date} />
+
       {/* Dominant signal — compact */}
       <div
         className={`rounded-xl p-3 border ${
@@ -301,8 +304,6 @@ export default function MarketInsightTierStance({ fallbackText }: { fallbackText
           <p className="text-sm font-bold text-white leading-snug">{data.confidence}</p>
         </div>
       </div>
-
-      <p className="text-[10px] text-zinc-500">Session date: {data.date}</p>
     </div>
   )
 }

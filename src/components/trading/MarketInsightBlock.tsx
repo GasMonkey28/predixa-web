@@ -7,6 +7,7 @@ import { AlertTriangle, BarChart3, Calendar, Layers } from 'lucide-react'
 import type { MarketInsightResponse } from '@/lib/server/market-insight-types'
 import MarketInsightTierStance from '@/components/trading/MarketInsightTierStance'
 import MarketInsightModelSignals from '@/components/trading/MarketInsightModelSignals'
+import SessionDateBadge from '@/components/trading/SessionDateBadge'
 
 const sectionIcons: Record<string, typeof BarChart3> = {
   tiers: Layers,
@@ -55,11 +56,14 @@ export default function MarketInsightBlock() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold text-white">Market insight</h2>
-        <p className="text-sm text-zinc-400 mt-1">
-          Rule-based summary for {data.date} — built from tiers, models, and weekly data (no AI rewrite in v1).
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-white">Market insight</h2>
+          <p className="text-sm text-zinc-400 mt-1">
+            Rule-based summary from tiers, models, and weekly data (no AI rewrite in v1).
+          </p>
+        </div>
+        <SessionDateBadge date={data.date} label="Insight date" />
       </div>
 
       {data.fallback && (

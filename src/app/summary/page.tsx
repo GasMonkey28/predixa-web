@@ -4,7 +4,7 @@ import { motion } from 'motion/react'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import MarketInsightBlock from '@/components/trading/MarketInsightBlock'
 import WeeklyPriceChartSection from '@/components/trading/WeeklyPriceChartSection'
-import EconomicCalendarInvesting from '@/components/trading/EconomicCalendarInvesting'
+import TradeJournalSummaryPanel from '@/components/trading/TradeJournalSummaryPanel'
 import SpyBriefingPanel from '@/components/trading/SpyBriefingPanel'
 
 export const dynamic = 'force-dynamic'
@@ -42,10 +42,10 @@ function SummaryPageContent() {
             <SpyBriefingPanel />
           </div>
 
-          {/* Right: economic calendar (same as daily model1) */}
+          {/* Right: trade journal snapshot */}
           <div className="lg:col-span-1 flex flex-col">
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border-2 border-zinc-800 p-6 flex-1 flex flex-col min-h-[320px] lg:min-h-0">
-              <EconomicCalendarInvesting />
+              <TradeJournalSummaryPanel />
             </div>
           </div>
         </motion.div>

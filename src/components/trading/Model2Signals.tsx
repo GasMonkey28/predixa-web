@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { TrendingUp, TrendingDown, Zap, Sparkles, Info, ArrowUpRight, ArrowDownRight, BarChart3 } from 'lucide-react'
+import SessionDateBadge from '@/components/trading/SessionDateBadge'
 
 interface Model2Data {
   metadata: {
@@ -154,10 +155,7 @@ export default function Model2Signals({ ticker = 'SPY' }: Model2SignalsProps) {
           animate={{ scale: 1 }}
           className="relative group"
         >
-          <div className="px-4 py-2 rounded-xl bg-zinc-800/80 border border-zinc-700">
-            <div className="text-xs text-gray-400 mb-1">Updated</div>
-            <div className="text-sm text-white font-semibold">{today.date}</div>
-          </div>
+          <SessionDateBadge date={today.date} label="Updated" />
         </motion.div>
       </motion.div>
 

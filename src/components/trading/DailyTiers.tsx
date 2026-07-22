@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { TrendingUp, TrendingDown, Zap, Sparkles, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react'
+import SessionDateBadge from '@/components/trading/SessionDateBadge'
 
 interface OpposingStrengthWarning {
   has_warning: boolean
@@ -229,10 +230,7 @@ export default function DailyTiers({ ticker = 'SPY' }: DailyTiersProps) {
           animate={{ scale: 1 }}
           className="relative group"
         >
-          <div className="px-4 py-2 rounded-xl bg-zinc-800/80 border border-zinc-700">
-            <div className="text-xs text-gray-400 mb-1">Updated</div>
-            <div className="text-sm text-white font-semibold">{tiersData.date}</div>
-          </div>
+          <SessionDateBadge date={tiersData.date} label="Updated" />
           <div className="absolute top-full right-0 mt-2 w-64 p-4 rounded-lg bg-zinc-900 border border-zinc-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all shadow-xl z-50">
             <div className="mb-2 text-white font-semibold">Signal Strength Guide:</div>
             <ul className="space-y-1 text-zinc-400 text-sm">
