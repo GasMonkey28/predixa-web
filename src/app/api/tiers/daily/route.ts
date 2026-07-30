@@ -8,6 +8,7 @@ import {
   fetchLatestSummary,
   fetchPreviousSummary,
 } from '@/lib/server/summary-json'
+import { isSupportedTicker, normalizeTicker } from '@/lib/tickers'
 
 // Force dynamic rendering - prevents Next.js from caching this route
 export const dynamic = 'force-dynamic'
@@ -76,18 +77,27 @@ export async function GET(request: Request) {
       )
     }
 
+    const { searchParams } = new URL(request.url)
+    const ticker = normalizeTicker(searchParams.get('ticker'))
+    if (!isSupportedTicker(ticker)) {
+      return NextResponse.json(
+        { error: `Unsupported ticker: ${ticker}` },
+        { status: 400, headers: getRateLimitHeaders(clientIp) }
+      )
+    }
+
     const today = etDateString(0)
 
     try {
-      const { date: actualDate, data: s3Data } = await fetchLatestSummary(BUCKET, today)
+      const { date: actualDate, data: s3Data } = await fetchLatestSummary(BUCKET, today, ticker)
 
       if (actualDate !== today) {
-        logger.warn({ today, actualDate }, 'Using most recent summary_json (today missing)')
+        logger.warn({ today, actualDate, ticker }, 'Using most recent summary_json (today missing)')
       } else {
-        logger.debug({ sourceDate: today }, 'Fetched tiers data for today')
+        logger.debug({ sourceDate: today, ticker }, 'Fetched tiers data for today')
       }
 
-      const prev = await fetchPreviousSummary(BUCKET, actualDate)
+      const prev = await fetchPreviousSummary(BUCKET, actualDate, ticker)
       const prevLong =
         prev
           ? (prev.data.long_signal as string) ||
@@ -103,7 +113,10 @@ export async function GET(request: Request) {
             'N/A'
           : null
 
-      const transformedData = transformSummary(s3Data, actualDate, prevLong, prevShort, prev?.date ?? null)
+      const transformedData = {
+        ...transformSummary(s3Data, actualDate, prevLong, prevShort, prev?.date ?? null),
+        ticker,
+      }
 
       return NextResponse.json(transformedData, {
         headers: {
@@ -116,10 +129,11 @@ export async function GET(request: Request) {
     } catch (s3Error) {
       const message =
         s3Error instanceof Error ? s3Error.message : typeof s3Error === 'string' ? s3Error : 'Unknown error'
-      logger.error({ today, bucket: BUCKET, error: message }, 'S3 tier summary unavailable; returning fallback')
+      logger.error({ today, bucket: BUCKET, ticker, error: message }, 'S3 tier summary unavailable; returning fallback')
 
       const fallback = {
         date: today,
+        ticker,
         long_tier: 'N/A',
         short_tier: 'N/A',
         long_score: 0,

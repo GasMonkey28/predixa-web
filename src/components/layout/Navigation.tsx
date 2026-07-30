@@ -13,6 +13,11 @@ const navigationItems = [
     icon: '📋',
   },
   {
+    name: 'Tickers',
+    href: '/tickers',
+    icon: '🏷️',
+  },
+  {
     name: 'Daily',
     icon: '📈',
     items: [

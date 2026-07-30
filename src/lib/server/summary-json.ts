@@ -1,5 +1,7 @@
 import axios from 'axios'
 
+import { summaryJsonKey, tickerBucket } from '@/lib/tickers'
+
 const MAX_LOOKBACK_DAYS = 10
 
 export function etDateString(daysAgo = 0): string {
@@ -17,8 +19,8 @@ export function subtractDaysFromDate(dateStr: string, days: number): string {
   return base.toISOString().slice(0, 10)
 }
 
-function summaryUrl(bucket: string, date: string): string {
-  return `https://${bucket}.s3.amazonaws.com/summary_json/${date}.json`
+function summaryUrl(bucket: string, ticker: string, date: string): string {
+  return `https://${bucket}.s3.amazonaws.com/${summaryJsonKey(ticker, date)}`
 }
 
 const fetchHeaders = {
@@ -28,16 +30,21 @@ const fetchHeaders = {
 
 export async function fetchSummaryForDate(
   bucket: string,
-  date: string
+  date: string,
+  ticker = 'SPY'
 ): Promise<Record<string, unknown>> {
-  const response = await axios.get(summaryUrl(bucket, date), { headers: fetchHeaders })
+  const dataBucket = tickerBucket(ticker, bucket)
+  const response = await axios.get(summaryUrl(dataBucket, ticker, date), {
+    headers: fetchHeaders,
+  })
   return response.data as Record<string, unknown>
 }
 
 /** Walk back up to MAX_LOOKBACK_DAYS to find the newest available summary_json file. */
 export async function fetchLatestSummary(
   bucket: string,
-  startDate?: string
+  startDate?: string,
+  ticker = 'SPY'
 ): Promise<{ date: string; data: Record<string, unknown> }> {
   const firstDate = startDate ?? etDateString(0)
   let lastError: unknown
@@ -45,7 +52,7 @@ export async function fetchLatestSummary(
   for (let offset = 0; offset < MAX_LOOKBACK_DAYS; offset++) {
     const date = subtractDaysFromDate(firstDate, offset)
     try {
-      const data = await fetchSummaryForDate(bucket, date)
+      const data = await fetchSummaryForDate(bucket, date, ticker)
       return { date, data }
     } catch (err) {
       lastError = err
@@ -58,12 +65,13 @@ export async function fetchLatestSummary(
 /** Previous trading summary strictly before the given date (skips missing days). */
 export async function fetchPreviousSummary(
   bucket: string,
-  beforeDate: string
+  beforeDate: string,
+  ticker = 'SPY'
 ): Promise<{ date: string; data: Record<string, unknown> } | null> {
   for (let offset = 1; offset <= MAX_LOOKBACK_DAYS; offset++) {
     const date = subtractDaysFromDate(beforeDate, offset)
     try {
-      const data = await fetchSummaryForDate(bucket, date)
+      const data = await fetchSummaryForDate(bucket, date, ticker)
       return { date, data }
     } catch {
       // keep walking back

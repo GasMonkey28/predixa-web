@@ -129,9 +129,14 @@ function SignalMiniCard({
 export default function MarketInsightModelSignals({
   facts,
   fallbackText,
+  ticker = 'SPY',
+  showModel1 = true,
 }: {
-  facts: MarketInsightFacts
+  facts?: MarketInsightFacts | null
   fallbackText?: string
+  ticker?: string
+  /** SPY summary shows Model1 horizons; equity tickers page shows y2y3 only. */
+  showModel1?: boolean
 }) {
   const [model2, setModel2] = useState<Model2ApiData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -140,7 +145,8 @@ export default function MarketInsightModelSignals({
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/model2/daily?t=${Date.now()}`)
+        const qs = new URLSearchParams({ t: String(Date.now()), ticker })
+        const res = await fetch(`/api/model2/daily?${qs}`)
         const json = (await res.json()) as Model2ApiData
         if (!res.ok) throw new Error('Failed to load Model 2 data')
         setModel2(json)
@@ -150,8 +156,10 @@ export default function MarketInsightModelSignals({
         setLoading(false)
       }
     }
+    setLoading(true)
+    setError(null)
     load()
-  }, [])
+  }, [ticker])
 
   if (loading) {
     return (
@@ -167,7 +175,7 @@ export default function MarketInsightModelSignals({
   }
 
   const today = model2 ? extractToday(model2) : null
-  const hasModel1 = facts.model1 != null
+  const hasModel1 = showModel1 && facts?.model1 != null
   const hasModel2 = today != null
 
   if (!hasModel1 && !hasModel2) {
@@ -184,7 +192,7 @@ export default function MarketInsightModelSignals({
     <div className="space-y-3">
       {hasModel2 && today && <SessionDateBadge date={today.date} />}
 
-      {hasModel1 && facts.model1 && (
+      {hasModel1 && facts?.model1 && (
         <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-xs font-semibold text-cyan-300">Model 1 horizons</span>

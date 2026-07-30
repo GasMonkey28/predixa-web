@@ -121,7 +121,13 @@ function TierMiniCard({
   )
 }
 
-export default function MarketInsightTierStance({ fallbackText }: { fallbackText?: string }) {
+export default function MarketInsightTierStance({
+  fallbackText,
+  ticker = 'SPY',
+}: {
+  fallbackText?: string
+  ticker?: string
+}) {
   const [data, setData] = useState<TierDailyData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -129,7 +135,8 @@ export default function MarketInsightTierStance({ fallbackText }: { fallbackText
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/tiers/daily?t=${Date.now()}`)
+        const qs = new URLSearchParams({ t: String(Date.now()), ticker })
+        const res = await fetch(`/api/tiers/daily?${qs}`)
         const json = await res.json()
         if (!res.ok) throw new Error(json.error || 'Failed to load tiers')
         setData(json)
@@ -139,8 +146,10 @@ export default function MarketInsightTierStance({ fallbackText }: { fallbackText
         setLoading(false)
       }
     }
+    setLoading(true)
+    setError(null)
     load()
-  }, [])
+  }, [ticker])
 
   if (loading) {
     return (

@@ -1,0 +1,99 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeMLAndRating",
+      "Effect": "Allow",
+      "Action": ["lambda:InvokeFunction"],
+      "Resource": [
+        "arn:aws:lambda:us-east-1:822233328169:function:tradespark-sync-daily-db",
+        "arn:aws:lambda:us-east-1:822233328169:function:ml-predict-function",
+        "arn:aws:lambda:us-east-1:822233328169:function:ml-rf-nn-blend",
+        "arn:aws:lambda:us-east-1:822233328169:function:tradespark-ml-tabnet",
+        "arn:aws:lambda:us-east-1:822233328169:function:tradespark-daily-tiers",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-data-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-features-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml1-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml2-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml3-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-tiers-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-premarket-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step1-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step2-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step3-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step4-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step5-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step6-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step7-AAPL",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-data-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-features-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml1-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml2-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml3-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-tiers-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-premarket-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step1-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step2-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step3-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step4-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step5-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step6-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step7-AMZN"
+      ]
+    },
+    {
+      "Sid": "StartNestedStateMachines",
+      "Effect": "Allow",
+      "Action": ["states:StartExecution"],
+      "Resource": [
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AAPL-ML-Then-Tiers",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AAPL-Y2Y3",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMZN-ML-Then-Tiers",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMZN-Y2Y3"
+      ]
+    },
+    {
+      "Sid": "DescribeNestedExecutions",
+      "Effect": "Allow",
+      "Action": [
+        "states:DescribeExecution",
+        "states:StopExecution"
+      ],
+      "Resource": [
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-AAPL-ML-Then-Tiers:*",
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-AAPL-Y2Y3:*",
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-AMZN-ML-Then-Tiers:*",
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-AMZN-Y2Y3:*"
+      ]
+    },
+    {
+      "Sid": "EventBridgeForSyncNested",
+      "Effect": "Allow",
+      "Action": [
+        "events:PutTargets",
+        "events:PutRule",
+        "events:DescribeRule"
+      ],
+      "Resource": [
+        "arn:aws:events:us-east-1:822233328169:rule/StepFunctionsGetEventsForStepFunctionsExecutionRule"
+      ]
+    },
+    {
+      "Sid": "LogsForSF",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogDelivery",
+        "logs:CreateLogStream",
+        "logs:GetLogDelivery",
+        "logs:UpdateLogDelivery",
+        "logs:DeleteLogDelivery",
+        "logs:ListLogDeliveries",
+        "logs:PutLogEvents",
+        "logs:PutResourcePolicy",
+        "logs:DescribeResourcePolicies",
+        "logs:DescribeLogGroups"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
