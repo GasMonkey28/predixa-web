@@ -38,7 +38,21 @@
         "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step4-AMZN",
         "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step5-AMZN",
         "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step6-AMZN",
-        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step7-AMZN"
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step7-AMZN",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-data-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-features-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml1-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml2-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml3-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-tiers-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-premarket-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step1-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step2-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step3-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step4-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step5-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step6-AMD",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step7-AMD"
       ]
     },
     {
@@ -49,7 +63,9 @@
         "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AAPL-ML-Then-Tiers",
         "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AAPL-Y2Y3",
         "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMZN-ML-Then-Tiers",
-        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMZN-Y2Y3"
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMZN-Y2Y3",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMD-ML-Then-Tiers",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMD-Y2Y3"
       ]
     },
     {
@@ -63,7 +79,9 @@
         "arn:aws:states:us-east-1:822233328169:execution:Predixa-AAPL-ML-Then-Tiers:*",
         "arn:aws:states:us-east-1:822233328169:execution:Predixa-AAPL-Y2Y3:*",
         "arn:aws:states:us-east-1:822233328169:execution:Predixa-AMZN-ML-Then-Tiers:*",
-        "arn:aws:states:us-east-1:822233328169:execution:Predixa-AMZN-Y2Y3:*"
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-AMZN-Y2Y3:*",
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-AMD-ML-Then-Tiers:*",
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-AMD-Y2Y3:*"
       ]
     },
     {

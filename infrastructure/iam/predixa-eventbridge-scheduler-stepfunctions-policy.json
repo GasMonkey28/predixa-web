@@ -6,7 +6,9 @@
       "Action": ["states:StartExecution"],
       "Resource": [
         "arn:aws:states:us-east-1:822233328169:stateMachine:model2-pipeline",
-        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AAPL-Daily"
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AAPL-Daily",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMZN-Daily",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMD-Daily"
       ]
     }
   ]
