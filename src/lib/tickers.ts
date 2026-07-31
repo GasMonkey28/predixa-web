@@ -1,5 +1,5 @@
 /** Equity tickers with Predixa ML pipelines (expand as more go live). */
-export const EQUITY_TICKERS = ['AAPL', 'AMZN', 'AMD', 'AVGO', 'BA', 'BABA', 'BAC', 'BITO', 'COIN', 'EFA', 'F', 'FXI', 'GLD', 'GOOG'] as const
+export const EQUITY_TICKERS = ['AAPL', 'AMZN', 'AMD', 'AVGO', 'BA', 'BABA', 'BAC', 'BITO', 'COIN', 'EFA', 'F', 'FXI', 'GLD', 'GOOG', 'HOOD'] as const
 
 export type EquityTicker = (typeof EQUITY_TICKERS)[number]
 
