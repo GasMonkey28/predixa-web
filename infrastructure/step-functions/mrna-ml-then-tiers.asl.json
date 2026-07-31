@@ -1,0 +1,192 @@
+{
+  "Comment": "MRNA: Features -> ML1 -> ML2 (RF+MLP) -> ML3 (TabNet) -> RateTiers. Tiers write ratings + description into features.db.",
+  "StartAt": "Features",
+  "States": {
+    "Features": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-features-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 10,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.features",
+      "Next": "CheckFeatures"
+    },
+    "CheckFeatures": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.features.Payload.ok",
+          "BooleanEquals": false,
+          "Next": "FailFeatures"
+        }
+      ],
+      "Default": "ML1"
+    },
+    "FailFeatures": {
+      "Type": "Fail",
+      "Error": "Features failed",
+      "Cause": "predixa-features-MRNA returned ok=false"
+    },
+    "ML1": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml1-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.ml1",
+      "Next": "CheckML1"
+    },
+    "CheckML1": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ml1.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "ML2"
+        }
+      ],
+      "Default": "FailML1"
+    },
+    "FailML1": {
+      "Type": "Fail",
+      "Error": "ML1 returned ok=false",
+      "Cause": "predixa-ml1-MRNA payload.ok != true"
+    },
+    "ML2": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml2-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.ml2",
+      "Next": "CheckML2"
+    },
+    "CheckML2": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ml2.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "ML3"
+        }
+      ],
+      "Default": "FailML2"
+    },
+    "FailML2": {
+      "Type": "Fail",
+      "Error": "ML2 returned ok=false",
+      "Cause": "predixa-ml2-MRNA payload.ok != true"
+    },
+    "ML3": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml3-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 10,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.ml3",
+      "Next": "CheckML3"
+    },
+    "CheckML3": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ml3.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "RateTiers"
+        }
+      ],
+      "Default": "FailML3"
+    },
+    "FailML3": {
+      "Type": "Fail",
+      "Error": "ML3 returned ok=false",
+      "Cause": "predixa-ml3-MRNA payload.ok != true"
+    },
+    "RateTiers": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-tiers-MRNA",
+        "Payload": {
+          "as_of.$": "$.ml1.Payload.as_of_date",
+          "ticker": "MRNA"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.TooManyRequestsException",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "MaxAttempts": 8,
+          "IntervalSeconds": 30,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 10,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.tiers",
+      "Next": "CheckTiers"
+    },
+    "CheckTiers": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.tiers.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Succeed"
+        }
+      ],
+      "Default": "FailTiers"
+    },
+    "FailTiers": {
+      "Type": "Fail",
+      "Error": "Tiers returned ok=false",
+      "Cause": "predixa-tiers-MRNA payload.ok != true"
+    },
+    "Succeed": {
+      "Type": "Succeed"
+    }
+  }
+}

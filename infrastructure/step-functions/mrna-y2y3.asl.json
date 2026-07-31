@@ -1,0 +1,281 @@
+{
+  "Comment": "MRNA model_y2y3 (product Model2): Premarket -> Step1..7. Writes model_y2y3.db + chart JSON only (not features.db).",
+  "StartAt": "Premarket",
+  "States": {
+    "Premarket": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-premarket-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 10,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.premarket",
+      "Next": "CheckPremarket"
+    },
+    "CheckPremarket": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.premarket.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Step1"
+        }
+      ],
+      "Default": "FailPremarket"
+    },
+    "FailPremarket": {
+      "Type": "Fail",
+      "Error": "Premarket failed",
+      "Cause": "predixa-premarket-MRNA payload.ok != true"
+    },
+    "Step1": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step1-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.step1",
+      "Next": "CheckStep1"
+    },
+    "CheckStep1": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.step1.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Step2"
+        }
+      ],
+      "Default": "FailStep1"
+    },
+    "FailStep1": {
+      "Type": "Fail",
+      "Error": "Step1 failed",
+      "Cause": "predixa-y2y3-step1-MRNA payload.ok != true"
+    },
+    "Step2": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step2-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.step2",
+      "Next": "CheckStep2"
+    },
+    "CheckStep2": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.step2.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Step3"
+        }
+      ],
+      "Default": "FailStep2"
+    },
+    "FailStep2": {
+      "Type": "Fail",
+      "Error": "Step2 failed",
+      "Cause": "predixa-y2y3-step2-MRNA payload.ok != true"
+    },
+    "Step3": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step3-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 10,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.step3",
+      "Next": "CheckStep3"
+    },
+    "CheckStep3": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.step3.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Step4"
+        }
+      ],
+      "Default": "FailStep3"
+    },
+    "FailStep3": {
+      "Type": "Fail",
+      "Error": "Step3 failed",
+      "Cause": "predixa-y2y3-step3-MRNA payload.ok != true"
+    },
+    "Step4": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step4-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 10,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.step4",
+      "Next": "CheckStep4"
+    },
+    "CheckStep4": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.step4.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Step5"
+        }
+      ],
+      "Default": "FailStep4"
+    },
+    "FailStep4": {
+      "Type": "Fail",
+      "Error": "Step4 failed",
+      "Cause": "predixa-y2y3-step4-MRNA payload.ok != true"
+    },
+    "Step5": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step5-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.step5",
+      "Next": "CheckStep5"
+    },
+    "CheckStep5": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.step5.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Step6"
+        }
+      ],
+      "Default": "FailStep5"
+    },
+    "FailStep5": {
+      "Type": "Fail",
+      "Error": "Step5 failed",
+      "Cause": "predixa-y2y3-step5-MRNA payload.ok != true"
+    },
+    "Step6": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step6-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.step6",
+      "Next": "CheckStep6"
+    },
+    "CheckStep6": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.step6.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Step7"
+        }
+      ],
+      "Default": "FailStep6"
+    },
+    "FailStep6": {
+      "Type": "Fail",
+      "Error": "Step6 failed",
+      "Cause": "predixa-y2y3-step6-MRNA payload.ok != true"
+    },
+    "Step7": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step7-MRNA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.step7",
+      "Next": "CheckStep7"
+    },
+    "CheckStep7": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.step7.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Succeed"
+        }
+      ],
+      "Default": "FailStep7"
+    },
+    "FailStep7": {
+      "Type": "Fail",
+      "Error": "Step7 failed",
+      "Cause": "predixa-y2y3-step7-MRNA payload.ok != true"
+    },
+    "Succeed": {
+      "Type": "Succeed"
+    }
+  }
+}
