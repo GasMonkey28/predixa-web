@@ -10,7 +10,8 @@
         "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMZN-Daily",
         "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AMD-Daily",
         "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-AVGO-Daily",
-        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BA-Daily"
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BA-Daily",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BABA-Daily"
       ]
     }
   ]
