@@ -94,7 +94,21 @@
         "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step4-BABA",
         "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step5-BABA",
         "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step6-BABA",
-        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step7-BABA"
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step7-BABA",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-data-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-features-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml1-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml2-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-ml3-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-tiers-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-premarket-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step1-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step2-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step3-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step4-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step5-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step6-BAC",
+        "arn:aws:lambda:us-east-1:822233328169:function:predixa-y2y3-step7-BAC"
       ]
     },
     {
@@ -113,7 +127,9 @@
         "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BA-ML-Then-Tiers",
         "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BA-Y2Y3",
         "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BABA-ML-Then-Tiers",
-        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BABA-Y2Y3"
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BABA-Y2Y3",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BAC-ML-Then-Tiers",
+        "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-BAC-Y2Y3"
       ]
     },
     {
@@ -135,7 +151,9 @@
         "arn:aws:states:us-east-1:822233328169:execution:Predixa-BA-ML-Then-Tiers:*",
         "arn:aws:states:us-east-1:822233328169:execution:Predixa-BA-Y2Y3:*",
         "arn:aws:states:us-east-1:822233328169:execution:Predixa-BABA-ML-Then-Tiers:*",
-        "arn:aws:states:us-east-1:822233328169:execution:Predixa-BABA-Y2Y3:*"
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-BABA-Y2Y3:*",
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-BAC-ML-Then-Tiers:*",
+        "arn:aws:states:us-east-1:822233328169:execution:Predixa-BAC-Y2Y3:*"
       ]
     },
     {
