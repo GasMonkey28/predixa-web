@@ -1,0 +1,21 @@
+# Predixa-TQQQ-Daily
+
+Morning orchestrator for TQQQ (same shape as AAPL/AMZN/AMD):
+
+1. **Data** — `predixa-data-TQQQ`
+2. **Premarket** — `predixa-premarket-TQQQ`
+3. **3mix** — nested `Predixa-TQQQ-ML-Then-Tiers`
+4. **y2y3** — nested `Predixa-TQQQ-Y2Y3`
+
+## Schedule
+
+`predixa-tqqq-schedules/predixa-tqqq-daily-0730` — weekdays **7:30 AM America/Chicago**.
+
+Standalone `predixa-data-TQQQ-schedule-cst/cdt` should stay **DISABLED**.
+
+## Website
+
+`/tickers` includes **TQQQ**. Feeders on tradespark:
+
+- `summary_json/TQQQ/{date}.json`
+- `model_y2y3/TQQQ/chart/latest.json`
