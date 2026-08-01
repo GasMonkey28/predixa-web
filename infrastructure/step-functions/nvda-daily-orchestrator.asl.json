@@ -1,0 +1,131 @@
+{
+  "Comment": "NVDA daily orchestrator: Data -> Premarket -> model_3mix (tiers) -> model_y2y3. Input optional {as_of_date}; handlers default to today CT/NY.",
+  "StartAt": "Data",
+  "States": {
+    "Data": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-data-NVDA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 30,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.data",
+      "Next": "CheckData"
+    },
+    "CheckData": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.data.Payload.status",
+          "StringEquals": "skip_not_trading_day",
+          "Next": "SkipNonTradingDay"
+        },
+        {
+          "Variable": "$.data.Payload.status",
+          "StringEquals": "ok",
+          "Next": "Premarket"
+        },
+        {
+          "Variable": "$.data.Payload.status",
+          "StringEquals": "ok_first_run",
+          "Next": "Premarket"
+        },
+        {
+          "Variable": "$.data.Payload.status",
+          "StringEquals": "ok_partial",
+          "Next": "Premarket"
+        }
+      ],
+      "Default": "FailData"
+    },
+    "SkipNonTradingDay": {
+      "Type": "Succeed"
+    },
+    "FailData": {
+      "Type": "Fail",
+      "Error": "Data failed",
+      "Cause": "predixa-data-NVDA status not ok*"
+    },
+    "Premarket": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-premarket-NVDA",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 15,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.premarket",
+      "Next": "CheckPremarket"
+    },
+    "CheckPremarket": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.premarket.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "Run3mix"
+        }
+      ],
+      "Default": "FailPremarket"
+    },
+    "FailPremarket": {
+      "Type": "Fail",
+      "Error": "Premarket failed",
+      "Cause": "predixa-premarket-NVDA payload.ok != true"
+    },
+    "Run3mix": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::states:startExecution.sync:2",
+      "Parameters": {
+        "StateMachineArn": "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-NVDA-ML-Then-Tiers",
+        "Input.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 1,
+          "IntervalSeconds": 60,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.mix3",
+      "Next": "RunY2Y3"
+    },
+    "RunY2Y3": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::states:startExecution.sync:2",
+      "Parameters": {
+        "StateMachineArn": "arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-NVDA-Y2Y3",
+        "Input.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 1,
+          "IntervalSeconds": 60,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.y2y3",
+      "Next": "Succeed"
+    },
+    "Succeed": {
+      "Type": "Succeed"
+    }
+  }
+}
