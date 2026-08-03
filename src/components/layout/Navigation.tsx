@@ -14,8 +14,19 @@ const navigationItems = [
   },
   {
     name: 'Tickers',
-    href: '/tickers',
     icon: '🏷️',
+    items: [
+      {
+        name: 'Ranks',
+        href: '/tickers',
+        icon: '🏆',
+      },
+      {
+        name: 'Insight',
+        href: '/tickers/insight',
+        icon: '🏷️',
+      },
+    ],
   },
   {
     name: 'Daily',
@@ -166,7 +177,10 @@ export default function Navigation() {
                 if ('items' in item && item.items) {
                   const isOpen = openDropdown === item.name
                   const isActive = item.items.some((subItem) => {
-                    // Check if current pathname matches the sub-item href
+                    // Exact match for /tickers so Ranks does not also match /tickers/insight
+                    if (subItem.href === '/tickers') {
+                      return pathname === '/tickers'
+                    }
                     return (
                       pathname === subItem.href ||
                       (subItem.href !== '/news/spy' && pathname?.startsWith(subItem.href))
@@ -211,10 +225,14 @@ export default function Navigation() {
                             
                             // For all dropdowns, use Link (now Daily uses different routes like Tools)
                             let isSubActive = false
-                            isSubActive =
-                              pathname === subItem.href ||
-                              (subItem.href !== '/news/spy' &&
-                                pathname?.startsWith(subItem.href))
+                            if (subItem.href === '/tickers') {
+                              isSubActive = pathname === '/tickers'
+                            } else {
+                              isSubActive =
+                                pathname === subItem.href ||
+                                (subItem.href !== '/news/spy' &&
+                                  Boolean(pathname?.startsWith(subItem.href)))
+                            }
                             
                             return (
                               <Link

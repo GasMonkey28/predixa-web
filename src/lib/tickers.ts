@@ -1,5 +1,5 @@
 /** Equity tickers with Predixa ML pipelines (expand as more go live). */
-export const EQUITY_TICKERS = ['AAPL', 'AMZN', 'AMD', 'AVGO', 'BA', 'BABA', 'BAC', 'BITO', 'COIN', 'EFA', 'F', 'FXI', 'GLD', 'GOOG', 'HOOD', 'HYG', 'IBIT', 'INTC', 'IWM', 'JD', 'JPM', 'MARA', 'META', 'MRNA', 'MSFT', 'MSTR', 'MU', 'NFLX', 'NVDA', 'ORCL', 'PLTR', 'QQQ', 'SHOP', 'SLV', 'SMCI', 'SOFI', 'SOXL', 'SOXS', 'TLT', 'TQQQ', 'TSLA', 'TSLL', 'UBER', 'WMT', 'WULF', 'XOM', 'DIS'] as const
+export const EQUITY_TICKERS = ['AAPL', 'AMZN', 'AMD', 'AVGO', 'BA', 'BABA', 'BAC', 'BITO', 'COIN', 'DIS', 'EFA', 'F', 'FXI', 'GLD', 'GOOG', 'HOOD', 'HYG', 'IBIT', 'INTC', 'IWM', 'JD', 'JPM', 'MARA', 'META', 'MRNA', 'MSFT', 'MSTR', 'MU', 'NFLX', 'NVDA', 'ORCL', 'PLTR', 'QQQ', 'SHOP', 'SLV', 'SMCI', 'SOFI', 'SOXL', 'SOXS', 'TLT', 'TQQQ', 'TSLA', 'TSLL', 'UBER', 'WMT', 'WULF', 'XOM'] as const
 
 export type EquityTicker = (typeof EQUITY_TICKERS)[number]
 
@@ -15,7 +15,7 @@ export function normalizeTicker(raw?: string | null): string {
   return t || 'SPY'
 }
 
-export function isEquityTicker(ticker: string): boolean {
+export function isEquityTicker(ticker: string): ticker is EquityTicker {
   return (EQUITY_TICKERS as readonly string[]).includes(ticker)
 }
 

@@ -1,28 +1,219 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { motion } from 'motion/react'
-import { BarChart3, Layers } from 'lucide-react'
+import { fetchAuthSession } from 'aws-amplify/auth'
 
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import MarketInsightTierStance from '@/components/trading/MarketInsightTierStance'
-import MarketInsightModelSignals from '@/components/trading/MarketInsightModelSignals'
-import {
-  DEFAULT_EQUITY_TICKER,
-  EQUITY_TICKERS,
-  type EquityTicker,
-} from '@/lib/tickers'
+import type { TickerRankBoard, TickerRanksResponse } from '@/lib/ticker-ranks'
 
 export const dynamic = 'force-dynamic'
 
-function TickersPageContent() {
-  const [ticker, setTicker] = useState<EquityTicker>(DEFAULT_EQUITY_TICKER)
+function formatScore(score: number | undefined): string {
+  if (score == null || !Number.isFinite(score)) return '—'
+  return String(Math.trunc(score))
+}
 
-  const subtitle = useMemo(
-    () =>
-      `${ticker}: 3mix letter tiers and Model 2 (y2y3) — same layout as the SPY Summary page.`,
-    [ticker]
+function formatHands(size: number | undefined): string {
+  if (size == null || !Number.isFinite(size)) return '—'
+  return size > 0 ? `+${size}` : String(size)
+}
+
+function formatDiff(diff: number | undefined): string {
+  if (diff == null || !Number.isFinite(diff)) return '—'
+  if (diff > 0) return `+${diff}`
+  return String(diff)
+}
+
+function RankBoardCard({ board }: { board: TickerRankBoard }) {
+  const isMix = board.id.startsWith('mix3')
+  const isSummary = board.id.startsWith('summary')
+  const primaryLabel = board.id === 'mix3_long' ? 'Long' : board.id === 'mix3_short' ? 'Short' : null
+  const otherLabel = board.id === 'mix3_long' ? 'Short' : board.id === 'mix3_short' ? 'Long' : null
+  const mixScoreLabel = board.id === 'summary_long' ? 'R1 score' : 'R2 score'
+  const handsOp = board.id === 'summary_long' ? '+' : '−'
+
+  return (
+    <section
+      className={`rounded-2xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/85 to-zinc-950/90 overflow-hidden backdrop-blur-sm ${
+        isMix ? 'lg:col-span-2' : ''
+      }`}
+    >
+      <header className="border-b border-zinc-800/80 px-4 py-3">
+        <h2 className="text-base font-semibold text-white">{board.title}</h2>
+        <p className="text-xs text-zinc-400 mt-1 leading-relaxed">{board.description}</p>
+      </header>
+
+      <div className="max-h-[min(70vh,640px)] overflow-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-zinc-950/95 text-[11px] uppercase tracking-wide text-zinc-500">
+            <tr>
+              <th className="px-3 py-2 text-left font-semibold w-12">#</th>
+              <th className="px-3 py-2 text-left font-semibold">Ticker</th>
+              {isMix ? (
+                <>
+                  <th className="px-3 py-2 text-left font-semibold">{primaryLabel}</th>
+                  <th className="px-3 py-2 text-left font-semibold">{otherLabel}</th>
+                  <th className="px-3 py-2 text-right font-semibold">Diff</th>
+                  <th className="px-3 py-2 text-right font-semibold">Score</th>
+                  <th className="px-3 py-2 text-left font-semibold min-w-[10rem]">Context</th>
+                  <th className="px-3 py-2 text-left font-semibold">Risk</th>
+                  <th className="px-3 py-2 text-left font-semibold">Conf</th>
+                </>
+              ) : isSummary ? (
+                <>
+                  <th className="px-3 py-2 text-right font-semibold">{mixScoreLabel}</th>
+                  <th className="px-3 py-2 text-right font-semibold">Hands</th>
+                  <th className="px-3 py-2 text-left font-semibold">Signal</th>
+                  <th className="px-3 py-2 text-right font-semibold">Total ({handsOp})</th>
+                </>
+              ) : (
+                <>
+                  <th className="px-3 py-2 text-left font-semibold">Signal</th>
+                  <th className="px-3 py-2 text-right font-semibold">Hands</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {board.rows.map((row) => (
+              <tr
+                key={`${board.id}-${row.ticker}`}
+                className="border-t border-zinc-800/50 hover:bg-zinc-800/30"
+              >
+                <td className="px-3 py-2 text-zinc-500 tabular-nums">{row.rank}</td>
+                <td className="px-3 py-2">
+                  <Link
+                    href={`/tickers/insight?ticker=${row.ticker}`}
+                    className="font-semibold text-blue-300 hover:text-blue-200"
+                  >
+                    {row.ticker}
+                  </Link>
+                </td>
+                {isMix ? (
+                  <>
+                    <td className="px-3 py-2 font-medium text-zinc-100">{row.tier ?? '—'}</td>
+                    <td className="px-3 py-2 font-medium text-zinc-400">{row.other_tier ?? '—'}</td>
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums font-medium ${
+                        (row.tier_diff ?? 0) > 0
+                          ? 'text-emerald-400'
+                          : (row.tier_diff ?? 0) < 0
+                            ? 'text-rose-400'
+                            : 'text-zinc-400'
+                      }`}
+                    >
+                      {formatDiff(row.tier_diff)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
+                      {formatScore(row.score)}
+                    </td>
+                    <td
+                      className="px-3 py-2 text-[11px] text-indigo-200/90 leading-snug max-w-[14rem]"
+                      title={row.market_context || undefined}
+                    >
+                      {row.market_context ?? '—'}
+                    </td>
+                    <td className="px-3 py-2 text-xs font-medium text-yellow-200/90 whitespace-nowrap">
+                      {row.risk ?? '—'}
+                    </td>
+                    <td className="px-3 py-2 text-xs font-semibold text-cyan-200 whitespace-nowrap">
+                      {row.confidence ?? '—'}
+                    </td>
+                  </>
+                ) : isSummary ? (
+                  <>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
+                      {formatScore(row.mix_score)}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums font-medium ${
+                        (row.position_size ?? 0) > 0
+                          ? 'text-emerald-400'
+                          : (row.position_size ?? 0) < 0
+                            ? 'text-rose-400'
+                            : 'text-zinc-400'
+                      }`}
+                    >
+                      {formatHands(row.position_size)}
+                    </td>
+                    <td className="px-3 py-2 capitalize text-zinc-400">
+                      {(row.signal ?? '—').replace(/_/g, ' ')}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-white">
+                      {formatScore(row.score)}
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-3 py-2 capitalize text-zinc-300">
+                      {(row.signal ?? '—').replace(/_/g, ' ')}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums font-medium ${
+                        (row.position_size ?? 0) > 0
+                          ? 'text-emerald-400'
+                          : (row.position_size ?? 0) < 0
+                            ? 'text-rose-400'
+                            : 'text-zinc-400'
+                      }`}
+                    >
+                      {formatHands(row.position_size)}
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
+}
+
+function TickersRanksPageContent() {
+  const [data, setData] = useState<TickerRanksResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const headers: HeadersInit = {}
+        try {
+          const session = await fetchAuthSession()
+          const idToken = session.tokens?.idToken?.toString()
+          if (idToken) headers.Authorization = `Bearer ${idToken}`
+        } catch {
+          // ProtectedRoute should already gate; API will 401 if still unauthenticated
+        }
+        const res = await fetch('/api/tickers/ranks', {
+          cache: 'no-store',
+          credentials: 'include',
+          headers,
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.error || `HTTP ${res.status}`)
+        }
+        const json = (await res.json()) as TickerRanksResponse
+        if (!cancelled) setData(json)
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load ranks')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
@@ -31,85 +222,70 @@ function TickersPageContent() {
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:items-end sm:justify-between"
+          className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
         >
-          <div className="text-center sm:text-left">
+          <div>
             <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Tickers
+              Ticker ranks
             </h1>
-            <p className="text-gray-300 text-lg max-w-2xl">{subtitle}</p>
+            <p className="text-gray-300 text-lg max-w-2xl">
+              Cross-ticker leaderboards from today&apos;s 3mix letter tiers and Model 2 (y2y3)
+              position size.
+            </p>
           </div>
+          <Link
+            href="/tickers/insight"
+            className="text-sm font-medium text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
+          >
+            Per-ticker insight →
+          </Link>
+        </motion.div>
 
-          <label className="flex flex-col gap-1.5 text-left">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-              Ticker
-            </span>
-            <select
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value as EquityTicker)}
-              className="min-w-[140px] rounded-xl border border-zinc-600/80 bg-zinc-900/90 px-3 py-2.5 text-sm font-semibold text-white shadow-lg outline-none focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/30"
-            >
-              {EQUITY_TICKERS.map((sym) => (
-                <option key={sym} value={sym}>
-                  {sym}
-                </option>
+        {loading && (
+          <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/70 px-6 py-16 text-center text-zinc-300">
+            Ranking {data?.ticker_count ?? 'all'} tickers…
+          </div>
+        )}
+
+        {error && !loading && (
+          <div className="rounded-2xl border border-rose-500/40 bg-rose-950/40 px-6 py-10 text-center text-rose-200">
+            {error}
+          </div>
+        )}
+
+        {data && !loading && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+          >
+            <p className="text-xs text-zinc-500">
+              {data.ticker_count} tickers · generated{' '}
+              {new Date(data.generated_at).toLocaleString()}
+              {data.errors?.length
+                ? ` · ${data.errors.length} feeder warning${data.errors.length === 1 ? '' : 's'}`
+                : ''}
+            </p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {data.boards.map((board) => (
+                <RankBoardCard key={board.id} board={board} />
               ))}
-            </select>
-          </label>
-        </motion.div>
-
-        <motion.div
-          key={ticker}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45 }}
-          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 border-2 border-zinc-800/50 p-6 backdrop-blur-sm"
-        >
-          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold text-white">{ticker} insight</h2>
-              <p className="text-sm text-zinc-400 mt-1">
-                Letter tiers from the 3mix ensemble, plus Model 2 y2y3 signals.
-              </p>
             </div>
-          </div>
-
-          <div className="space-y-4">
-            <section className="rounded-xl border border-zinc-700/60 bg-zinc-900/50 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Layers className="h-4 w-4 text-blue-400 shrink-0" />
-                <h3 className="text-sm font-medium text-zinc-200">
-                  3mix letter tiers
-                </h3>
-              </div>
-              <MarketInsightTierStance ticker={ticker} />
-            </section>
-
-            <section className="rounded-xl border border-zinc-700/60 bg-zinc-900/50 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <BarChart3 className="h-4 w-4 text-blue-400 shrink-0" />
-                <h3 className="text-sm font-medium text-zinc-200">
-                  Model 2 (y2y3)
-                </h3>
-              </div>
-              <MarketInsightModelSignals ticker={ticker} showModel1={false} />
-            </section>
-          </div>
-
-          <p className="text-xs text-zinc-500 border-t border-zinc-800 pt-4 mt-5 leading-relaxed">
-            For informational purposes only. Not investment advice. Equity pipelines publish
-            under ticker-scoped S3 keys; SPY Summary remains unchanged.
-          </p>
-        </motion.div>
+            <p className="text-xs text-zinc-500 leading-relaxed pt-2">
+              For informational purposes only. Not investment advice. Ranks are derived server-side
+              from published S3 feeders (no recompute of model scores).
+            </p>
+          </motion.div>
+        )}
       </div>
     </div>
   )
 }
 
-export default function TickersPage() {
+export default function TickersRanksPage() {
   return (
     <ProtectedRoute requireSubscription>
-      <TickersPageContent />
+      <TickersRanksPageContent />
     </ProtectedRoute>
   )
 }
