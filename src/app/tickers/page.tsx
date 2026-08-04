@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'motion/react'
 import { fetchAuthSession } from 'aws-amplify/auth'
@@ -26,6 +26,8 @@ function formatDiff(diff: number | undefined): string {
   return String(diff)
 }
 
+const SUMMARY_TOTAL_LINE = 17
+
 function RankBoardCard({ board }: { board: TickerRankBoard }) {
   const isMix = board.id.startsWith('mix3')
   const isSummary = board.id.startsWith('summary')
@@ -33,6 +35,7 @@ function RankBoardCard({ board }: { board: TickerRankBoard }) {
   const otherLabel = board.id === 'mix3_long' ? 'Short' : board.id === 'mix3_short' ? 'Long' : null
   const mixScoreLabel = board.id === 'summary_long' ? 'R1 score' : 'R2 score'
   const handsOp = board.id === 'summary_long' ? '+' : '−'
+  const colSpan = isMix ? 9 : isSummary ? 6 : 4
 
   return (
     <section
@@ -77,94 +80,115 @@ function RankBoardCard({ board }: { board: TickerRankBoard }) {
             </tr>
           </thead>
           <tbody>
-            {board.rows.map((row) => (
-              <tr
-                key={`${board.id}-${row.ticker}`}
-                className="border-t border-zinc-800/50 hover:bg-zinc-800/30"
-              >
-                <td className="px-3 py-2 text-zinc-500 tabular-nums">{row.rank}</td>
-                <td className="px-3 py-2">
-                  <Link
-                    href={`/tickers/insight?ticker=${row.ticker}`}
-                    className="font-semibold text-blue-300 hover:text-blue-200"
-                  >
-                    {row.ticker}
-                  </Link>
-                </td>
-                {isMix ? (
-                  <>
-                    <td className="px-3 py-2 font-medium text-zinc-100">{row.tier ?? '—'}</td>
-                    <td className="px-3 py-2 font-medium text-zinc-400">{row.other_tier ?? '—'}</td>
-                    <td
-                      className={`px-3 py-2 text-right tabular-nums font-medium ${
-                        (row.tier_diff ?? 0) > 0
-                          ? 'text-emerald-400'
-                          : (row.tier_diff ?? 0) < 0
-                            ? 'text-rose-400'
-                            : 'text-zinc-400'
-                      }`}
-                    >
-                      {formatDiff(row.tier_diff)}
+            {board.rows.map((row, index) => {
+              const prev = index > 0 ? board.rows[index - 1] : null
+              const showSummaryLine =
+                isSummary &&
+                prev != null &&
+                (prev.score ?? Number.NEGATIVE_INFINITY) >= SUMMARY_TOTAL_LINE &&
+                (row.score ?? Number.NEGATIVE_INFINITY) < SUMMARY_TOTAL_LINE
+
+              return (
+                <Fragment key={`${board.id}-${row.ticker}`}>
+                  {showSummaryLine && (
+                    <tr className="bg-amber-500/10">
+                      <td colSpan={colSpan} className="px-3 py-1.5">
+                        <div className="flex items-center gap-3">
+                          <div className="h-px flex-1 bg-amber-400/80" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300 whitespace-nowrap">
+                            Total {SUMMARY_TOTAL_LINE} line
+                          </span>
+                          <div className="h-px flex-1 bg-amber-400/80" />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  <tr className="border-t border-zinc-800/50 hover:bg-zinc-800/30">
+                    <td className="px-3 py-2 text-zinc-500 tabular-nums">{row.rank}</td>
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/tickers/insight?ticker=${row.ticker}`}
+                        className="font-semibold text-blue-300 hover:text-blue-200"
+                      >
+                        {row.ticker}
+                      </Link>
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
-                      {formatScore(row.score)}
-                    </td>
-                    <td
-                      className="px-3 py-2 text-[11px] text-indigo-200/90 leading-snug max-w-[14rem]"
-                      title={row.market_context || undefined}
-                    >
-                      {row.market_context ?? '—'}
-                    </td>
-                    <td className="px-3 py-2 text-xs font-medium text-yellow-200/90 whitespace-nowrap">
-                      {row.risk ?? '—'}
-                    </td>
-                    <td className="px-3 py-2 text-xs font-semibold text-cyan-200 whitespace-nowrap">
-                      {row.confidence ?? '—'}
-                    </td>
-                  </>
-                ) : isSummary ? (
-                  <>
-                    <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
-                      {formatScore(row.mix_score)}
-                    </td>
-                    <td
-                      className={`px-3 py-2 text-right tabular-nums font-medium ${
-                        (row.position_size ?? 0) > 0
-                          ? 'text-emerald-400'
-                          : (row.position_size ?? 0) < 0
-                            ? 'text-rose-400'
-                            : 'text-zinc-400'
-                      }`}
-                    >
-                      {formatHands(row.position_size)}
-                    </td>
-                    <td className="px-3 py-2 capitalize text-zinc-400">
-                      {(row.signal ?? '—').replace(/_/g, ' ')}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-white">
-                      {formatScore(row.score)}
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-3 py-2 capitalize text-zinc-300">
-                      {(row.signal ?? '—').replace(/_/g, ' ')}
-                    </td>
-                    <td
-                      className={`px-3 py-2 text-right tabular-nums font-medium ${
-                        (row.position_size ?? 0) > 0
-                          ? 'text-emerald-400'
-                          : (row.position_size ?? 0) < 0
-                            ? 'text-rose-400'
-                            : 'text-zinc-400'
-                      }`}
-                    >
-                      {formatHands(row.position_size)}
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
+                    {isMix ? (
+                      <>
+                        <td className="px-3 py-2 font-medium text-zinc-100">{row.tier ?? '—'}</td>
+                        <td className="px-3 py-2 font-medium text-zinc-400">{row.other_tier ?? '—'}</td>
+                        <td
+                          className={`px-3 py-2 text-right tabular-nums font-medium ${
+                            (row.tier_diff ?? 0) > 0
+                              ? 'text-emerald-400'
+                              : (row.tier_diff ?? 0) < 0
+                                ? 'text-rose-400'
+                                : 'text-zinc-400'
+                          }`}
+                        >
+                          {formatDiff(row.tier_diff)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
+                          {formatScore(row.score)}
+                        </td>
+                        <td
+                          className="px-3 py-2 text-[11px] text-indigo-200/90 leading-snug max-w-[14rem]"
+                          title={row.market_context || undefined}
+                        >
+                          {row.market_context ?? '—'}
+                        </td>
+                        <td className="px-3 py-2 text-xs font-medium text-yellow-200/90 whitespace-nowrap">
+                          {row.risk ?? '—'}
+                        </td>
+                        <td className="px-3 py-2 text-xs font-semibold text-cyan-200 whitespace-nowrap">
+                          {row.confidence ?? '—'}
+                        </td>
+                      </>
+                    ) : isSummary ? (
+                      <>
+                        <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
+                          {formatScore(row.mix_score)}
+                        </td>
+                        <td
+                          className={`px-3 py-2 text-right tabular-nums font-medium ${
+                            (row.position_size ?? 0) > 0
+                              ? 'text-emerald-400'
+                              : (row.position_size ?? 0) < 0
+                                ? 'text-rose-400'
+                                : 'text-zinc-400'
+                          }`}
+                        >
+                          {formatHands(row.position_size)}
+                        </td>
+                        <td className="px-3 py-2 capitalize text-zinc-400">
+                          {(row.signal ?? '—').replace(/_/g, ' ')}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-white">
+                          {formatScore(row.score)}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-3 py-2 capitalize text-zinc-300">
+                          {(row.signal ?? '—').replace(/_/g, ' ')}
+                        </td>
+                        <td
+                          className={`px-3 py-2 text-right tabular-nums font-medium ${
+                            (row.position_size ?? 0) > 0
+                              ? 'text-emerald-400'
+                              : (row.position_size ?? 0) < 0
+                                ? 'text-rose-400'
+                                : 'text-zinc-400'
+                          }`}
+                        >
+                          {formatHands(row.position_size)}
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>

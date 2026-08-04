@@ -123,6 +123,16 @@ export function compareMix3Composite(
   return a.ticker.localeCompare(b.ticker)
 }
 
+/** Summary long: +2 when y2y3 hands are +5 or +7. */
+export function summaryLongHandsBonus(positionSize: number): number {
+  return positionSize === 5 || positionSize === 7 ? 2 : 0
+}
+
+/** Summary short: +2 when y2y3 hands are −5 or −7. */
+export function summaryShortHandsBonus(positionSize: number): number {
+  return positionSize === -5 || positionSize === -7 ? 2 : 0
+}
+
 /** Highest +hands first. */
 export function compareY2y3Long(
   a: { position_size: number; ticker: string },

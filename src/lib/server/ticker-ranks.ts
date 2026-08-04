@@ -11,6 +11,8 @@ import {
   mix3CompositeScore,
   shortMarketContext,
   shortRisk,
+  summaryLongHandsBonus,
+  summaryShortHandsBonus,
   tierDiff,
   type TickerRankBoard,
   type TickerRanksResponse,
@@ -205,14 +207,17 @@ export async function buildTickerRanks(): Promise<TickerRanksResponse> {
   const summaryLongBoard: TickerRankBoard = {
     id: 'summary_long',
     title: 'Summary long',
-    description: 'Score = Rank 1 (3mix long) score + Rank 3 y2y3 hands. Higher total first.',
+    description:
+      'Score = Rank 1 score + Rank 3 hands (+2 bonus if hands are +5 or +7). Higher total first.',
     rows: withRanks(
       EQUITY_TICKERS.map((ticker) => {
         const mixScore = longMixScoreByTicker.get(ticker) ?? Number.NEGATIVE_INFINITY
         const hands = y2y3ByTicker.get(ticker)?.position_size ?? 0
         const signal = y2y3ByTicker.get(ticker)?.final_signal
-        const score =
-          Number.isFinite(mixScore) ? mixScore + hands : Number.NEGATIVE_INFINITY
+        const bonus = summaryLongHandsBonus(hands)
+        const score = Number.isFinite(mixScore)
+          ? mixScore + hands + bonus
+          : Number.NEGATIVE_INFINITY
         return { ticker, mixScore, hands, signal, score }
       }).sort((a, b) =>
         compareMix3Composite(
@@ -235,14 +240,16 @@ export async function buildTickerRanks(): Promise<TickerRanksResponse> {
     id: 'summary_short',
     title: 'Summary short',
     description:
-      'Score = Rank 2 (3mix short) score − Rank 4 y2y3 hands (minus negative hands adds). Higher total first.',
+      'Score = Rank 2 score − Rank 4 hands (+2 bonus if hands are −5 or −7). Higher total first.',
     rows: withRanks(
       EQUITY_TICKERS.map((ticker) => {
         const mixScore = shortMixScoreByTicker.get(ticker) ?? Number.NEGATIVE_INFINITY
         const hands = y2y3ByTicker.get(ticker)?.position_size ?? 0
         const signal = y2y3ByTicker.get(ticker)?.final_signal
-        const score =
-          Number.isFinite(mixScore) ? mixScore - hands : Number.NEGATIVE_INFINITY
+        const bonus = summaryShortHandsBonus(hands)
+        const score = Number.isFinite(mixScore)
+          ? mixScore - hands + bonus
+          : Number.NEGATIVE_INFINITY
         return { ticker, mixScore, hands, signal, score }
       }).sort((a, b) =>
         compareMix3Composite(
