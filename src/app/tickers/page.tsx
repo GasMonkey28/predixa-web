@@ -26,6 +26,23 @@ function formatDiff(diff: number | undefined): string {
   return String(diff)
 }
 
+function sumBoardTotals(board: TickerRankBoard | undefined): number {
+  if (!board) return 0
+  return board.rows.reduce(
+    (sum, row) => sum + (Number.isFinite(row.score) ? (row.score as number) : 0),
+    0
+  )
+}
+
+function sumBoardHands(board: TickerRankBoard | undefined): number {
+  if (!board) return 0
+  return board.rows.reduce(
+    (sum, row) =>
+      sum + (Number.isFinite(row.position_size) ? (row.position_size as number) : 0),
+    0
+  )
+}
+
 const SUMMARY_TOTAL_LINE = 17
 
 function RankBoardCard({ board }: { board: TickerRankBoard }) {
@@ -36,6 +53,9 @@ function RankBoardCard({ board }: { board: TickerRankBoard }) {
   const mixScoreLabel = board.id === 'summary_long' ? 'R1 score' : 'R2 score'
   const handsOp = board.id === 'summary_long' ? '+' : '−'
   const colSpan = isMix ? 9 : isSummary ? 6 : 4
+  const summaryTotalSum = isSummary
+    ? board.rows.reduce((sum, row) => sum + (Number.isFinite(row.score) ? (row.score as number) : 0), 0)
+    : null
 
   return (
     <section
@@ -44,8 +64,22 @@ function RankBoardCard({ board }: { board: TickerRankBoard }) {
       }`}
     >
       <header className="border-b border-zinc-800/80 px-4 py-3">
-        <h2 className="text-base font-semibold text-white">{board.title}</h2>
-        <p className="text-xs text-zinc-400 mt-1 leading-relaxed">{board.description}</p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold text-white">{board.title}</h2>
+            <p className="text-xs text-zinc-400 mt-1 leading-relaxed">{board.description}</p>
+          </div>
+          {summaryTotalSum != null && (
+            <div className="rounded-lg border border-zinc-700/70 bg-zinc-900/80 px-3 py-1.5 text-right">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                Sum of totals
+              </div>
+              <div className="text-lg font-bold tabular-nums text-white">
+                {formatScore(summaryTotalSum)}
+              </div>
+            </div>
+          )}
+        </div>
       </header>
 
       <div className="max-h-[min(70vh,640px)] overflow-auto">
@@ -190,6 +224,18 @@ function RankBoardCard({ board }: { board: TickerRankBoard }) {
               )
             })}
           </tbody>
+          {summaryTotalSum != null && (
+            <tfoot className="sticky bottom-0 bg-zinc-950/95 border-t border-zinc-700">
+              <tr>
+                <td colSpan={5} className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                  Sum of totals
+                </td>
+                <td className="px-3 py-2.5 text-right text-base font-bold tabular-nums text-white">
+                  {formatScore(summaryTotalSum)}
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </section>
@@ -238,6 +284,17 @@ function TickersRanksPageContent() {
       cancelled = true
     }
   }, [])
+
+  const summaryLongSum = data
+    ? sumBoardTotals(data.boards.find((b) => b.id === 'summary_long'))
+    : 0
+  const summaryShortSum = data
+    ? sumBoardTotals(data.boards.find((b) => b.id === 'summary_short'))
+    : 0
+  const summaryLongShortDiff = summaryLongSum - summaryShortSum
+  const rank3HandsSum = data
+    ? sumBoardHands(data.boards.find((b) => b.id === 'y2y3_long'))
+    : 0
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
@@ -290,6 +347,58 @@ function TickersRanksPageContent() {
                 ? ` · ${data.errors.length} feeder warning${data.errors.length === 1 ? '' : 's'}`
                 : ''}
             </p>
+            <div className="rounded-2xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/85 to-zinc-950/90 px-4 py-3 backdrop-blur-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    Summary long sum
+                  </div>
+                  <div className="text-xl font-bold tabular-nums text-emerald-300">
+                    {formatScore(summaryLongSum)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    Summary short sum
+                  </div>
+                  <div className="text-xl font-bold tabular-nums text-rose-300">
+                    {formatScore(summaryShortSum)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    Diff (long − short)
+                  </div>
+                  <div
+                    className={`text-xl font-bold tabular-nums ${
+                      summaryLongShortDiff > 0
+                        ? 'text-emerald-300'
+                        : summaryLongShortDiff < 0
+                          ? 'text-rose-300'
+                          : 'text-zinc-300'
+                    }`}
+                  >
+                    {formatDiff(summaryLongShortDiff)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    Rank 3 hands sum
+                  </div>
+                  <div
+                    className={`text-xl font-bold tabular-nums ${
+                      rank3HandsSum > 0
+                        ? 'text-emerald-300'
+                        : rank3HandsSum < 0
+                          ? 'text-rose-300'
+                          : 'text-zinc-300'
+                    }`}
+                  >
+                    {formatHands(rank3HandsSum)}
+                  </div>
+                </div>
+              </div>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {data.boards.map((board) => (
                 <RankBoardCard key={board.id} board={board} />
