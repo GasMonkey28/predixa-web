@@ -3,48 +3,78 @@ import { NextRequest, NextResponse } from 'next/server'
 import { exchangeAuthorizationCode } from '@/lib/server/tradestation-oauth'
 import { saveTradeStationConnection } from '@/lib/server/tradestation-storage'
 import { fetchTradeStationAccounts } from '@/lib/server/tradestation-client'
+import { sanitizeReturnTo } from '@/lib/server/tradestation-config'
 
 const STATE_COOKIE = 'ts_oauth_state'
 
 export async function GET(request: NextRequest) {
   const origin = request.nextUrl.origin
-  const journalUrl = new URL('/trade-journal', origin)
+  const stateCookie = request.cookies.get(STATE_COOKIE)?.value
+
+  let returnTo = '/trade-journal'
+  if (stateCookie) {
+    try {
+      const parsedEarly = JSON.parse(stateCookie) as { returnTo?: string }
+      returnTo = sanitizeReturnTo(parsedEarly.returnTo, '/trade-journal')
+    } catch {
+      // keep default
+    }
+  }
+
+  const redirectUrl = new URL(returnTo, origin)
 
   const error = request.nextUrl.searchParams.get('error')
   if (error) {
-    journalUrl.searchParams.set('ts', 'denied')
-    return NextResponse.redirect(journalUrl)
+    redirectUrl.searchParams.set('ts', 'denied')
+    return NextResponse.redirect(redirectUrl)
   }
 
   const code = request.nextUrl.searchParams.get('code')
   const returnedState = request.nextUrl.searchParams.get('state')
-  const stateCookie = request.cookies.get(STATE_COOKIE)?.value
 
   if (!code || !returnedState || !stateCookie) {
-    journalUrl.searchParams.set('ts', 'error')
-    return NextResponse.redirect(journalUrl)
+    redirectUrl.searchParams.set('ts', 'error')
+    return NextResponse.redirect(redirectUrl)
   }
 
-  let parsed: { userId: string; state: string; redirectUri: string }
+  let parsed: { userId: string; state: string; redirectUri: string; returnTo?: string }
   try {
-    parsed = JSON.parse(stateCookie) as { userId: string; state: string; redirectUri: string }
+    parsed = JSON.parse(stateCookie) as {
+      userId: string
+      state: string
+      redirectUri: string
+      returnTo?: string
+    }
   } catch {
-    journalUrl.searchParams.set('ts', 'error')
-    return NextResponse.redirect(journalUrl)
+    redirectUrl.searchParams.set('ts', 'error')
+    return NextResponse.redirect(redirectUrl)
   }
 
   if (parsed.state !== returnedState) {
-    journalUrl.searchParams.set('ts', 'error')
-    return NextResponse.redirect(journalUrl)
+    redirectUrl.searchParams.set('ts', 'error')
+    return NextResponse.redirect(redirectUrl)
   }
 
   try {
     const tokens = await exchangeAuthorizationCode(code, parsed.redirectUri)
-    const accounts = await fetchTradeStationAccounts(tokens.access_token)
-    const accountIds = accounts.map((account) => account.AccountID).filter(Boolean)
+
+    // Prefer live accounts for journal futures; also try sim for Option DT paper.
+    const [liveAccounts, simAccounts] = await Promise.all([
+      fetchTradeStationAccounts(tokens.access_token, 'live').catch(() => []),
+      fetchTradeStationAccounts(tokens.access_token, 'sim').catch(() => []),
+    ])
+
+    const accountIds = Array.from(
+      new Set([
+        ...liveAccounts.map((a) => a.AccountID),
+        ...simAccounts.map((a) => a.AccountID),
+      ].filter(Boolean))
+    )
+
     const futuresAccount =
-      accounts.find((account) => account.AccountType?.toLowerCase().includes('future')) ??
-      accounts[0]
+      liveAccounts.find((account) => account.AccountType?.toLowerCase().includes('future')) ??
+      liveAccounts[0] ??
+      simAccounts[0]
 
     await saveTradeStationConnection({
       userId: parsed.userId,
@@ -57,13 +87,13 @@ export async function GET(request: NextRequest) {
       updatedAt: new Date().toISOString(),
     })
 
-    journalUrl.searchParams.set('ts', 'connected')
-    const response = NextResponse.redirect(journalUrl)
+    redirectUrl.searchParams.set('ts', 'connected')
+    const response = NextResponse.redirect(redirectUrl)
     response.cookies.delete(STATE_COOKIE)
     return response
   } catch (err) {
     console.error('TradeStation callback error:', err)
-    journalUrl.searchParams.set('ts', 'error')
-    return NextResponse.redirect(journalUrl)
+    redirectUrl.searchParams.set('ts', 'error')
+    return NextResponse.redirect(redirectUrl)
   }
 }

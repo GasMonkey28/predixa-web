@@ -13,6 +13,11 @@ const navigationItems = [
     icon: '📋',
   },
   {
+    name: 'Option DT',
+    href: '/option-dt',
+    icon: '📉',
+  },
+  {
     name: 'Tickers',
     icon: '🏷️',
     items: [

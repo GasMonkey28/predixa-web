@@ -5,6 +5,7 @@ import { requireUserId } from '@/lib/server/cognito-request-auth'
 import {
   getTradeStationCredentials,
   resolveRedirectUri,
+  sanitizeReturnTo,
   TRADESTATION_AUDIENCE,
   TRADESTATION_AUTH_URL,
   TRADESTATION_SCOPES,
@@ -13,14 +14,25 @@ import {
 const STATE_COOKIE = 'ts_oauth_state'
 
 export async function GET(request: NextRequest) {
+  const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get('returnTo'))
+  const failRedirect = () => {
+    const url = new URL(returnTo, request.nextUrl.origin)
+    url.searchParams.set('ts', 'not_configured')
+    return NextResponse.redirect(url)
+  }
+
   const userId = requireUserId(request)
   if (!userId) {
-    return NextResponse.json({ error: 'Sign in to Predixa first' }, { status: 401 })
+    // Browser navigations often lack Bearer; try cookie auth only.
+    // If still missing, send them back with a clear flag.
+    const url = new URL(returnTo, request.nextUrl.origin)
+    url.searchParams.set('ts', 'signin')
+    return NextResponse.redirect(url)
   }
 
   const creds = getTradeStationCredentials()
   if (!creds) {
-    return NextResponse.json({ error: 'TradeStation is not configured on the server' }, { status: 503 })
+    return failRedirect()
   }
 
   const redirectUri = resolveRedirectUri(request)
@@ -38,7 +50,7 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(`${TRADESTATION_AUTH_URL}?${params.toString()}`)
   response.cookies.set(
     STATE_COOKIE,
-    JSON.stringify({ userId, state, redirectUri }),
+    JSON.stringify({ userId, state, redirectUri, returnTo }),
     {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
