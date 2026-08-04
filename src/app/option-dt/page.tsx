@@ -47,14 +47,22 @@ function SideTable({
   plan,
   selected,
   onToggle,
+  onChangeContract,
+  onChangeExpiration,
+  onChangeQuantity,
 }: {
   title: string
   side: OptionDtSide
   plan: OptionDtPlanResponse['long'] | undefined
   selected: Set<string>
   onToggle: (id: string) => void
+  onChangeContract: (candidateId: string, optionSymbol: string) => void
+  onChangeExpiration: (candidateId: string, expiration: string) => void
+  onChangeQuantity: (candidateId: string, quantity: number) => void
 }) {
   if (!plan) return null
+
+  const overSuggested = plan.spent > plan.budget
 
   return (
     <section className="rounded-2xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/85 to-zinc-950/90 overflow-hidden">
@@ -65,14 +73,15 @@ function SideTable({
             Summary total ≥ {OPTION_DT_SCORE_LINE} · {side === 'long' ? 'calls' : 'puts'} ·{' '}
             {OPTION_DT_LOOSE_FILTERS
               ? 'loose filters (any strike / exp / premium)'
-              : `OTM · ${OPTION_DT_PREMIUM_LABEL}`}
+              : `${OPTION_DT_PREMIUM_LABEL} · ITM + OTM`}
           </p>
         </div>
         <div className="text-xs text-zinc-400 text-right">
-          <div>
-            Spent {money(plan.spent)} / {money(plan.budget)}
+          <div className={overSuggested ? 'text-amber-300' : undefined}>
+            Est. {money(plan.spent)}
+            <span className="text-zinc-500"> · suggested start {money(plan.budget)}</span>
           </div>
-          <div>Left {money(plan.remaining)}</div>
+          <div className="text-zinc-500">$500 guides initial qty only — not a buy cap</div>
         </div>
       </header>
 
@@ -83,8 +92,8 @@ function SideTable({
               <th className="px-3 py-2 text-left">OK</th>
               <th className="px-3 py-2 text-left">Ticker</th>
               <th className="px-3 py-2 text-right">Score</th>
-              <th className="px-3 py-2 text-left">Contract</th>
-              <th className="px-3 py-2 text-right">Strike</th>
+              <th className="px-3 py-2 text-left">Exp</th>
+              <th className="px-3 py-2 text-left">Strike</th>
               <th className="px-3 py-2 text-right">DTE</th>
               <th className="px-3 py-2 text-right">Ask</th>
               <th className="px-3 py-2 text-right">OI</th>
@@ -102,6 +111,20 @@ function SideTable({
             )}
             {plan.candidates.map((row) => {
               const checked = selected.has(row.id)
+              const alts = row.alternatives ?? []
+              const expirations = Array.from(
+                new Map(
+                  alts.map((a) => [
+                    a.expiration,
+                    { expiration: a.expiration, dte: a.dteTradingDays },
+                  ])
+                ).values()
+              ).sort((a, b) => a.dte - b.dte || a.expiration.localeCompare(b.expiration))
+              const strikesForExp = alts
+                .filter((a) => a.expiration === row.expiration)
+                .sort((a, b) => a.strike - b.strike)
+              const strikeOptions = strikesForExp.length > 0 ? strikesForExp : alts
+
               return (
                 <tr
                   key={row.id}
@@ -115,17 +138,78 @@ function SideTable({
                       className="h-4 w-4 rounded border-zinc-600 bg-zinc-900"
                     />
                   </td>
-                  <td className="px-3 py-2 font-medium text-white">{row.ticker}</td>
-                  <td className="px-3 py-2 text-right text-amber-200">{row.summaryScore}</td>
-                  <td className="px-3 py-2 text-zinc-300">
-                    <div className="font-mono text-xs">{row.optionSymbol}</div>
-                    <div className="text-[11px] text-zinc-500">{row.reason}</div>
+                  <td className="px-3 py-2 font-medium text-white">
+                    <Link
+                      href={`/tickers/insight?ticker=${row.ticker}`}
+                      className="text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
+                    >
+                      {row.ticker}
+                    </Link>
                   </td>
-                  <td className="px-3 py-2 text-right text-zinc-300">{row.strike}</td>
+                  <td className="px-3 py-2 text-right text-amber-200">{row.summaryScore}</td>
+                  <td className="px-3 py-2 text-zinc-300 min-w-[8.5rem]">
+                    {expirations.length > 0 ? (
+                      <select
+                        value={row.expiration}
+                        onChange={(e) => onChangeExpiration(row.id, e.target.value)}
+                        className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 font-mono text-[11px] text-zinc-200 focus:border-emerald-500/60 focus:outline-none"
+                        title="Expiration / DTE"
+                      >
+                        {expirations.map((e) => (
+                          <option key={e.expiration} value={e.expiration}>
+                            {e.expiration} · {e.dte}d
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="font-mono text-xs">{row.expiration}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-zinc-300 min-w-[10rem]">
+                    {strikeOptions.length > 0 ? (
+                      <select
+                        value={row.optionSymbol}
+                        onChange={(e) => onChangeContract(row.id, e.target.value)}
+                        className="w-full max-w-[14rem] rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 font-mono text-[11px] text-zinc-200 focus:border-emerald-500/60 focus:outline-none"
+                        title="Strike"
+                      >
+                        {strikeOptions.map((a) => (
+                          <option key={a.optionSymbol} value={a.optionSymbol}>
+                            {a.label.includes('★') ? '★ ' : ''}${a.strike}
+                            {a.label.includes('ITM')
+                              ? ' ITM'
+                              : a.label.includes('ATM')
+                                ? ' ATM'
+                                : ' OTM'}
+                            {a.costPerContract > 0 ? ` · $${a.costPerContract.toFixed(0)}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="font-mono text-xs">{row.strike}</span>
+                    )}
+                    <div className="mt-1 text-[11px] text-zinc-500 truncate max-w-[14rem]">
+                      {row.optionSymbol}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-right text-zinc-300">{row.dteTradingDays}</td>
                   <td className="px-3 py-2 text-right text-zinc-300">{money(row.ask)}</td>
                   <td className="px-3 py-2 text-right text-zinc-300">{row.openInterest}</td>
-                  <td className="px-3 py-2 text-right text-white">{row.quantity}</td>
+                  <td className="px-3 py-2 text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      max={99}
+                      step={1}
+                      value={row.quantity}
+                      onChange={(e) => {
+                        const n = Number(e.target.value)
+                        if (!Number.isFinite(n)) return
+                        onChangeQuantity(row.id, n)
+                      }}
+                      className="w-16 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-right text-white focus:border-emerald-500/60 focus:outline-none"
+                    />
+                  </td>
                   <td className="px-3 py-2 text-right text-emerald-300">{money(row.estimatedCost)}</td>
                 </tr>
               )
@@ -297,9 +381,14 @@ function OptionDtPageContent() {
     [allCandidates, selected]
   )
 
-  const selectedCost = useMemo(
-    () => selectedCandidates.reduce((sum, c) => sum + c.estimatedCost, 0),
+  const placeableCandidates = useMemo(
+    () => selectedCandidates.filter((c) => c.quantity > 0),
     [selectedCandidates]
+  )
+
+  const selectedCost = useMemo(
+    () => placeableCandidates.reduce((sum, c) => sum + c.estimatedCost, 0),
+    [placeableCandidates]
   )
 
   const loadPlan = useCallback(async () => {
@@ -354,10 +443,102 @@ function OptionDtPageContent() {
     })
   }
 
+  const patchCandidate = (
+    candidateId: string,
+    patch: (row: OptionDtCandidate) => OptionDtCandidate | null
+  ) => {
+    setPlan((prev) => {
+      if (!prev) return prev
+      const sideKey = candidateId.startsWith('long:') ? 'long' : 'short'
+      const sidePlan = prev[sideKey]
+      const idx = sidePlan.candidates.findIndex((c) => c.id === candidateId)
+      if (idx < 0) return prev
+      const updated = patch(sidePlan.candidates[idx])
+      if (!updated) return prev
+      const candidates = sidePlan.candidates.map((c, i) => (i === idx ? updated : c))
+      const spent = Math.round(candidates.reduce((s, c) => s + c.estimatedCost, 0) * 100) / 100
+      return {
+        ...prev,
+        [sideKey]: {
+          ...sidePlan,
+          candidates,
+          spent,
+          remaining: Math.round((sidePlan.budget - spent) * 100) / 100,
+        },
+      }
+    })
+  }
+
+  const applyChoice = (
+    row: OptionDtCandidate,
+    choice: NonNullable<OptionDtCandidate['alternatives']>[number],
+    quantity = row.quantity
+  ): OptionDtCandidate => {
+    const qty = Math.max(0, Math.min(99, Number.isFinite(quantity) ? Math.floor(quantity) : 0))
+    const costPer = choice.costPerContract
+    return {
+      ...row,
+      optionSymbol: choice.optionSymbol,
+      strike: choice.strike,
+      expiration: choice.expiration,
+      expirationLabel: choice.expiration,
+      dteTradingDays: choice.dteTradingDays,
+      bid: choice.bid,
+      ask: choice.ask,
+      mid: choice.mid,
+      openInterest: choice.openInterest,
+      costPerContract: costPer,
+      quantity: qty,
+      estimatedCost: Math.round(qty * costPer * 100) / 100,
+      reason: `Picked · ~$${costPer.toFixed(0)}/ct`,
+    }
+  }
+
+  const changeContract = (candidateId: string, optionSymbol: string) => {
+    patchCandidate(candidateId, (row) => {
+      if (row.optionSymbol === optionSymbol) return null
+      const choice = row.alternatives?.find((a) => a.optionSymbol === optionSymbol)
+      if (!choice) return null
+      // Keep user's qty when switching strike — $500 is not a buy cap.
+      return applyChoice(row, choice, row.quantity)
+    })
+  }
+
+  const changeExpiration = (candidateId: string, expiration: string) => {
+    patchCandidate(candidateId, (row) => {
+      if (row.expiration === expiration) return null
+      const alts = row.alternatives ?? []
+      const onExp = alts.filter((a) => a.expiration === expiration)
+      if (onExp.length === 0) return null
+      // Prefer same strike on the new exp, else nearest strike, prefer ★ band.
+      const sameStrike = onExp.find((a) => a.strike === row.strike)
+      const preferred = onExp
+        .filter((a) => a.costPerContract >= 20 && a.costPerContract <= 300)
+        .sort((a, b) => Math.abs(a.strike - row.strike) - Math.abs(b.strike - row.strike))
+      const nearest = [...onExp].sort(
+        (a, b) => Math.abs(a.strike - row.strike) - Math.abs(b.strike - row.strike)
+      )[0]
+      const choice = sameStrike ?? preferred[0] ?? nearest
+      return applyChoice(row, choice, row.quantity)
+    })
+  }
+
+  const changeQuantity = (candidateId: string, quantity: number) => {
+    patchCandidate(candidateId, (row) => {
+      const qty = Math.max(0, Math.min(99, Number.isFinite(quantity) ? Math.floor(quantity) : 0))
+      if (qty === row.quantity) return null
+      return {
+        ...row,
+        quantity: qty,
+        estimatedCost: Math.round(qty * row.costPerContract * 100) / 100,
+      }
+    })
+  }
+
   const confirmAndPlace = async () => {
-    if (selectedCandidates.length === 0) return
+    if (placeableCandidates.length === 0) return
     const ok = window.confirm(
-      `Place ${selectedCandidates.length} paper BuyToOpen order(s) on account ${accountId}?\n` +
+      `Place ${placeableCandidates.length} paper BuyToOpen order(s) on account ${accountId}?\n` +
         `Est. debit ~${money(selectedCost)}\n\n` +
         `Remember to Flatten before close.`
     )
@@ -374,7 +555,7 @@ function OptionDtPageContent() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ accountId, candidates: selectedCandidates }),
+        body: JSON.stringify({ accountId, candidates: placeableCandidates }),
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
@@ -474,8 +655,9 @@ function OptionDtPageContent() {
               Paper day-trades from Summary Long/Short ranks above the {OPTION_DT_SCORE_LINE} line.
               {OPTION_DT_LOOSE_FILTERS
                 ? ' Loose filters ON (no premium / OTM / DTE caps) for testing.'
-                : ` Near OTM, ${OPTION_DT_PREMIUM_LABEL}, high OI, 0–5 trading-day DTE.`}{' '}
-              Budget {money(OPTION_DT_SIDE_BUDGET)} per side. Confirm before send. Flat by close.
+                : ` ITM + OTM, ${OPTION_DT_PREMIUM_LABEL}, 0–5 trading-day DTE.`}{' '}
+              Suggested start ~{money(OPTION_DT_SIDE_BUDGET)} per side (not a buy cap). Confirm
+              before send. Flat by close.
             </p>
           </div>
           <Link
@@ -563,10 +745,10 @@ function OptionDtPageContent() {
             <button
               type="button"
               onClick={() => void confirmAndPlace()}
-              disabled={placing || selectedCandidates.length === 0 || !accountId}
+              disabled={placing || placeableCandidates.length === 0 || !accountId}
               className="rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm font-medium px-3 py-2"
             >
-              {placing ? 'Placing…' : `Confirm & place (${selectedCandidates.length})`}
+              {placing ? 'Placing…' : `Confirm & place (${placeableCandidates.length})`}
             </button>
             <button
               type="button"
@@ -678,6 +860,9 @@ function OptionDtPageContent() {
               plan={plan.long}
               selected={selected}
               onToggle={toggle}
+              onChangeContract={changeContract}
+              onChangeExpiration={changeExpiration}
+              onChangeQuantity={changeQuantity}
             />
             <SideTable
               title="Short · buy puts"
@@ -685,6 +870,9 @@ function OptionDtPageContent() {
               plan={plan.short}
               selected={selected}
               onToggle={toggle}
+              onChangeContract={changeContract}
+              onChangeExpiration={changeExpiration}
+              onChangeQuantity={changeQuantity}
             />
             <p className="text-xs text-zinc-500 leading-relaxed">
               Paper trading only (sim-api). Not investment advice. Default is flat by close — use

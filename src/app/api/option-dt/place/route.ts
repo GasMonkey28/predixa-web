@@ -79,13 +79,13 @@ export async function POST(request: NextRequest) {
     }> = []
 
     for (const candidate of candidates) {
-      if (!candidate.optionSymbol || !candidate.quantity || candidate.quantity < 1) {
+      if (!candidate.optionSymbol || candidate.quantity == null || candidate.quantity < 1) {
         results.push({
           id: candidate.id,
           ticker: candidate.ticker,
           optionSymbol: candidate.optionSymbol,
           ok: false,
-          message: 'Invalid candidate',
+          message: candidate.quantity === 0 ? 'Skipped (qty 0)' : 'Invalid candidate',
         })
         continue
       }
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       const openOrder: TradeStationOrderRequest = {
         AccountID: accountId,
         Symbol: candidate.optionSymbol,
-        Quantity: String(candidate.quantity),
+        Quantity: String(Math.max(1, Math.min(99, Math.floor(candidate.quantity)))),
         OrderType: 'Market',
         TradeAction: 'BUYTOOPEN',
         TimeInForce: { Duration: 'DAY' },

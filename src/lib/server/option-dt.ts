@@ -3,13 +3,12 @@ import {
   OPTION_DT_MAX_DTE_TRADING_DAYS,
   OPTION_DT_PRICE_MAX,
   OPTION_DT_PRICE_MIN,
-  OPTION_DT_PRICE_SOFT_MAX,
-  OPTION_DT_PRICE_SOFT_MIN,
   OPTION_DT_PRICE_TARGET,
   OPTION_DT_PREMIUM_LABEL,
   OPTION_DT_SCORE_LINE,
   OPTION_DT_SIDE_BUDGET,
   type OptionDtCandidate,
+  type OptionDtContractChoice,
   type OptionDtPlanResponse,
   type OptionDtSide,
   type OptionDtSidePlan,
@@ -96,12 +95,42 @@ interface ScoredContract {
   /** Absolute distance from spot (ATM preference). */
   atmDistance: number
   preferredBand: boolean
+  dte: number
 }
 
+function contractChoiceFromScored(
+  c: ScoredContract,
+  side: OptionDtSide,
+  underlyingLast: number
+): OptionDtContractChoice {
+  const ask = toNum(c.row.Ask) ?? (c.premium > 0 ? c.premium : undefined)
+  const costPer = Math.round(Math.max(ask ?? 0, 0) * 100 * 100) / 100
+  const priceBit =
+    ask != null && ask > 0 ? `$${costPer.toFixed(0)}/ct` : 'no quote'
+  const otm =
+    side === 'long' ? c.strike >= underlyingLast : c.strike <= underlyingLast
+  const moneyBit = otm ? (Math.abs(c.strike - underlyingLast) < 1e-6 ? 'ATM' : 'OTM') : 'ITM'
+  return {
+    optionSymbol: c.symbol,
+    strike: c.strike,
+    expiration: c.expiration,
+    dteTradingDays: c.dte,
+    bid: toNum(c.row.Bid),
+    ask: ask != null && ask > 0 ? ask : undefined,
+    mid: toNum(c.row.Mid) ?? (c.premium > 0 ? c.premium : undefined),
+    openInterest: c.oi,
+    costPerContract: costPer,
+    label: `${c.preferredBand ? '★ ' : ''}$${c.strike} · ${moneyBit} · ${c.expiration} · ${priceBit} · ${c.dte}d`,
+  }
+}
+
+/** Build contract list for a chain snapshot. No OI filter — OI is display-only. */
 function scoreContracts(
   rows: TradeStationOptionChainRow[],
   underlyingLast: number,
-  loose: boolean
+  loose: boolean,
+  dte: number,
+  expirationFallback: string
 ): ScoredContract[] {
   const scored: ScoredContract[] = []
 
@@ -112,50 +141,39 @@ function scoreContracts(
     const exp =
       expirationYmd(leg?.Expiration || '') ||
       expirationYmd(row.ExpirationDate || '') ||
+      expirationFallback ||
       null
     const premium = pickPremium(row)
     const oi = toNum(row.DailyOpenInterest) ?? toNum(row.OpenInterest) ?? 0
-    if (!symbol || strike == null) continue
-    // Loose: allow missing premium/expiration
-    if (!loose && (premium == null || premium <= 0 || !exp)) continue
+    if (!symbol || strike == null || !exp) continue
 
+    // Include all strikes (ITM + OTM), even without a quote. Expensive ITM quotes stay listed.
     const atmDistance = Math.abs(strike - underlyingLast)
 
     scored.push({
       row,
       symbol,
       strike,
-      expiration: exp || todayEtYmd(),
+      expiration: exp,
       premium: premium ?? 0,
       oi,
       atmDistance,
       preferredBand:
         premium != null && inBand(premium, OPTION_DT_PRICE_MIN, OPTION_DT_PRICE_MAX),
+      dte,
     })
   }
 
-  let pool = scored
-  if (!loose) {
-    const preferred = scored.filter((c) => c.preferredBand)
-    pool =
-      preferred.length > 0
-        ? preferred
-        : scored.filter((c) =>
-            inBand(c.premium, OPTION_DT_PRICE_SOFT_MIN, OPTION_DT_PRICE_SOFT_MAX)
-          )
-  }
-
-  // ATM first, then highest OI, then premium closest to target (strict mode)
-  pool.sort((a, b) => {
+  scored.sort((a, b) => {
+    if (a.preferredBand !== b.preferredBand) return a.preferredBand ? -1 : 1
     if (a.atmDistance !== b.atmDistance) return a.atmDistance - b.atmDistance
-    if (b.oi !== a.oi) return b.oi - a.oi
-    if (!loose) {
+    if (!loose && a.premium > 0 && b.premium > 0) {
       return Math.abs(a.premium - OPTION_DT_PRICE_TARGET) - Math.abs(b.premium - OPTION_DT_PRICE_TARGET)
     }
-    return 0
+    return a.strike - b.strike
   })
 
-  return pool
+  return scored
 }
 
 async function pickBestContractForTicker(input: {
@@ -164,7 +182,13 @@ async function pickBestContractForTicker(input: {
   side: OptionDtSide
   todayYmd: string
 }): Promise<
-  | { ok: true; contract: ScoredContract; underlyingLast: number; dte: number }
+  | {
+      ok: true
+      contract: ScoredContract
+      alternatives: ScoredContract[]
+      underlyingLast: number
+      dte: number
+    }
   | { ok: false; reason: string }
 > {
   const { accessToken, ticker, side, todayYmd } = input
@@ -214,12 +238,10 @@ async function pickBestContractForTicker(input: {
     }
   }
 
-  let best: ScoredContract | null = null
-  let bestDte = 0
-  const expLimit = loose ? 6 : 4
+  const allRanked: ScoredContract[] = []
   const diagnostics: string[] = []
+  const expLimit = loose ? 8 : Math.min(eligible.length, 6)
 
-  // Also try default next expiration (omit expiration param) once up front in loose mode
   const attempts: Array<{ ymd: string | null; dte: number; label: string }> = [
     ...eligible.slice(0, expLimit).map((e) => ({
       ymd: e.ymd as string | null,
@@ -240,8 +262,8 @@ async function pickBestContractForTicker(input: {
         {
           expiration: exp.ymd ? toTsExpirationParam(exp.ymd) : undefined,
           optionType,
-          strikeRange: loose ? 'All' : 'OTM',
-          strikeProximity: loose ? 15 : 10,
+          strikeRange: 'All',
+          strikeProximity: 40,
           enableGreeks: false,
         },
         { timeoutMs: 12_000 }
@@ -257,44 +279,90 @@ async function pickBestContractForTicker(input: {
         (detail.sampleKeys.length ? ` keys=${detail.sampleKeys.join('|')}` : '')
     )
 
-    const ranked = scoreContracts(detail.rows, underlyingLast, loose)
-    if (ranked.length === 0) continue
+    const ranked = scoreContracts(
+      detail.rows,
+      underlyingLast,
+      loose,
+      exp.dte,
+      exp.ymd || todayYmd
+    )
+    // Include ITM + OTM/ATM strikes in the picker.
+    allRanked.push(...ranked)
+  }
 
-    const candidate = ranked[0]
-    if (
-      !best ||
-      exp.dte < bestDte ||
-      (exp.dte === bestDte &&
-        (candidate.oi > best.oi ||
-          (candidate.oi === best.oi && candidate.atmDistance < best.atmDistance)))
-    ) {
-      best = candidate
-      bestDte = exp.dte
-      if (exp.dte <= 2 || exp.ymd == null) break
+  const bySymbol = new Map<string, ScoredContract>()
+  for (const c of allRanked) {
+    const existing = bySymbol.get(c.symbol)
+    if (!existing) {
+      bySymbol.set(c.symbol, c)
+      continue
+    }
+    // Prefer a quote when deduping; never use OI as a gate.
+    const existingHasQuote = existing.premium > 0
+    const nextHasQuote = c.premium > 0
+    if (nextHasQuote && !existingHasQuote) {
+      bySymbol.set(c.symbol, c)
+      continue
+    }
+    if (c.dte < existing.dte || (c.dte === existing.dte && c.atmDistance < existing.atmDistance)) {
+      bySymbol.set(c.symbol, c)
     }
   }
 
-  if (!best) {
+  // Dropdown order: by expiration, then strike (easy to scan). ★ preferred still used for default.
+  const alternatives = Array.from(bySymbol.values()).sort((a, b) => {
+    if (a.dte !== b.dte) return a.dte - b.dte
+    if (a.strike !== b.strike) return a.strike - b.strike
+    return a.symbol.localeCompare(b.symbol)
+  })
+
+  if (alternatives.length === 0) {
     const hint = diagnostics.slice(0, 3).join(' · ')
     return {
       ok: false,
-      reason: loose
-        ? `No option contracts from chain (${hint || 'empty'})`
-        : `No OTM contract in ${OPTION_DT_PREMIUM_LABEL} band`,
+      reason: `No option contracts from chain (${hint || 'empty'})`,
     }
   }
 
-  return { ok: true, contract: best, underlyingLast, dte: bestDte }
+  const isOtmOrAtm = (c: ScoredContract) =>
+    side === 'long' ? c.strike >= underlyingLast : c.strike <= underlyingLast
+
+  // Default pick: prefer OTM/ATM in preferred band, then any preferred, then nearest quote.
+  const byPickQuality = (a: ScoredContract, b: ScoredContract) =>
+    a.atmDistance - b.atmDistance || a.dte - b.dte
+  const preferredOtm = alternatives
+    .filter((c) => c.preferredBand && isOtmOrAtm(c))
+    .sort(byPickQuality)
+  const preferredAny = alternatives.filter((c) => c.preferredBand).sort(byPickQuality)
+  const withQuote = alternatives.filter((c) => c.premium > 0).sort(byPickQuality)
+  const best = preferredOtm[0] ?? preferredAny[0] ?? withQuote[0] ?? alternatives[0]
+
+  return {
+    ok: true,
+    contract: best,
+    alternatives: alternatives.slice(0, 80),
+    underlyingLast,
+    dte: best.dte,
+  }
 }
 
 function allocateSide(input: {
   side: OptionDtSide
   rows: TickerRankRow[]
-  picks: Map<string, { contract: ScoredContract; underlyingLast: number; dte: number }>
+  picks: Map<
+    string,
+    {
+      contract: ScoredContract
+      alternatives: ScoredContract[]
+      underlyingLast: number
+      dte: number
+    }
+  >
   skips: Map<string, string>
 }): OptionDtSidePlan {
   const { side, rows, picks, skips } = input
   const loose = OPTION_DT_LOOSE_FILTERS
+  const optionType = side === 'long' ? 'Call' : 'Put'
   const above = rows
     .filter((r) => (r.score ?? Number.NEGATIVE_INFINITY) >= OPTION_DT_SCORE_LINE)
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
@@ -319,6 +387,7 @@ function allocateSide(input: {
     const ask = toNum(pick.contract.row.Ask) ?? pick.contract.premium
     const costPer = Math.round(Math.max(ask, 0) * 100 * 100) / 100
 
+    // $500 is a suggested initial sizing guide only — never skip a ticker for budget.
     let quantity = 1
     if (!loose) {
       if (costPer <= 0) {
@@ -329,24 +398,16 @@ function allocateSide(input: {
         })
         continue
       }
-      if (costPer > remaining) {
-        skipped.push({
-          ticker: row.ticker,
-          score: row.score ?? 0,
-          reason: `Need $${costPer.toFixed(0)} but only $${remaining.toFixed(0)} left`,
-        })
-        continue
+      if (costPer <= remaining) {
+        const maxQty = Math.floor(remaining / costPer)
+        quantity = Math.max(1, Math.min(maxQty, 5))
+      } else {
+        quantity = 1
       }
-      const maxQty = Math.floor(remaining / costPer)
-      quantity = Math.max(1, Math.min(maxQty, 5))
     }
 
     const estimatedCost = Math.round(quantity * costPer * 100) / 100
-    if (!loose) {
-      remaining = Math.round((remaining - estimatedCost) * 100) / 100
-    } else {
-      remaining = Math.round((remaining - Math.min(estimatedCost, remaining)) * 100) / 100
-    }
+    remaining = Math.round((remaining - estimatedCost) * 100) / 100
 
     const moneyness =
       side === 'long'
@@ -357,8 +418,12 @@ function allocateSide(input: {
           ? 'OTM/ATM put'
           : 'ITM put'
 
+    const alternatives = pick.alternatives.map((c) =>
+      contractChoiceFromScored(c, side, pick.underlyingLast)
+    )
+
     candidates.push({
-      id: `${side}:${row.ticker}:${pick.contract.symbol}`,
+      id: `${side}:${row.ticker}`,
       side,
       ticker: row.ticker,
       summaryScore: row.score ?? 0,
@@ -367,7 +432,7 @@ function allocateSide(input: {
       signal: row.signal,
       underlyingLast: pick.underlyingLast,
       optionSymbol: pick.contract.symbol,
-      optionType: side === 'long' ? 'Call' : 'Put',
+      optionType,
       strike: pick.contract.strike,
       expiration: pick.contract.expiration,
       expirationLabel: pick.contract.expiration,
@@ -380,8 +445,9 @@ function allocateSide(input: {
       quantity,
       estimatedCost,
       reason: loose
-        ? `Loose · nearest exp · ${moneyness} · OI ${pick.contract.oi} · ~$${costPer.toFixed(0)}/ct`
-        : `Nearest · OI ${pick.contract.oi} · ~$${costPer.toFixed(0)}/ct`,
+        ? `Loose · nearest exp · ${moneyness} · ~$${costPer.toFixed(0)}/ct`
+        : `Nearest · ~$${costPer.toFixed(0)}/ct`,
+      alternatives,
     })
   }
 
@@ -431,8 +497,24 @@ export async function buildOptionDtPlan(input: {
     ...shortAbove.map((r) => ({ ticker: r.ticker, side: 'short' as const })),
   ]
 
-  const longPicks = new Map<string, { contract: ScoredContract; underlyingLast: number; dte: number }>()
-  const shortPicks = new Map<string, { contract: ScoredContract; underlyingLast: number; dte: number }>()
+  const longPicks = new Map<
+    string,
+    {
+      contract: ScoredContract
+      alternatives: ScoredContract[]
+      underlyingLast: number
+      dte: number
+    }
+  >()
+  const shortPicks = new Map<
+    string,
+    {
+      contract: ScoredContract
+      alternatives: ScoredContract[]
+      underlyingLast: number
+      dte: number
+    }
+  >()
   const longSkips = new Map<string, string>()
   const shortSkips = new Map<string, string>()
 
@@ -452,6 +534,7 @@ export async function buildOptionDtPlan(input: {
         if (result.ok) {
           picks.set(job.ticker, {
             contract: result.contract,
+            alternatives: result.alternatives,
             underlyingLast: result.underlyingLast,
             dte: result.dte,
           })

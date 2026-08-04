@@ -16,10 +16,26 @@ export const OPTION_DT_PRICE_MIN = 0.2
 export const OPTION_DT_PRICE_MAX = 3
 export const OPTION_DT_PRICE_SOFT_MIN = 0.15
 export const OPTION_DT_PRICE_SOFT_MAX = 3.5
+/** Drop contracts above this quote from the dropdown (keeps cheap/ATM range). */
+export const OPTION_DT_PICKER_PRICE_MAX = 5
 export const OPTION_DT_PRICE_TARGET = 1.5
 export const OPTION_DT_PREMIUM_LABEL = '$20–300/contract (~$0.20–3 quote)'
 
 export type OptionDtSide = 'long' | 'short'
+
+/** Alternate contracts the user can pick for a candidate ticker. */
+export interface OptionDtContractChoice {
+  optionSymbol: string
+  strike: number
+  expiration: string
+  dteTradingDays: number
+  bid?: number
+  ask?: number
+  mid?: number
+  openInterest: number
+  costPerContract: number
+  label: string
+}
 
 export interface OptionDtCandidate {
   id: string
@@ -45,6 +61,8 @@ export interface OptionDtCandidate {
   quantity: number
   estimatedCost: number
   reason: string
+  /** Other contracts in band for this ticker (includes the selected one). */
+  alternatives?: OptionDtContractChoice[]
 }
 
 export interface OptionDtSidePlan {
