@@ -6,6 +6,9 @@ import { motion } from 'motion/react'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import OptionDtPositionsPanel, {
+  type OptionDtOpenPosition,
+} from '@/components/option-dt/OptionDtPositionsPanel'
 import { useAuthStore } from '@/lib/auth-store'
 import {
   OPTION_DT_LOOSE_FILTERS,
@@ -171,6 +174,15 @@ function OptionDtPageContent() {
   const [flattening, setFlattening] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [placeResult, setPlaceResult] = useState<string | null>(null)
+  const [positions, setPositions] = useState<OptionDtOpenPosition[]>([])
+  const [positionTotals, setPositionTotals] = useState({
+    marketValue: 0,
+    totalCost: 0,
+    unrealizedPnl: 0,
+    contracts: 0,
+  })
+  const [positionsLoading, setPositionsLoading] = useState(false)
+  const [busySymbol, setBusySymbol] = useState<string | null>(null)
 
   const refreshTs = useCallback(async () => {
     if (!isAuthenticated) {
@@ -222,6 +234,40 @@ function OptionDtPageContent() {
     void refreshTs()
   }, [refreshTs])
 
+  const loadPositions = useCallback(async () => {
+    if (!accountId || !tsConnected) {
+      setPositions([])
+      setPositionTotals({ marketValue: 0, totalCost: 0, unrealizedPnl: 0, contracts: 0 })
+      return
+    }
+    setPositionsLoading(true)
+    try {
+      const res = await fetch(
+        `/api/option-dt/positions?accountId=${encodeURIComponent(accountId)}`,
+        {
+          headers: await authHeaders(),
+          credentials: 'include',
+          cache: 'no-store',
+        }
+      )
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+      setPositions((body.positions as OptionDtOpenPosition[]) || [])
+      setPositionTotals(
+        body.totals || { marketValue: 0, totalCost: 0, unrealizedPnl: 0, contracts: 0 }
+      )
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load positions')
+    } finally {
+      setPositionsLoading(false)
+    }
+  }, [accountId, tsConnected])
+
+  useEffect(() => {
+    void loadPositions()
+  }, [loadPositions])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
@@ -256,7 +302,8 @@ function OptionDtPageContent() {
     [selectedCandidates]
   )
 
-  const loadPlan = async () => {
+  const loadPlan = useCallback(async () => {
+    if (!tsConnected) return
     setLoadingPlan(true)
     setError(null)
     setPlaceResult(null)
@@ -278,7 +325,25 @@ function OptionDtPageContent() {
     } finally {
       setLoadingPlan(false)
     }
-  }
+  }, [accountId, tsConnected])
+
+  // Auto-load candidates when connected + paper account ready.
+  useEffect(() => {
+    if (!tsConnected || !accountId || !tradeScopesOk) return
+    void loadPlan()
+  }, [tsConnected, accountId, tradeScopesOk, loadPlan])
+
+  // Refresh candidates when returning to the tab.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && tsConnected && accountId && tradeScopesOk) {
+        void loadPlan()
+        void loadPositions()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [tsConnected, accountId, tradeScopesOk, loadPlan, loadPositions])
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -316,6 +381,7 @@ function OptionDtPageContent() {
       setPlaceResult(
         `Placed ${body.placed}, failed ${body.failed}. ${body.note || ''}`.trim()
       )
+      void loadPositions()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Place failed')
     } finally {
@@ -344,10 +410,50 @@ function OptionDtPageContent() {
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
       setPlaceResult(`Flattened ${body.closed}, failed ${body.failed}.`)
+      void loadPositions()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Flatten failed')
     } finally {
       setFlattening(false)
+    }
+  }
+
+  const adjustPosition = async (symbol: string, action: 'buy_more' | 'sell_one' | 'flatten') => {
+    if (!accountId) return
+    const label =
+      action === 'buy_more'
+        ? `Buy +1 ${symbol}`
+        : action === 'sell_one'
+          ? `Sell −1 ${symbol}`
+          : `Flatten ${symbol}`
+    if (!window.confirm(`${label} on paper account ${accountId}?`)) return
+
+    setBusySymbol(symbol)
+    setError(null)
+    try {
+      const res = await fetch('/api/option-dt/adjust', {
+        method: 'POST',
+        headers: {
+          ...(await authHeaders()),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ accountId, symbol, action, quantity: 1 }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+      setPlaceResult(
+        action === 'buy_more'
+          ? `Bought +1 ${symbol} (order ${body.orderId}).`
+          : action === 'sell_one'
+            ? `Sold −1 ${symbol} (order ${body.orderId}).`
+            : `Flattened ${symbol} (order ${body.orderId}).`
+      )
+      void loadPositions()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Adjust failed')
+    } finally {
+      setBusySymbol(null)
     }
   }
 
@@ -452,7 +558,7 @@ function OptionDtPageContent() {
               disabled={loadingPlan || !tsConnected}
               className="rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium px-3 py-2"
             >
-              {loadingPlan ? 'Loading chains…' : 'Load candidates'}
+              {loadingPlan ? 'Loading chains…' : 'Reload candidates'}
             </button>
             <button
               type="button"
@@ -544,6 +650,19 @@ function OptionDtPageContent() {
             </p>
           )}
         </section>
+
+        {tsConnected && accountId && (
+          <OptionDtPositionsPanel
+            positions={positions}
+            totals={positionTotals}
+            loading={positionsLoading}
+            busySymbol={busySymbol}
+            onRefresh={() => void loadPositions()}
+            onBuyMore={(symbol) => void adjustPosition(symbol, 'buy_more')}
+            onSellOne={(symbol) => void adjustPosition(symbol, 'sell_one')}
+            onFlatten={(symbol) => void adjustPosition(symbol, 'flatten')}
+          />
+        )}
 
         {loadingPlan && (
           <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/70 px-6 py-16 text-center text-zinc-300">

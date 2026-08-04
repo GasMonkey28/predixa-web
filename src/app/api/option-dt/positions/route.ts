@@ -1,0 +1,107 @@
+import { NextRequest, NextResponse } from 'next/server'
+
+import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
+import { logger } from '@/lib/server/logger'
+import { requireSubscriber } from '@/lib/server/require-subscriber'
+import {
+  fetchTradeStationPositions,
+  getValidAccessToken,
+  type TradeStationPosition,
+} from '@/lib/server/tradestation-client'
+
+export const dynamic = 'force-dynamic'
+
+function toNum(value: string | number | undefined | null): number {
+  if (value == null || value === '') return 0
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function isOptionPosition(p: TradeStationPosition): boolean {
+  const asset = (p.AssetType || '').toLowerCase()
+  return asset.includes('option') || /\d{6}[CP]/i.test(p.Symbol) || p.Symbol.includes(' ')
+}
+
+export async function GET(request: NextRequest) {
+  const clientIp =
+    (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'anonymous'
+
+  if (!checkRateLimit(clientIp)) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: getRateLimitHeaders(clientIp) }
+    )
+  }
+
+  const auth = await requireSubscriber(request)
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: auth.error },
+      { status: auth.status, headers: getRateLimitHeaders(clientIp) }
+    )
+  }
+
+  try {
+    const { accessToken, connection } = await getValidAccessToken(auth.userId)
+    const accountId =
+      request.nextUrl.searchParams.get('accountId') || connection.selectedAccountId
+    if (!accountId) {
+      return NextResponse.json({ error: 'No paper account selected' }, { status: 400 })
+    }
+
+    const raw = await fetchTradeStationPositions(accessToken, [accountId], 'sim')
+    const positions = raw.filter(isOptionPosition).map((p) => {
+      const qty = Math.abs(toNum(p.Quantity))
+      const avg = toNum(p.AveragePrice)
+      const last = toNum(p.Last)
+      const marketValue = toNum(p.MarketValue) || qty * last * 100
+      const totalCost = toNum(p.TotalCost) || qty * avg * 100
+      const unrealized =
+        toNum(p.UnrealizedProfitLoss) || marketValue - totalCost
+      const isLong = (p.LongShort || '').toLowerCase().startsWith('long')
+
+      return {
+        positionId: p.PositionID,
+        symbol: p.Symbol,
+        quantity: qty,
+        longShort: isLong ? 'Long' : 'Short',
+        averagePrice: avg,
+        last: last || null,
+        marketValue,
+        totalCost,
+        unrealizedPnl: unrealized,
+        todaysPnl: toNum(p.TodaysProfitLoss) || null,
+        assetType: p.AssetType || null,
+      }
+    })
+
+    const totals = positions.reduce(
+      (acc, p) => {
+        acc.marketValue += p.marketValue
+        acc.totalCost += p.totalCost
+        acc.unrealizedPnl += p.unrealizedPnl
+        acc.contracts += p.quantity
+        return acc
+      },
+      { marketValue: 0, totalCost: 0, unrealizedPnl: 0, contracts: 0 }
+    )
+
+    return NextResponse.json(
+      {
+        accountId,
+        generated_at: new Date().toISOString(),
+        positions,
+        totals,
+      },
+      { headers: { 'Cache-Control': 'no-store', ...getRateLimitHeaders(clientIp) } }
+    )
+  } catch (error) {
+    logger.error({ error, userId: auth.userId }, 'Option DT positions error')
+    return NextResponse.json(
+      { error: (error as Error).message || 'Failed to load positions' },
+      { status: 500, headers: getRateLimitHeaders(clientIp) }
+    )
+  }
+}

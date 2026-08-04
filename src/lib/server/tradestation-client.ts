@@ -25,6 +25,14 @@ export interface TradeStationPosition {
   AveragePrice: string
   AssetType?: string
   Timestamp?: string
+  Last?: string
+  Bid?: string
+  Ask?: string
+  MarketValue?: string
+  TotalCost?: string
+  UnrealizedProfitLoss?: string
+  UnrealizedProfitLossPercent?: string
+  TodaysProfitLoss?: string
 }
 
 export interface TradeStationOrderLeg {

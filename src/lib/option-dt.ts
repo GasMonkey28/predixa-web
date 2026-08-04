@@ -4,22 +4,20 @@ export const OPTION_DT_SCORE_LINE = 17
 export const OPTION_DT_SIDE_BUDGET = 500
 
 /**
- * Temporary loose mode for debugging / off-hours:
- * - no premium $ band
- * - no OTM-only
- * - no 0–5 DTE cap (use nearest available expirations)
- * - always offer 1 contract (budget is informational)
+ * Loose mode (debug): no premium band / OTM-only / DTE cap; always 1 contract.
+ * Keep false for production Option DT rules.
  */
-export const OPTION_DT_LOOSE_FILTERS = true
+export const OPTION_DT_LOOSE_FILTERS = false
 
 /** Used only when OPTION_DT_LOOSE_FILTERS is false. */
 export const OPTION_DT_MAX_DTE_TRADING_DAYS = 5
-export const OPTION_DT_PRICE_MIN = 1
+/** Quote per share; debit/contract = quote × 100 → $20–$300. */
+export const OPTION_DT_PRICE_MIN = 0.2
 export const OPTION_DT_PRICE_MAX = 3
-export const OPTION_DT_PRICE_SOFT_MIN = 0.8
+export const OPTION_DT_PRICE_SOFT_MIN = 0.15
 export const OPTION_DT_PRICE_SOFT_MAX = 3.5
-export const OPTION_DT_PRICE_TARGET = 2
-export const OPTION_DT_PREMIUM_LABEL = '$100–300/contract (~$1–3 quote)'
+export const OPTION_DT_PRICE_TARGET = 1.5
+export const OPTION_DT_PREMIUM_LABEL = '$20–300/contract (~$0.20–3 quote)'
 
 export type OptionDtSide = 'long' | 'short'
 
