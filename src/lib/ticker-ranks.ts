@@ -155,7 +155,7 @@ export function shortMarketContext(
   return `${(sp > 40 ? cut.slice(0, sp) : cut).trimEnd()}…`
 }
 
-export function withRanks<T extends { ticker: string }>(
+export function withRanks<T>(
   sorted: T[],
   mapRow: (item: T, rank: number) => TickerRankRow
 ): TickerRankRow[] {
