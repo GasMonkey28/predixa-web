@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-export type OptionDtOpenPosition = {
+export type StockDtOpenPosition = {
   positionId: string
   symbol: string
   quantity: number
@@ -24,10 +24,10 @@ function money(n: number | null | undefined): string {
 
 function clampTradeSize(raw: number): number {
   if (!Number.isFinite(raw)) return 1
-  return Math.max(1, Math.min(99, Math.floor(raw)))
+  return Math.max(1, Math.min(10_000, Math.floor(raw)))
 }
 
-export default function OptionDtPositionsPanel({
+export default function StockDtPositionsPanel({
   positions,
   totals,
   loading,
@@ -37,8 +37,8 @@ export default function OptionDtPositionsPanel({
   onSellOne,
   onFlatten,
 }: {
-  positions: OptionDtOpenPosition[]
-  totals: { marketValue: number; totalCost: number; unrealizedPnl: number; contracts: number }
+  positions: StockDtOpenPosition[]
+  totals: { marketValue: number; totalCost: number; unrealizedPnl: number; shares: number }
   loading?: boolean
   busySymbol?: string | null
   onRefresh: () => void
@@ -53,9 +53,9 @@ export default function OptionDtPositionsPanel({
     <section className="rounded-2xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/85 to-zinc-950/90 overflow-hidden">
       <header className="border-b border-zinc-800/80 px-4 py-3 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-white">Open option positions</h2>
+          <h2 className="text-base font-semibold text-white">Open stock positions</h2>
           <p className="text-xs text-zinc-400 mt-1">
-            Paper account P&amp;L — buy/sell by size, or flatten each contract.
+            Paper account P&amp;L — add/trim by size, or flatten each name.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -64,7 +64,7 @@ export default function OptionDtPositionsPanel({
             <input
               type="number"
               min={1}
-              max={99}
+              max={10000}
               value={tradeSize}
               onChange={(e) => setTradeSize(clampTradeSize(Number(e.target.value)))}
               className="w-16 rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-right text-sm text-zinc-100"
@@ -75,7 +75,7 @@ export default function OptionDtPositionsPanel({
               MV {money(totals.marketValue)} · Cost {money(totals.totalCost)}
             </div>
             <div className={totals.unrealizedPnl >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
-              uPnL {money(totals.unrealizedPnl)} · {totals.contracts} ct
+              uPnL {money(totals.unrealizedPnl)} · {totals.shares} sh
             </div>
           </div>
           <button
@@ -91,14 +91,14 @@ export default function OptionDtPositionsPanel({
 
       {positions.length === 0 ? (
         <div className="px-4 py-12 text-center text-zinc-500 text-sm">
-          {loading ? 'Loading positions…' : 'No open option positions on this paper account.'}
+          {loading ? 'Loading positions…' : 'No open stock positions on this paper account.'}
         </div>
       ) : (
         <div className="overflow-auto">
           <table className="w-full text-sm">
             <thead className="bg-zinc-950/95 text-[11px] uppercase tracking-wide text-zinc-500">
               <tr>
-                <th className="px-3 py-2 text-left">Contract</th>
+                <th className="px-3 py-2 text-left">Ticker</th>
                 <th className="px-3 py-2 text-right">Qty</th>
                 <th className="px-3 py-2 text-right">Avg</th>
                 <th className="px-3 py-2 text-right">Last</th>
@@ -136,7 +136,11 @@ export default function OptionDtPositionsPanel({
                           onClick={() => onBuyMore(p.symbol, size)}
                           className="rounded-md bg-emerald-600/90 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium px-2 py-1.5"
                         >
-                          {busy ? '…' : `Buy +${size}`}
+                          {busy
+                            ? '…'
+                            : p.longShort === 'Short'
+                              ? `Short +${size}`
+                              : `Buy +${size}`}
                         </button>
                         <button
                           type="button"
@@ -144,7 +148,11 @@ export default function OptionDtPositionsPanel({
                           onClick={() => onSellOne(p.symbol, trimQty)}
                           className="rounded-md bg-amber-600/90 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-medium px-2 py-1.5"
                         >
-                          {busy ? '…' : `Sell −${trimQty}`}
+                          {busy
+                            ? '…'
+                            : p.longShort === 'Short'
+                              ? `Cover −${trimQty}`
+                              : `Sell −${trimQty}`}
                         </button>
                         <button
                           type="button"

@@ -109,11 +109,17 @@ export interface OptionChainSnapshotResult {
 
 export interface TradeStationQuote {
   Symbol: string
-  Last?: string
-  Ask?: string
-  Bid?: string
-  Close?: string
-  PreviousClose?: string
+  Last?: string | number
+  Ask?: string | number
+  Bid?: string | number
+  Close?: string | number
+  PreviousClose?: string | number
+  Open?: string | number
+  High?: string | number
+  Low?: string | number
+  NetChange?: string | number
+  NetChangePct?: string | number
+  Volume?: string | number
 }
 
 export interface TradeStationOrderRequest {

@@ -6,23 +6,24 @@ import { motion } from 'motion/react'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import DtMarketQuotesBoard, {
-  DtTickerPriceHint,
-} from '@/components/dt/DtMarketQuotesBoard'
-import OptionDtPositionsPanel, {
-  type OptionDtOpenPosition,
-} from '@/components/option-dt/OptionDtPositionsPanel'
+import DtMarketQuotesBoard from '@/components/dt/DtMarketQuotesBoard'
+import StockDtPositionsPanel, {
+  type StockDtOpenPosition,
+} from '@/components/stock-dt/StockDtPositionsPanel'
 import { useAuthStore } from '@/lib/auth-store'
 import { readDtSimAccountId, writeDtSimAccountId } from '@/lib/dt-account'
 import {
-  OPTION_DT_LOOSE_FILTERS,
-  OPTION_DT_PREMIUM_LABEL,
-  OPTION_DT_SCORE_LINE,
-  OPTION_DT_SIDE_BUDGET,
-  type OptionDtCandidate,
-  type OptionDtPlanResponse,
-  type OptionDtSide,
-} from '@/lib/option-dt'
+  formatMoney,
+  formatSignedMoney,
+  formatSignedPct,
+} from '@/lib/dt-quotes'
+import {
+  STOCK_DT_SCORE_LINE,
+  STOCK_DT_SIDE_BUDGET,
+  type StockDtCandidate,
+  type StockDtPlanResponse,
+  type StockDtSide,
+} from '@/lib/stock-dt'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,19 +52,13 @@ function SideTable({
   plan,
   selected,
   onToggle,
-  onChangeContract,
-  onChangeExpiration,
-  onChangeDte,
   onChangeQuantity,
 }: {
   title: string
-  side: OptionDtSide
-  plan: OptionDtPlanResponse['long'] | undefined
+  side: StockDtSide
+  plan: StockDtPlanResponse['long'] | undefined
   selected: Set<string>
   onToggle: (id: string) => void
-  onChangeContract: (candidateId: string, optionSymbol: string) => void
-  onChangeExpiration: (candidateId: string, expiration: string) => void
-  onChangeDte: (candidateId: string, dte: number) => void
   onChangeQuantity: (candidateId: string, quantity: number) => void
 }) {
   if (!plan) return null
@@ -76,10 +71,8 @@ function SideTable({
         <div>
           <h2 className="text-base font-semibold text-white">{title}</h2>
           <p className="text-xs text-zinc-400 mt-1">
-            Summary total ≥ {OPTION_DT_SCORE_LINE} · {side === 'long' ? 'calls' : 'puts'} ·{' '}
-            {OPTION_DT_LOOSE_FILTERS
-              ? 'loose filters (any strike / exp / premium)'
-              : `${OPTION_DT_PREMIUM_LABEL} · ITM + OTM · avoid 0DTE when possible`}
+            Summary total ≥ {STOCK_DT_SCORE_LINE} · {side === 'long' ? 'Buy' : 'SellShort'} ·
+            score-weighted across ~{money(STOCK_DT_SIDE_BUDGET)}
           </p>
         </div>
         <div className="text-xs text-zinc-400 text-right">
@@ -87,7 +80,7 @@ function SideTable({
             Est. {money(plan.spent)}
             <span className="text-zinc-500"> · suggested start {money(plan.budget)}</span>
           </div>
-          <div className="text-zinc-500">$500 guides initial qty only — not a buy cap</div>
+          <div className="text-zinc-500">$5k guides initial qty only — not a buy cap</div>
         </div>
       </header>
 
@@ -98,11 +91,11 @@ function SideTable({
               <th className="px-3 py-2 text-left">OK</th>
               <th className="px-3 py-2 text-left">Ticker</th>
               <th className="px-3 py-2 text-right">Score</th>
-              <th className="px-3 py-2 text-left">Exp</th>
-              <th className="px-3 py-2 text-left">Strike</th>
-              <th className="px-3 py-2 text-right">DTE</th>
-              <th className="px-3 py-2 text-right">Ask</th>
-              <th className="px-3 py-2 text-right">OI</th>
+              <th className="px-3 py-2 text-right">Last</th>
+              <th className="px-3 py-2 text-right">Change</th>
+              <th className="px-3 py-2 text-right">Weight</th>
+              <th className="px-3 py-2 text-right">Target $</th>
+              <th className="px-3 py-2 text-right">Price</th>
               <th className="px-3 py-2 text-right">Qty</th>
               <th className="px-3 py-2 text-right">Cost</th>
             </tr>
@@ -111,169 +104,78 @@ function SideTable({
             {plan.candidates.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
-                  No tradeable contracts above the {OPTION_DT_SCORE_LINE} line for this side.
+                  No tradeable stocks above the {STOCK_DT_SCORE_LINE} line for this side.
                 </td>
               </tr>
             )}
             {plan.candidates.map((row) => {
               const checked = selected.has(row.id)
-              const alts = row.alternatives ?? []
-              const expirations = Array.from(
-                new Map(
-                  alts.map((a) => [
-                    a.expiration,
-                    { expiration: a.expiration, dte: a.dteTradingDays },
-                  ])
-                ).values()
-              ).sort((a, b) => a.dte - b.dte || a.expiration.localeCompare(b.expiration))
-              const dteOptions = Array.from(
-                new Set([row.dteTradingDays, ...alts.map((a) => a.dteTradingDays)])
-              ).sort((a, b) => a - b)
-              const strikesForExp = alts
-                .filter((a) => a.expiration === row.expiration)
-                .sort((a, b) => a.strike - b.strike)
-              let strikeOptions = strikesForExp.length > 0 ? [...strikesForExp] : [...alts]
-              // Select value must include the recommended contract (label below), or the
-              // browser falls back to the first option and looks desynced.
-              if (
-                row.optionSymbol &&
-                !strikeOptions.some((a) => a.optionSymbol === row.optionSymbol)
-              ) {
-                strikeOptions.push({
-                  optionSymbol: row.optionSymbol,
-                  strike: row.strike,
-                  expiration: row.expiration,
-                  dteTradingDays: row.dteTradingDays,
-                  bid: row.bid,
-                  ask: row.ask,
-                  mid: row.mid,
-                  openInterest: row.openInterest,
-                  costPerContract: row.costPerContract,
-                  label: `$${row.strike}`,
-                })
-                strikeOptions.sort((a, b) => a.strike - b.strike)
-              }
-              if (
-                row.expiration &&
-                !expirations.some((e) => e.expiration === row.expiration)
-              ) {
-                expirations.push({
-                  expiration: row.expiration,
-                  dte: row.dteTradingDays,
-                })
-                expirations.sort(
-                  (a, b) => a.dte - b.dte || a.expiration.localeCompare(b.expiration)
-                )
-              }
-
+              const chgPositive = (row.netChange ?? row.netChangePct ?? 0) >= 0
               return (
                 <tr
                   key={row.id}
-                  className={`border-t border-zinc-800/50 ${checked ? 'bg-emerald-500/5' : ''}`}
+                  className={`border-t border-zinc-800/50 ${checked ? 'bg-zinc-900/40' : ''}`}
                 >
                   <td className="px-3 py-2">
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => onToggle(row.id)}
-                      className="h-4 w-4 rounded border-zinc-600 bg-zinc-900"
+                      className="h-4 w-4 rounded border-zinc-600"
                     />
                   </td>
-                  <td className="px-3 py-2 font-medium text-white">
-                    <Link
-                      href={`/tickers/insight?ticker=${row.ticker}`}
-                      className="text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
-                    >
-                      {row.ticker}
-                    </Link>
-                    <DtTickerPriceHint
-                      last={row.underlyingLast}
-                      netChange={row.netChange}
-                      netChangePct={row.netChangePct}
-                    />
+                  <td className="px-3 py-2">
+                    <div className="font-mono text-white">{row.ticker}</div>
+                    <div className="text-[11px] text-zinc-500">{row.reason}</div>
                   </td>
-                  <td className="px-3 py-2 text-right text-amber-200">{row.summaryScore}</td>
-                  <td className="px-3 py-2 text-zinc-300 min-w-[8.5rem]">
-                    {expirations.length > 0 ? (
-                      <select
-                        value={row.expiration}
-                        onChange={(e) => onChangeExpiration(row.id, e.target.value)}
-                        className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 font-mono text-[11px] text-zinc-200 focus:border-emerald-500/60 focus:outline-none"
-                        title="Expiration date"
-                      >
-                        {expirations.map((e) => (
-                          <option key={e.expiration} value={e.expiration}>
-                            {e.expiration}
-                          </option>
-                        ))}
-                      </select>
+                  <td className="px-3 py-2 text-right text-zinc-200 tabular-nums">
+                    {row.summaryScore.toFixed(1)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-zinc-200 tabular-nums">
+                    {formatMoney(row.last ?? row.price)}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${
+                      row.netChange == null && row.netChangePct == null
+                        ? 'text-zinc-500'
+                        : chgPositive
+                          ? 'text-emerald-400'
+                          : 'text-rose-400'
+                    }`}
+                  >
+                    {row.netChange == null && row.netChangePct == null ? (
+                      '—'
                     ) : (
-                      <span className="font-mono text-xs">{row.expiration}</span>
+                      <>
+                        {formatSignedMoney(row.netChange)}{' '}
+                        <span className="text-[11px]">({formatSignedPct(row.netChangePct)})</span>
+                      </>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-zinc-300 min-w-[10rem]">
-                    {strikeOptions.length > 0 ? (
-                      <select
-                        value={row.optionSymbol}
-                        onChange={(e) => onChangeContract(row.id, e.target.value)}
-                        className="w-full max-w-[14rem] rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 font-mono text-[11px] text-zinc-200 focus:border-emerald-500/60 focus:outline-none"
-                        title="Strike"
-                      >
-                        {strikeOptions.map((a) => (
-                          <option key={a.optionSymbol} value={a.optionSymbol}>
-                            {a.label.includes('★') ? '★ ' : ''}${a.strike}
-                            {a.label.includes('ITM')
-                              ? ' ITM'
-                              : a.label.includes('ATM')
-                                ? ' ATM'
-                                : ' OTM'}
-                            {a.costPerContract > 0 ? ` · $${a.costPerContract.toFixed(0)}` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="font-mono text-xs">{row.strike}</span>
-                    )}
-                    <div className="mt-1 text-[11px] text-zinc-500 truncate max-w-[14rem]">
-                      {row.optionSymbol}
-                    </div>
+                  <td className="px-3 py-2 text-right text-zinc-300 tabular-nums">
+                    {(row.weight * 100).toFixed(1)}%
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    {dteOptions.length > 0 ? (
-                      <select
-                        value={row.dteTradingDays}
-                        onChange={(e) => onChangeDte(row.id, Number(e.target.value))}
-                        className="w-16 rounded-md border border-zinc-700 bg-zinc-950 px-1.5 py-1.5 text-right font-mono text-[11px] text-zinc-200 focus:border-emerald-500/60 focus:outline-none"
-                        title="Days to expiration"
-                      >
-                        {dteOptions.map((d) => (
-                          <option key={d} value={d}>
-                            {d}d
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-zinc-300">{row.dteTradingDays}</span>
-                    )}
+                  <td className="px-3 py-2 text-right text-zinc-300 tabular-nums">
+                    {money(row.targetDollars)}
                   </td>
-                  <td className="px-3 py-2 text-right text-zinc-300">{money(row.ask)}</td>
-                  <td className="px-3 py-2 text-right text-zinc-300">{row.openInterest}</td>
+                  <td className="px-3 py-2 text-right text-zinc-300 tabular-nums">
+                    {money(row.price)}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <input
                       type="number"
                       min={0}
-                      max={99}
-                      step={1}
+                      max={10000}
                       value={row.quantity}
-                      onChange={(e) => {
-                        const n = Number(e.target.value)
-                        if (!Number.isFinite(n)) return
-                        onChangeQuantity(row.id, n)
-                      }}
-                      className="w-16 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-right text-white focus:border-emerald-500/60 focus:outline-none"
+                      onChange={(e) =>
+                        onChangeQuantity(row.id, Number(e.target.value))
+                      }
+                      className="w-16 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-right text-zinc-100"
                     />
                   </td>
-                  <td className="px-3 py-2 text-right text-emerald-300">{money(row.estimatedCost)}</td>
+                  <td className="px-3 py-2 text-right text-zinc-200 tabular-nums">
+                    {money(row.estimatedCost)}
+                  </td>
                 </tr>
               )
             })}
@@ -283,8 +185,8 @@ function SideTable({
 
       {plan.skipped.length > 0 && (
         <div className="border-t border-zinc-800/80 px-4 py-3">
-          <p className="text-[11px] uppercase tracking-wide text-zinc-500 mb-2">Skipped</p>
-          <ul className="space-y-1 text-xs text-zinc-400">
+          <p className="text-xs font-medium text-zinc-400 mb-1">Skipped</p>
+          <ul className="text-xs text-zinc-500 space-y-0.5">
             {plan.skipped.map((s) => (
               <li key={`${side}-skip-${s.ticker}`}>
                 <span className="text-zinc-300">{s.ticker}</span> (score {s.score}) — {s.reason}
@@ -297,7 +199,7 @@ function SideTable({
   )
 }
 
-function OptionDtPageContent() {
+function StockDtPageContent() {
   const { isAuthenticated } = useAuthStore()
   const [tsConnected, setTsConnected] = useState(false)
   const [tradeScopesOk, setTradeScopesOk] = useState(false)
@@ -308,19 +210,19 @@ function OptionDtPageContent() {
   const [accountId, setAccountId] = useState<string>(() => readDtSimAccountId())
   const [manualAccountId, setManualAccountId] = useState(() => readDtSimAccountId())
   const [tsMessage, setTsMessage] = useState<string | null>(null)
-  const [plan, setPlan] = useState<OptionDtPlanResponse | null>(null)
+  const [plan, setPlan] = useState<StockDtPlanResponse | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loadingPlan, setLoadingPlan] = useState(false)
   const [placing, setPlacing] = useState(false)
   const [flattening, setFlattening] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [placeResult, setPlaceResult] = useState<string | null>(null)
-  const [positions, setPositions] = useState<OptionDtOpenPosition[]>([])
+  const [positions, setPositions] = useState<StockDtOpenPosition[]>([])
   const [positionTotals, setPositionTotals] = useState({
     marketValue: 0,
     totalCost: 0,
     unrealizedPnl: 0,
-    contracts: 0,
+    shares: 0,
   })
   const [positionsLoading, setPositionsLoading] = useState(false)
   const [busySymbol, setBusySymbol] = useState<string | null>(null)
@@ -378,13 +280,13 @@ function OptionDtPageContent() {
   const loadPositions = useCallback(async () => {
     if (!accountId || !tsConnected) {
       setPositions([])
-      setPositionTotals({ marketValue: 0, totalCost: 0, unrealizedPnl: 0, contracts: 0 })
+      setPositionTotals({ marketValue: 0, totalCost: 0, unrealizedPnl: 0, shares: 0 })
       return
     }
     setPositionsLoading(true)
     try {
       const res = await fetch(
-        `/api/option-dt/positions?accountId=${encodeURIComponent(accountId)}`,
+        `/api/stock-dt/positions?accountId=${encodeURIComponent(accountId)}`,
         {
           headers: await authHeaders(),
           credentials: 'include',
@@ -393,9 +295,9 @@ function OptionDtPageContent() {
       )
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
-      setPositions((body.positions as OptionDtOpenPosition[]) || [])
+      setPositions((body.positions as StockDtOpenPosition[]) || [])
       setPositionTotals(
-        body.totals || { marketValue: 0, totalCost: 0, unrealizedPnl: 0, contracts: 0 }
+        body.totals || { marketValue: 0, totalCost: 0, unrealizedPnl: 0, shares: 0 }
       )
       setError(null)
     } catch (err) {
@@ -414,7 +316,8 @@ function OptionDtPageContent() {
     const params = new URLSearchParams(window.location.search)
     const ts = params.get('ts')
     if (!ts) return
-    if (ts === 'connected') setTsMessage('TradeStation connected. Pick your paper account, then load candidates.')
+    if (ts === 'connected')
+      setTsMessage('TradeStation connected. Pick your paper account, then load candidates.')
     else if (ts === 'denied') setTsMessage('TradeStation authorization was declined.')
     else if (ts === 'not_configured') {
       setTsMessage(
@@ -424,12 +327,16 @@ function OptionDtPageContent() {
     } else if (ts === 'signin') setTsMessage('Sign in to Predixa first, then reconnect TradeStation.')
     else setTsMessage('TradeStation connection failed. Check callback URL / Vercel keys.')
     params.delete('ts')
-    window.history.replaceState({}, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}`)
+    window.history.replaceState(
+      {},
+      '',
+      `${window.location.pathname}${params.toString() ? `?${params}` : ''}`
+    )
     void refreshTs()
   }, [refreshTs])
 
   const allCandidates = useMemo(() => {
-    if (!plan) return [] as OptionDtCandidate[]
+    if (!plan) return [] as StockDtCandidate[]
     return [...plan.long.candidates, ...plan.short.candidates]
   }, [plan])
 
@@ -455,14 +362,14 @@ function OptionDtPageContent() {
     setPlaceResult(null)
     try {
       const qs = accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''
-      const res = await fetch(`/api/option-dt/candidates${qs}`, {
+      const res = await fetch(`/api/stock-dt/candidates${qs}`, {
         headers: await authHeaders(),
         credentials: 'include',
         cache: 'no-store',
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
-      const next = body as OptionDtPlanResponse
+      const next = body as StockDtPlanResponse
       setPlan(next)
       setSelected(new Set([...next.long.candidates, ...next.short.candidates].map((c) => c.id)))
     } catch (err) {
@@ -473,13 +380,11 @@ function OptionDtPageContent() {
     }
   }, [accountId, tsConnected])
 
-  // Auto-load candidates when connected + paper account ready.
   useEffect(() => {
     if (!tsConnected || !accountId || !tradeScopesOk) return
     void loadPlan()
   }, [tsConnected, accountId, tradeScopesOk, loadPlan])
 
-  // Refresh candidates when returning to the tab.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible' && tsConnected && accountId && tradeScopesOk) {
@@ -500,19 +405,25 @@ function OptionDtPageContent() {
     })
   }
 
-  const patchCandidate = (
-    candidateId: string,
-    patch: (row: OptionDtCandidate) => OptionDtCandidate | null
-  ) => {
+  const changeQuantity = (candidateId: string, quantity: number) => {
     setPlan((prev) => {
       if (!prev) return prev
       const sideKey = candidateId.startsWith('long:') ? 'long' : 'short'
       const sidePlan = prev[sideKey]
       const idx = sidePlan.candidates.findIndex((c) => c.id === candidateId)
       if (idx < 0) return prev
-      const updated = patch(sidePlan.candidates[idx])
-      if (!updated) return prev
-      const candidates = sidePlan.candidates.map((c, i) => (i === idx ? updated : c))
+      const qty = Math.max(0, Math.min(10_000, Number.isFinite(quantity) ? Math.floor(quantity) : 0))
+      const row = sidePlan.candidates[idx]
+      if (qty === row.quantity) return prev
+      const candidates = sidePlan.candidates.map((c, i) =>
+        i === idx
+          ? {
+              ...c,
+              quantity: qty,
+              estimatedCost: Math.round(qty * c.price * 100) / 100,
+            }
+          : c
+      )
       const spent = Math.round(candidates.reduce((s, c) => s + c.estimatedCost, 0) * 100) / 100
       return {
         ...prev,
@@ -526,92 +437,14 @@ function OptionDtPageContent() {
     })
   }
 
-  const applyChoice = (
-    row: OptionDtCandidate,
-    choice: NonNullable<OptionDtCandidate['alternatives']>[number],
-    quantity = row.quantity
-  ): OptionDtCandidate => {
-    const qty = Math.max(0, Math.min(99, Number.isFinite(quantity) ? Math.floor(quantity) : 0))
-    const costPer = choice.costPerContract
-    return {
-      ...row,
-      optionSymbol: choice.optionSymbol,
-      strike: choice.strike,
-      expiration: choice.expiration,
-      expirationLabel: choice.expiration,
-      dteTradingDays: choice.dteTradingDays,
-      bid: choice.bid,
-      ask: choice.ask,
-      mid: choice.mid,
-      openInterest: choice.openInterest,
-      costPerContract: costPer,
-      quantity: qty,
-      estimatedCost: Math.round(qty * costPer * 100) / 100,
-      reason: `Picked · ~$${costPer.toFixed(0)}/ct`,
-    }
-  }
-
-  const pickOnExpiration = (
-    row: OptionDtCandidate,
-    expiration: string
-  ): OptionDtCandidate | null => {
-    const alts = row.alternatives ?? []
-    const onExp = alts.filter((a) => a.expiration === expiration)
-    if (onExp.length === 0) return null
-    const sameStrike = onExp.find((a) => a.strike === row.strike)
-    const preferred = onExp
-      .filter((a) => a.costPerContract >= 20 && a.costPerContract <= 300)
-      .sort((a, b) => Math.abs(a.strike - row.strike) - Math.abs(b.strike - row.strike))
-    const nearest = [...onExp].sort(
-      (a, b) => Math.abs(a.strike - row.strike) - Math.abs(b.strike - row.strike)
-    )[0]
-    const choice = sameStrike ?? preferred[0] ?? nearest
-    return applyChoice(row, choice, row.quantity)
-  }
-
-  const changeContract = (candidateId: string, optionSymbol: string) => {
-    patchCandidate(candidateId, (row) => {
-      if (row.optionSymbol === optionSymbol) return null
-      const choice = row.alternatives?.find((a) => a.optionSymbol === optionSymbol)
-      if (!choice) return null
-      return applyChoice(row, choice, row.quantity)
-    })
-  }
-
-  const changeExpiration = (candidateId: string, expiration: string) => {
-    patchCandidate(candidateId, (row) => {
-      if (row.expiration === expiration) return null
-      return pickOnExpiration(row, expiration)
-    })
-  }
-
-  const changeDte = (candidateId: string, dte: number) => {
-    patchCandidate(candidateId, (row) => {
-      if (row.dteTradingDays === dte) return null
-      const alts = row.alternatives ?? []
-      const match = alts.find((a) => a.dteTradingDays === dte)
-      if (!match) return null
-      return pickOnExpiration(row, match.expiration)
-    })
-  }
-
-  const changeQuantity = (candidateId: string, quantity: number) => {
-    patchCandidate(candidateId, (row) => {
-      const qty = Math.max(0, Math.min(99, Number.isFinite(quantity) ? Math.floor(quantity) : 0))
-      if (qty === row.quantity) return null
-      return {
-        ...row,
-        quantity: qty,
-        estimatedCost: Math.round(qty * row.costPerContract * 100) / 100,
-      }
-    })
-  }
-
   const confirmAndPlace = async () => {
     if (placeableCandidates.length === 0) return
+    const longs = placeableCandidates.filter((c) => c.side === 'long').length
+    const shorts = placeableCandidates.filter((c) => c.side === 'short').length
     const ok = window.confirm(
-      `Place ${placeableCandidates.length} paper BuyToOpen order(s) on account ${accountId}?\n` +
-        `Est. debit ~${money(selectedCost)}\n\n` +
+      `Place ${placeableCandidates.length} paper stock order(s) on account ${accountId}?\n` +
+        `${longs} Buy · ${shorts} SellShort\n` +
+        `Est. notional ~${money(selectedCost)}\n\n` +
         `Remember to Flatten before close.`
     )
     if (!ok) return
@@ -620,7 +453,7 @@ function OptionDtPageContent() {
     setPlaceResult(null)
     setError(null)
     try {
-      const res = await fetch('/api/option-dt/place', {
+      const res = await fetch('/api/stock-dt/place', {
         method: 'POST',
         headers: {
           ...(await authHeaders()),
@@ -645,13 +478,13 @@ function OptionDtPageContent() {
   const flatten = async () => {
     if (!accountId) return
     const ok = window.confirm(
-      `Sell-to-close all option positions on paper account ${accountId}?`
+      `Close all stock positions on paper account ${accountId}? (Sell longs / BuyToCover shorts)`
     )
     if (!ok) return
     setFlattening(true)
     setError(null)
     try {
-      const res = await fetch('/api/option-dt/flatten', {
+      const res = await fetch('/api/stock-dt/flatten', {
         method: 'POST',
         headers: {
           ...(await authHeaders()),
@@ -680,16 +513,16 @@ function OptionDtPageContent() {
     const qty = Math.max(1, Math.floor(quantity))
     const label =
       action === 'buy_more'
-        ? `Buy +${qty} ${symbol}`
+        ? `Add +${qty} ${symbol}`
         : action === 'sell_one'
-          ? `Sell −${qty} ${symbol}`
+          ? `Trim −${qty} ${symbol}`
           : `Flatten ${symbol}`
     if (!window.confirm(`${label} on paper account ${accountId}?`)) return
 
     setBusySymbol(symbol)
     setError(null)
     try {
-      const res = await fetch('/api/option-dt/adjust', {
+      const res = await fetch('/api/stock-dt/adjust', {
         method: 'POST',
         headers: {
           ...(await authHeaders()),
@@ -702,9 +535,9 @@ function OptionDtPageContent() {
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
       setPlaceResult(
         action === 'buy_more'
-          ? `Bought +${qty} ${symbol} (order ${body.orderId}).`
+          ? `Added +${qty} ${symbol} (order ${body.orderId}).`
           : action === 'sell_one'
-            ? `Sold −${qty} ${symbol} (order ${body.orderId}).`
+            ? `Trimmed −${qty} ${symbol} (order ${body.orderId}).`
             : `Flattened ${symbol} (order ${body.orderId}).`
       )
       void loadPositions()
@@ -713,6 +546,12 @@ function OptionDtPageContent() {
     } finally {
       setBusySymbol(null)
     }
+  }
+
+  const persistAccount = (id: string) => {
+    setAccountId(id)
+    setManualAccountId(id)
+    if (id) writeDtSimAccountId(id)
   }
 
   return (
@@ -726,23 +565,21 @@ function OptionDtPageContent() {
         >
           <div>
             <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Option DT
+              Stock DT
             </h1>
             <p className="text-gray-300 text-lg max-w-2xl">
-              Paper day-trades from Summary Long/Short ranks above the {OPTION_DT_SCORE_LINE} line.
-              {OPTION_DT_LOOSE_FILTERS
-                ? ' Loose filters ON (no premium / OTM / DTE caps) for testing.'
-                : ` ITM + OTM, ${OPTION_DT_PREMIUM_LABEL}, 0–5 trading-day DTE.`}{' '}
-              Suggested start ~{money(OPTION_DT_SIDE_BUDGET)} per side (not a buy cap). Confirm
-              before send. Flat by close.
+              Paper equity day-trades from Summary Long/Short ranks above the{' '}
+              {STOCK_DT_SCORE_LINE} line. Score-weighted across ~{money(STOCK_DT_SIDE_BUDGET)} long
+              and ~{money(STOCK_DT_SIDE_BUDGET)} short (soft guide). Confirm before send. Flat by
+              close.
             </p>
           </div>
           <div className="flex flex-col items-end gap-1 text-sm">
             <Link
-              href="/stock-dt"
+              href="/option-dt"
               className="font-medium text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
             >
-              ← Stock DT
+              Option DT →
             </Link>
             <Link
               href="/tickers"
@@ -766,7 +603,9 @@ function OptionDtPageContent() {
             {tsConnected && (
               <span
                 className={`text-xs px-2 py-0.5 rounded ${
-                  tradeScopesOk ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-200'
+                  tradeScopesOk
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-amber-500/20 text-amber-200'
                 }`}
               >
                 {tradeScopesOk ? 'Trade scopes OK' : 'Reconnect for Trade + MarketData'}
@@ -776,19 +615,14 @@ function OptionDtPageContent() {
 
           <div className="flex flex-wrap gap-2 items-center">
             <a
-              href="/api/tradestation/connect?returnTo=/option-dt"
+              href="/api/tradestation/connect?returnTo=/stock-dt"
               className="rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-3 py-2"
             >
               {tsConnected ? 'Reconnect TradeStation' : 'Connect TradeStation'}
             </a>
             <select
               value={simAccounts.some((a) => a.id === accountId) ? accountId : ''}
-              onChange={(e) => {
-                const id = e.target.value
-                setAccountId(id)
-                setManualAccountId(id)
-                if (id) writeDtSimAccountId(id)
-              }}
+              onChange={(e) => persistAccount(e.target.value)}
               className="rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-200 text-sm px-3 py-2 min-w-[14rem]"
             >
               <option value="">Select sim account…</option>
@@ -810,9 +644,7 @@ function OptionDtPageContent() {
               onClick={() => {
                 const id = manualAccountId.trim().toUpperCase()
                 if (!id) return
-                setAccountId(id)
-                setManualAccountId(id)
-                writeDtSimAccountId(id)
+                persistAccount(id)
                 setTsMessage(`Using paper account ${id}`)
               }}
               className="rounded-lg border border-zinc-600 text-zinc-200 hover:bg-zinc-800 text-sm font-medium px-3 py-2"
@@ -825,7 +657,7 @@ function OptionDtPageContent() {
               disabled={loadingPlan || !tsConnected}
               className="rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium px-3 py-2"
             >
-              {loadingPlan ? 'Loading chains…' : 'Reload candidates'}
+              {loadingPlan ? 'Loading quotes…' : 'Reload candidates'}
             </button>
             <button
               type="button"
@@ -841,14 +673,14 @@ function OptionDtPageContent() {
               disabled={flattening || !accountId}
               className="rounded-lg border border-rose-500/50 text-rose-200 hover:bg-rose-500/10 disabled:opacity-50 text-sm font-medium px-3 py-2"
             >
-              {flattening ? 'Flattening…' : 'Flatten options'}
+              {flattening ? 'Flattening…' : 'Flatten stocks'}
             </button>
           </div>
 
           {accountId && (
             <p className="text-xs text-zinc-400">
               Active paper account: <span className="font-mono text-emerald-300">{accountId}</span>
-              <span className="text-zinc-500"> (shared with Stock DT)</span>
+              <span className="text-zinc-500"> (shared with Option DT)</span>
             </p>
           )}
 
@@ -858,18 +690,12 @@ function OptionDtPageContent() {
                 Server missing TradeStation API keys (this is why Reconnect shows an error).
               </p>
               <p>
-                Your Vercel Production/Preview vars are fine for the live site. Localhost needs the same
-                three values in <span className="font-mono text-white">.env.local</span>, then restart
-                Next:
-              </p>
-              <ul className="list-disc pl-4 space-y-1 font-mono text-[11px] text-rose-100/90">
-                <li>TRADESTATION_CLIENT_ID</li>
-                <li>TRADESTATION_CLIENT_SECRET</li>
-                <li>TRADESTATION_REDIRECT_URI (http://localhost:3000/api/tradestation/callback)</li>
-              </ul>
-              <p>
-                Or open Option DT on your deployed Predixa URL and reconnect there. No new Client ID is
-                needed for sim — same Auth0 key, different base URL.
+                Localhost needs{' '}
+                <span className="font-mono text-white">TRADESTATION_CLIENT_ID</span>,{' '}
+                <span className="font-mono text-white">TRADESTATION_CLIENT_SECRET</span>, and{' '}
+                <span className="font-mono text-white">TRADESTATION_REDIRECT_URI</span> in{' '}
+                <span className="font-mono text-white">.env.local</span>, then restart Next — or
+                reconnect on the deployed Predixa site.
               </p>
             </div>
           )}
@@ -877,8 +703,8 @@ function OptionDtPageContent() {
           {simAccounts.length === 0 && tsConnected && serverConfigured && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3 space-y-2 text-xs text-amber-100/95 leading-relaxed">
               <p className="font-medium text-amber-200">
-                Connected, but sim account list is empty. You can paste your SIM account (e.g. SIM1847602F)
-                above and click Use account.
+                Connected, but sim account list is empty. Paste your SIM account above and click Use
+                account.
               </p>
               {simError && (
                 <p className="font-mono text-[11px] text-amber-200/80 break-words">{simError}</p>
@@ -892,17 +718,9 @@ function OptionDtPageContent() {
                   : ''}
                 .
               </p>
-              <p>
-                Only contact TradeStation if reconnect works with keys present and sim-api still fails —
-                ask them to confirm sim-api access for your Auth0 API key. You do <span className="text-white">not</span> need a
-                separate Client ID for paper.
-              </p>
             </div>
           )}
 
-          {simAccounts.length === 0 && tsConnected && !serverConfigured && simError && (
-            <p className="text-xs text-amber-200/90 font-mono break-words">{simError}</p>
-          )}
           {tsMessage && <p className="text-xs text-blue-200">{tsMessage}</p>}
           {plan?.warnings?.map((w) => (
             <p key={w} className="text-xs text-amber-200">
@@ -913,14 +731,14 @@ function OptionDtPageContent() {
           {placeResult && <p className="text-sm text-emerald-300">{placeResult}</p>}
           {plan && (
             <p className="text-xs text-zinc-500">
-              Ranks as of {plan.ranks_as_of || '—'} · plan {new Date(plan.generated_at).toLocaleString()}{' '}
-              · selected est. {money(selectedCost)}
+              Ranks as of {plan.ranks_as_of || '—'} · plan{' '}
+              {new Date(plan.generated_at).toLocaleString()} · selected est. {money(selectedCost)}
             </p>
           )}
         </section>
 
         {tsConnected && accountId && (
-          <OptionDtPositionsPanel
+          <StockDtPositionsPanel
             positions={positions}
             totals={positionTotals}
             loading={positionsLoading}
@@ -934,39 +752,33 @@ function OptionDtPageContent() {
 
         {loadingPlan && (
           <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/70 px-6 py-16 text-center text-zinc-300">
-            Pulling ranks ≥ {OPTION_DT_SCORE_LINE} and option chains…
+            Pulling ranks ≥ {STOCK_DT_SCORE_LINE} and equity quotes…
           </div>
         )}
 
         {plan && !loadingPlan && (
           <>
-            <DtMarketQuotesBoard market={plan.market} scoreLine={OPTION_DT_SCORE_LINE} />
+            <DtMarketQuotesBoard market={plan.market} scoreLine={STOCK_DT_SCORE_LINE} />
             <div className="grid grid-cols-1 gap-4">
               <SideTable
-                title="Long · buy calls"
+                title="Long · Buy shares"
                 side="long"
                 plan={plan.long}
                 selected={selected}
                 onToggle={toggle}
-                onChangeContract={changeContract}
-                onChangeExpiration={changeExpiration}
-                onChangeDte={changeDte}
                 onChangeQuantity={changeQuantity}
               />
               <SideTable
-                title="Short · buy puts"
+                title="Short · SellShort shares"
                 side="short"
                 plan={plan.short}
                 selected={selected}
                 onToggle={toggle}
-                onChangeContract={changeContract}
-                onChangeExpiration={changeExpiration}
-                onChangeDte={changeDte}
                 onChangeQuantity={changeQuantity}
               />
               <p className="text-xs text-zinc-500 leading-relaxed">
                 Paper trading only (sim-api). Not investment advice. Default is flat by close — use
-                Flatten before the bell (auto EOD flatten can come later).
+                Flatten before the bell.
               </p>
             </div>
           </>
@@ -976,10 +788,10 @@ function OptionDtPageContent() {
   )
 }
 
-export default function OptionDtPage() {
+export default function StockDtPage() {
   return (
     <ProtectedRoute requireSubscription>
-      <OptionDtPageContent />
+      <StockDtPageContent />
     </ProtectedRoute>
   )
 }

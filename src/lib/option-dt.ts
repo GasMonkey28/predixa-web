@@ -1,5 +1,7 @@
 /** Shared Option DT constants + types (client + server). */
 
+import type { DtMarketQuotes } from '@/lib/dt-quotes'
+
 export const OPTION_DT_SCORE_LINE = 17
 export const OPTION_DT_SIDE_BUDGET = 500
 
@@ -46,6 +48,9 @@ export interface OptionDtCandidate {
   hands?: number
   signal?: string
   underlyingLast?: number
+  previousClose?: number
+  netChange?: number
+  netChangePct?: number
   optionSymbol: string
   optionType: 'Call' | 'Put'
   strike: number
@@ -80,6 +85,7 @@ export interface OptionDtPlanResponse {
   score_line: number
   side_budget: number
   loose_filters: boolean
+  market: DtMarketQuotes
   long: OptionDtSidePlan
   short: OptionDtSidePlan
   warnings?: string[]

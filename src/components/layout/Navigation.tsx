@@ -13,9 +13,20 @@ const navigationItems = [
     icon: '📋',
   },
   {
-    name: 'Option DT',
-    href: '/option-dt',
+    name: 'DT',
     icon: '📉',
+    items: [
+      {
+        name: 'Stock DT',
+        href: '/stock-dt',
+        icon: '📈',
+      },
+      {
+        name: 'Option DT',
+        href: '/option-dt',
+        icon: '📉',
+      },
+    ],
   },
   {
     name: 'Tickers',

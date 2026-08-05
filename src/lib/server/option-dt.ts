@@ -13,12 +13,14 @@ import {
   type OptionDtSide,
   type OptionDtSidePlan,
 } from '@/lib/option-dt'
+import { dayMoveFromQuote, type DtMarketQuotes, type DtTickerQuote } from '@/lib/dt-quotes'
 import { buildTickerRanks } from '@/lib/server/ticker-ranks'
 import {
   collectOptionChainSnapshotDetailed,
   fetchOptionExpirations,
   fetchQuoteSnapshots,
   type TradeStationOptionChainRow,
+  type TradeStationQuote,
 } from '@/lib/server/tradestation-client'
 import type { TickerRankRow } from '@/lib/ticker-ranks'
 
@@ -181,12 +183,16 @@ async function pickBestContractForTicker(input: {
   ticker: string
   side: OptionDtSide
   todayYmd: string
+  quote?: TradeStationQuote
 }): Promise<
   | {
       ok: true
       contract: ScoredContract
       alternatives: ScoredContract[]
       underlyingLast: number
+      previousClose?: number
+      netChange?: number
+      netChangePct?: number
       dte: number
     }
   | { ok: false; reason: string }
@@ -195,16 +201,23 @@ async function pickBestContractForTicker(input: {
   const optionType = side === 'long' ? 'Call' : 'Put'
   const loose = OPTION_DT_LOOSE_FILTERS
 
-  let quotes
-  try {
-    quotes = await fetchQuoteSnapshots(accessToken, [ticker])
-  } catch (error) {
-    return { ok: false, reason: `Quote failed: ${(error as Error).message}` }
+  let quote = input.quote
+  if (!quote) {
+    try {
+      const quotes = await fetchQuoteSnapshots(accessToken, [ticker])
+      quote = quotes[0]
+    } catch (error) {
+      return { ok: false, reason: `Quote failed: ${(error as Error).message}` }
+    }
   }
 
-  const quote = quotes[0]
+  const move = dayMoveFromQuote(quote)
   const underlyingLast =
-    toNum(quote?.Last) ?? toNum(quote?.Ask) ?? toNum(quote?.Close) ?? toNum(quote?.PreviousClose)
+    move.last ??
+    toNum(quote?.Ask) ??
+    toNum(quote?.Last) ??
+    toNum(quote?.Close) ??
+    toNum(quote?.PreviousClose)
   if (underlyingLast == null || underlyingLast <= 0) {
     return { ok: false, reason: 'No underlying last price' }
   }
@@ -379,6 +392,9 @@ async function pickBestContractForTicker(input: {
     contract: best,
     alternatives: pickerAlternatives,
     underlyingLast,
+    previousClose: move.previousClose,
+    netChange: move.netChange,
+    netChangePct: move.netChangePct,
     dte: best.dte,
   }
 }
@@ -392,6 +408,9 @@ function allocateSide(input: {
       contract: ScoredContract
       alternatives: ScoredContract[]
       underlyingLast: number
+      previousClose?: number
+      netChange?: number
+      netChangePct?: number
       dte: number
     }
   >
@@ -468,6 +487,9 @@ function allocateSide(input: {
       hands: row.position_size,
       signal: row.signal,
       underlyingLast: pick.underlyingLast,
+      previousClose: pick.previousClose,
+      netChange: pick.netChange,
+      netChangePct: pick.netChangePct,
       optionSymbol: pick.contract.symbol,
       optionType,
       strike: pick.contract.strike,
@@ -496,6 +518,28 @@ function allocateSide(input: {
     candidates,
     skipped,
   }
+}
+
+function buildMarketSide(
+  side: OptionDtSide,
+  rows: TickerRankRow[],
+  quotesBySymbol: Map<string, TradeStationQuote>
+): DtTickerQuote[] {
+  return rows
+    .filter((r) => (r.score ?? Number.NEGATIVE_INFINITY) >= OPTION_DT_SCORE_LINE)
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .map((row) => {
+      const move = dayMoveFromQuote(quotesBySymbol.get(row.ticker.toUpperCase()))
+      return {
+        ticker: row.ticker,
+        side,
+        score: row.score ?? 0,
+        last: move.last,
+        previousClose: move.previousClose,
+        netChange: move.netChange,
+        netChangePct: move.netChangePct,
+      }
+    })
 }
 
 export async function buildOptionDtPlan(input: {
@@ -529,6 +573,25 @@ export async function buildOptionDtPlan(input: {
     (r) => (r.score ?? Number.NEGATIVE_INFINITY) >= OPTION_DT_SCORE_LINE
   )
 
+  const tickers = Array.from(
+    new Set([...longAbove, ...shortAbove].map((r) => r.ticker.toUpperCase()))
+  )
+  const quotesBySymbol = new Map<string, TradeStationQuote>()
+  const chunkSize = 40
+  for (let i = 0; i < tickers.length; i += chunkSize) {
+    const chunk = tickers.slice(i, i + chunkSize)
+    try {
+      const quotes = await fetchQuoteSnapshots(input.accessToken, chunk)
+      for (const q of quotes) {
+        if (q.Symbol) quotesBySymbol.set(q.Symbol.toUpperCase(), q)
+      }
+    } catch (error) {
+      warnings.push(
+        `Quote fetch failed for ${chunk.slice(0, 3).join(',')}…: ${(error as Error).message}`
+      )
+    }
+  }
+
   const jobs: Array<{ ticker: string; side: OptionDtSide }> = [
     ...longAbove.map((r) => ({ ticker: r.ticker, side: 'long' as const })),
     ...shortAbove.map((r) => ({ ticker: r.ticker, side: 'short' as const })),
@@ -540,6 +603,9 @@ export async function buildOptionDtPlan(input: {
       contract: ScoredContract
       alternatives: ScoredContract[]
       underlyingLast: number
+      previousClose?: number
+      netChange?: number
+      netChangePct?: number
       dte: number
     }
   >()
@@ -549,6 +615,9 @@ export async function buildOptionDtPlan(input: {
       contract: ScoredContract
       alternatives: ScoredContract[]
       underlyingLast: number
+      previousClose?: number
+      netChange?: number
+      netChangePct?: number
       dte: number
     }
   >()
@@ -565,6 +634,7 @@ export async function buildOptionDtPlan(input: {
           ticker: job.ticker,
           side: job.side,
           todayYmd,
+          quote: quotesBySymbol.get(job.ticker.toUpperCase()),
         })
         const picks = job.side === 'long' ? longPicks : shortPicks
         const skips = job.side === 'long' ? longSkips : shortSkips
@@ -573,6 +643,9 @@ export async function buildOptionDtPlan(input: {
             contract: result.contract,
             alternatives: result.alternatives,
             underlyingLast: result.underlyingLast,
+            previousClose: result.previousClose,
+            netChange: result.netChange,
+            netChangePct: result.netChangePct,
             dte: result.dte,
           })
         } else {
@@ -594,6 +667,10 @@ export async function buildOptionDtPlan(input: {
     picks: shortPicks,
     skips: shortSkips,
   })
+  const market: DtMarketQuotes = {
+    long: buildMarketSide('long', longRows, quotesBySymbol),
+    short: buildMarketSide('short', shortRows, quotesBySymbol),
+  }
 
   const asOf =
     longAbove[0]?.as_of ||
@@ -608,6 +685,7 @@ export async function buildOptionDtPlan(input: {
     score_line: OPTION_DT_SCORE_LINE,
     side_budget: OPTION_DT_SIDE_BUDGET,
     loose_filters: OPTION_DT_LOOSE_FILTERS,
+    market,
     long,
     short,
     warnings: warnings.length ? warnings : undefined,
