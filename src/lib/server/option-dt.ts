@@ -327,15 +327,35 @@ async function pickBestContractForTicker(input: {
   const isOtmOrAtm = (c: ScoredContract) =>
     side === 'long' ? c.strike >= underlyingLast : c.strike <= underlyingLast
 
-  // Default pick: prefer OTM/ATM in preferred band, then any preferred, then nearest quote.
-  const byPickQuality = (a: ScoredContract, b: ScoredContract) =>
-    a.atmDistance - b.atmDistance || a.dte - b.dte
+  // Prefer non-0DTE unless that is the only option.
+  const byPickQuality = (a: ScoredContract, b: ScoredContract) => {
+    const aZero = a.dte <= 0 ? 1 : 0
+    const bZero = b.dte <= 0 ? 1 : 0
+    if (aZero !== bZero) return aZero - bZero
+    return a.atmDistance - b.atmDistance || a.dte - b.dte
+  }
+
+  const nonZeroDte = (c: ScoredContract) => c.dte > 0
+  const preferredOtmNz = alternatives
+    .filter((c) => c.preferredBand && isOtmOrAtm(c) && nonZeroDte(c))
+    .sort(byPickQuality)
+  const preferredAnyNz = alternatives
+    .filter((c) => c.preferredBand && nonZeroDte(c))
+    .sort(byPickQuality)
+  const withQuoteNz = alternatives.filter((c) => c.premium > 0 && nonZeroDte(c)).sort(byPickQuality)
   const preferredOtm = alternatives
     .filter((c) => c.preferredBand && isOtmOrAtm(c))
     .sort(byPickQuality)
   const preferredAny = alternatives.filter((c) => c.preferredBand).sort(byPickQuality)
   const withQuote = alternatives.filter((c) => c.premium > 0).sort(byPickQuality)
-  const best = preferredOtm[0] ?? preferredAny[0] ?? withQuote[0] ?? alternatives[0]
+  const best =
+    preferredOtmNz[0] ??
+    preferredAnyNz[0] ??
+    withQuoteNz[0] ??
+    preferredOtm[0] ??
+    preferredAny[0] ??
+    withQuote[0] ??
+    alternatives[0]
 
   return {
     ok: true,

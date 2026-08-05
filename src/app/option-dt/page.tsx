@@ -49,6 +49,7 @@ function SideTable({
   onToggle,
   onChangeContract,
   onChangeExpiration,
+  onChangeDte,
   onChangeQuantity,
 }: {
   title: string
@@ -58,6 +59,7 @@ function SideTable({
   onToggle: (id: string) => void
   onChangeContract: (candidateId: string, optionSymbol: string) => void
   onChangeExpiration: (candidateId: string, expiration: string) => void
+  onChangeDte: (candidateId: string, dte: number) => void
   onChangeQuantity: (candidateId: string, quantity: number) => void
 }) {
   if (!plan) return null
@@ -73,7 +75,7 @@ function SideTable({
             Summary total ≥ {OPTION_DT_SCORE_LINE} · {side === 'long' ? 'calls' : 'puts'} ·{' '}
             {OPTION_DT_LOOSE_FILTERS
               ? 'loose filters (any strike / exp / premium)'
-              : `${OPTION_DT_PREMIUM_LABEL} · ITM + OTM`}
+              : `${OPTION_DT_PREMIUM_LABEL} · ITM + OTM · avoid 0DTE when possible`}
           </p>
         </div>
         <div className="text-xs text-zinc-400 text-right">
@@ -120,6 +122,9 @@ function SideTable({
                   ])
                 ).values()
               ).sort((a, b) => a.dte - b.dte || a.expiration.localeCompare(b.expiration))
+              const dteOptions = Array.from(
+                new Set(alts.map((a) => a.dteTradingDays))
+              ).sort((a, b) => a - b)
               const strikesForExp = alts
                 .filter((a) => a.expiration === row.expiration)
                 .sort((a, b) => a.strike - b.strike)
@@ -153,11 +158,11 @@ function SideTable({
                         value={row.expiration}
                         onChange={(e) => onChangeExpiration(row.id, e.target.value)}
                         className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 font-mono text-[11px] text-zinc-200 focus:border-emerald-500/60 focus:outline-none"
-                        title="Expiration / DTE"
+                        title="Expiration date"
                       >
                         {expirations.map((e) => (
                           <option key={e.expiration} value={e.expiration}>
-                            {e.expiration} · {e.dte}d
+                            {e.expiration}
                           </option>
                         ))}
                       </select>
@@ -192,7 +197,24 @@ function SideTable({
                       {row.optionSymbol}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right text-zinc-300">{row.dteTradingDays}</td>
+                  <td className="px-3 py-2 text-right">
+                    {dteOptions.length > 0 ? (
+                      <select
+                        value={row.dteTradingDays}
+                        onChange={(e) => onChangeDte(row.id, Number(e.target.value))}
+                        className="w-16 rounded-md border border-zinc-700 bg-zinc-950 px-1.5 py-1.5 text-right font-mono text-[11px] text-zinc-200 focus:border-emerald-500/60 focus:outline-none"
+                        title="Days to expiration"
+                      >
+                        {dteOptions.map((d) => (
+                          <option key={d} value={d}>
+                            {d}d
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-zinc-300">{row.dteTradingDays}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right text-zinc-300">{money(row.ask)}</td>
                   <td className="px-3 py-2 text-right text-zinc-300">{row.openInterest}</td>
                   <td className="px-3 py-2 text-right">
@@ -494,12 +516,29 @@ function OptionDtPageContent() {
     }
   }
 
+  const pickOnExpiration = (
+    row: OptionDtCandidate,
+    expiration: string
+  ): OptionDtCandidate | null => {
+    const alts = row.alternatives ?? []
+    const onExp = alts.filter((a) => a.expiration === expiration)
+    if (onExp.length === 0) return null
+    const sameStrike = onExp.find((a) => a.strike === row.strike)
+    const preferred = onExp
+      .filter((a) => a.costPerContract >= 20 && a.costPerContract <= 300)
+      .sort((a, b) => Math.abs(a.strike - row.strike) - Math.abs(b.strike - row.strike))
+    const nearest = [...onExp].sort(
+      (a, b) => Math.abs(a.strike - row.strike) - Math.abs(b.strike - row.strike)
+    )[0]
+    const choice = sameStrike ?? preferred[0] ?? nearest
+    return applyChoice(row, choice, row.quantity)
+  }
+
   const changeContract = (candidateId: string, optionSymbol: string) => {
     patchCandidate(candidateId, (row) => {
       if (row.optionSymbol === optionSymbol) return null
       const choice = row.alternatives?.find((a) => a.optionSymbol === optionSymbol)
       if (!choice) return null
-      // Keep user's qty when switching strike — $500 is not a buy cap.
       return applyChoice(row, choice, row.quantity)
     })
   }
@@ -507,19 +546,17 @@ function OptionDtPageContent() {
   const changeExpiration = (candidateId: string, expiration: string) => {
     patchCandidate(candidateId, (row) => {
       if (row.expiration === expiration) return null
+      return pickOnExpiration(row, expiration)
+    })
+  }
+
+  const changeDte = (candidateId: string, dte: number) => {
+    patchCandidate(candidateId, (row) => {
+      if (row.dteTradingDays === dte) return null
       const alts = row.alternatives ?? []
-      const onExp = alts.filter((a) => a.expiration === expiration)
-      if (onExp.length === 0) return null
-      // Prefer same strike on the new exp, else nearest strike, prefer ★ band.
-      const sameStrike = onExp.find((a) => a.strike === row.strike)
-      const preferred = onExp
-        .filter((a) => a.costPerContract >= 20 && a.costPerContract <= 300)
-        .sort((a, b) => Math.abs(a.strike - row.strike) - Math.abs(b.strike - row.strike))
-      const nearest = [...onExp].sort(
-        (a, b) => Math.abs(a.strike - row.strike) - Math.abs(b.strike - row.strike)
-      )[0]
-      const choice = sameStrike ?? preferred[0] ?? nearest
-      return applyChoice(row, choice, row.quantity)
+      const match = alts.find((a) => a.dteTradingDays === dte)
+      if (!match) return null
+      return pickOnExpiration(row, match.expiration)
     })
   }
 
@@ -862,6 +899,7 @@ function OptionDtPageContent() {
               onToggle={toggle}
               onChangeContract={changeContract}
               onChangeExpiration={changeExpiration}
+              onChangeDte={changeDte}
               onChangeQuantity={changeQuantity}
             />
             <SideTable
@@ -872,6 +910,7 @@ function OptionDtPageContent() {
               onToggle={toggle}
               onChangeContract={changeContract}
               onChangeExpiration={changeExpiration}
+              onChangeDte={changeDte}
               onChangeQuantity={changeQuantity}
             />
             <p className="text-xs text-zinc-500 leading-relaxed">
