@@ -123,12 +123,44 @@ function SideTable({
                 ).values()
               ).sort((a, b) => a.dte - b.dte || a.expiration.localeCompare(b.expiration))
               const dteOptions = Array.from(
-                new Set(alts.map((a) => a.dteTradingDays))
+                new Set([row.dteTradingDays, ...alts.map((a) => a.dteTradingDays)])
               ).sort((a, b) => a - b)
               const strikesForExp = alts
                 .filter((a) => a.expiration === row.expiration)
                 .sort((a, b) => a.strike - b.strike)
-              const strikeOptions = strikesForExp.length > 0 ? strikesForExp : alts
+              let strikeOptions = strikesForExp.length > 0 ? [...strikesForExp] : [...alts]
+              // Select value must include the recommended contract (label below), or the
+              // browser falls back to the first option and looks desynced.
+              if (
+                row.optionSymbol &&
+                !strikeOptions.some((a) => a.optionSymbol === row.optionSymbol)
+              ) {
+                strikeOptions.push({
+                  optionSymbol: row.optionSymbol,
+                  strike: row.strike,
+                  expiration: row.expiration,
+                  dteTradingDays: row.dteTradingDays,
+                  bid: row.bid,
+                  ask: row.ask,
+                  mid: row.mid,
+                  openInterest: row.openInterest,
+                  costPerContract: row.costPerContract,
+                  label: `$${row.strike}`,
+                })
+                strikeOptions.sort((a, b) => a.strike - b.strike)
+              }
+              if (
+                row.expiration &&
+                !expirations.some((e) => e.expiration === row.expiration)
+              ) {
+                expirations.push({
+                  expiration: row.expiration,
+                  dte: row.dteTradingDays,
+                })
+                expirations.sort(
+                  (a, b) => a.dte - b.dte || a.expiration.localeCompare(b.expiration)
+                )
+              }
 
               return (
                 <tr

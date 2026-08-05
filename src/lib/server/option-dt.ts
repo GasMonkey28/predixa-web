@@ -357,10 +357,27 @@ async function pickBestContractForTicker(input: {
     withQuote[0] ??
     alternatives[0]
 
+  // Keep recommended contract in the list (slice-by-strike was dropping it for names like AMZN).
+  const altBySymbol = new Map<string, ScoredContract>()
+  altBySymbol.set(best.symbol, best)
+  const rankedForPicker = [...alternatives].sort((a, b) => {
+    if (a.preferredBand !== b.preferredBand) return a.preferredBand ? -1 : 1
+    if (a.dte !== b.dte) return a.dte - b.dte
+    return a.atmDistance - b.atmDistance || a.strike - b.strike
+  })
+  for (const c of rankedForPicker) {
+    if (altBySymbol.size >= 100) break
+    altBySymbol.set(c.symbol, c)
+  }
+  const pickerAlternatives = Array.from(altBySymbol.values()).sort((a, b) => {
+    if (a.dte !== b.dte) return a.dte - b.dte
+    return a.strike - b.strike || a.symbol.localeCompare(b.symbol)
+  })
+
   return {
     ok: true,
     contract: best,
-    alternatives: alternatives.slice(0, 80),
+    alternatives: pickerAlternatives,
     underlyingLast,
     dte: best.dte,
   }
