@@ -13,6 +13,11 @@ const navigationItems = [
     icon: '📋',
   },
   {
+    name: 'Journal',
+    href: '/trade-journal',
+    icon: '📝',
+  },
+  {
     name: 'DT',
     icon: '📉',
     items: [
@@ -45,30 +50,35 @@ const navigationItems = [
     ],
   },
   {
-    name: 'Daily',
+    name: 'Model',
     icon: '📈',
     items: [
       {
-        name: 'Model1',
+        name: 'Model 3 Mixer',
         href: '/daily/model1',
         icon: '📊'
       },
       {
-        name: 'Model2',
+        name: 'Model Y2Y3',
         href: '/daily/model2',
         icon: '📈'
+      },
+      {
+        name: 'Model Weekly',
+        href: '/weekly',
+        icon: '📊'
+      },
+      {
+        name: 'Model Future',
+        href: '/future',
+        icon: '🎯'
+      },
+      {
+        name: 'Model History',
+        href: '/history',
+        icon: '📜'
       }
     ]
-  },
-  {
-    name: 'Weekly',
-    href: '/weekly',
-    icon: '📊'
-  },
-  {
-    name: 'Future',
-    href: '/future',
-    icon: '🎯'
   },
   {
     name: 'Tools',
@@ -83,18 +93,8 @@ const navigationItems = [
         name: 'Risk Calculator',
         href: '/risk-calculator',
         icon: '📊'
-      },
-      {
-        name: 'Trade Journal',
-        href: '/trade-journal',
-        icon: '📝'
       }
     ]
-  },
-  {
-    name: 'History',
-    href: '/history',
-    icon: '📜'
   },
   {
     name: 'Account',
