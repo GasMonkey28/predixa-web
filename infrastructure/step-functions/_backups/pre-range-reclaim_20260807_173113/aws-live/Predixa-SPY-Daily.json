@@ -1,0 +1,9 @@
+﻿aws : 
+At C:\Users\malin\AppData\Local\Temp\ps-script-149ce6db-c77d-434e-b2bc-d83615ae73d6.ps1:96 char:3
++   aws stepfunctions describe-state-machine --state-machine-arn $arn - ...
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+An error occurred (StateMachineDoesNotExist) when calling the DescribeStateMachine operation: State Machine Does Not 
+Exist: 'arn:aws:states:us-east-1:822233328169:stateMachine:Predixa-SPY-Daily'

@@ -6,6 +6,7 @@ Morning orchestrator for AVGO (same shape as AAPL/AMZN/AMD):
 2. **Premarket** — `predixa-premarket-AVGO`
 3. **3mix** — nested `Predixa-AVGO-ML-Then-Tiers`
 4. **y2y3** — nested `Predixa-AVGO-Y2Y3`
+5. **Range Reclaim** � shared Lambda `predixa-range-reclaim` after y2y3 (soft-fail). Writes `range_reclaim/{T}/latest.json`. See `range-reclaim.README.md` + backup `_backups/pre-range-reclaim_*`.
 
 ## Schedule
 

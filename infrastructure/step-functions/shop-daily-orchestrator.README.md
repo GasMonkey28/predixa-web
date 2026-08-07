@@ -6,6 +6,7 @@ Morning orchestrator for SHOP (same shape as AAPL/AMZN/AMD):
 2. **Premarket** — `predixa-premarket-SHOP`
 3. **3mix** — nested `Predixa-SHOP-ML-Then-Tiers`
 4. **y2y3** — nested `Predixa-SHOP-Y2Y3`
+5. **Range Reclaim** � shared Lambda `predixa-range-reclaim` after y2y3 (soft-fail). Writes `range_reclaim/{T}/latest.json`. See `range-reclaim.README.md` + backup `_backups/pre-range-reclaim_*`.
 
 ## Schedule
 

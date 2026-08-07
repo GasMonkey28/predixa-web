@@ -6,6 +6,13 @@ Morning orchestrator for AAPL:
 2. **Premarket** — `predixa-premarket-AAPL`
 3. **3mix** — nested `Predixa-AAPL-ML-Then-Tiers` (features → ML1/2/3 → tiers)
 4. **y2y3** — nested `Predixa-AAPL-Y2Y3` (product Model2; includes its own premarket step again)
+5. **Range Reclaim** — shared Lambda `predixa-range-reclaim` with `{"ticker":"AAPL"}`
+   - Runs **after** y2y3 so Model1 y4/y5, letter tiers, and y2y3 hands exist for sizing.
+   - Soft-fail: Catch → Succeed (does not fail the Daily run).
+   - Writes public feeders: `range_reclaim/AAPL/{date|latest}.json` on tradespark.
+   - Full logic + reverse notes: `infrastructure/step-functions/range-reclaim.README.md`
+     and private `tradespark/range_reclaim/README.md`.
+   - Pre-change SFN backup: `infrastructure/step-functions/_backups/pre-range-reclaim_*`.
 
 ## Schedule
 
@@ -41,6 +48,7 @@ Public JSON for the site is served from **tradespark** (same bucket as SPY):
 
 - `summary_json/AAPL/{date}.json` — 3mix letter tiers
 - `model_y2y3/AAPL/chart/latest.json` — Model 2 chart
+- `range_reclaim/AAPL/latest.json` — Model Reclaim (`/daily/reclaim`)
 
 AAPL Lambdas keep DBs on **predixa**. `predixa-tiers-AAPL` and `predixa-y2y3-step7-AAPL`
 dual-write those feeder keys to `WEB_BUCKET` (default `tradespark-822233328169-us-east-1`)

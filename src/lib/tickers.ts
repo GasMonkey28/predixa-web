@@ -39,3 +39,12 @@ export function model2ChartKey(ticker: string): string {
   if (ticker === 'SPY') return 'model2_y2y3/chart/latest.json'
   return `model_y2y3/${ticker}/chart/latest.json`
 }
+
+/** Range Reclaim (Model Reclaim) feeder JSON key. */
+export function rangeReclaimLatestKey(ticker: string): string {
+  return `range_reclaim/${normalizeTicker(ticker)}/latest.json`
+}
+
+export function rangeReclaimDatedKey(ticker: string, date: string): string {
+  return `range_reclaim/${normalizeTicker(ticker)}/${date}.json`
+}

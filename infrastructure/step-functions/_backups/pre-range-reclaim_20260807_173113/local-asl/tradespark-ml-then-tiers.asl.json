@@ -1,0 +1,180 @@
+{
+  "Comment": "PreSync prior trading day into DB, then MLs sequentially, then rate tiers",
+  "StartAt": "PreSyncDb",
+  "States": {
+    "PreSyncDb": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:tradespark-sync-daily-db",
+        "Payload.$": "$$.Execution.Input"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 10,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.preSync",
+      "Next": "CheckPreSync"
+    },
+    "CheckPreSync": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.preSync.Payload.ok",
+          "BooleanEquals": false,
+          "Next": "FailPreSync"
+        },
+        {
+          "Variable": "$.preSync.Payload.skipped",
+          "BooleanEquals": true,
+          "Next": "SkippedNonTradingDay"
+        }
+      ],
+      "Default": "ML1"
+    },
+    "SkippedNonTradingDay": {
+      "Type": "Succeed",
+      "Comment": "NYSE holiday/weekend — no ML/tiers run"
+    },
+    "FailPreSync": {
+      "Type": "Fail",
+      "Error": "PreSync failed",
+      "Cause": "tradespark-sync-daily-db returned ok=false"
+    },
+    "ML1": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:ml-predict-function",
+        "Payload": {}
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.ml1",
+      "Next": "CheckML1"
+    },
+    "CheckML1": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ml1.Payload.statusCode",
+          "NumericEquals": 200,
+          "Next": "ML2"
+        }
+      ],
+      "Default": "FailML1"
+    },
+    "FailML1": {
+      "Type": "Fail",
+      "Error": "ML1 returned non-200",
+      "Cause": "ml-predict-function payload.statusCode != 200"
+    },
+    "ML2": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:ml-rf-nn-blend",
+        "Payload": {}
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.ml2",
+      "Next": "CheckML2"
+    },
+    "CheckML2": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ml2.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "ML3"
+        }
+      ],
+      "Default": "FailML2"
+    },
+    "FailML2": {
+      "Type": "Fail",
+      "Error": "ML2 returned ok=false",
+      "Cause": "ml-rf-nn-blend payload.ok != true"
+    },
+    "ML3": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:tradespark-ml-tabnet",
+        "Payload": {}
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.ml3",
+      "Next": "CheckML3"
+    },
+    "CheckML3": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ml3.Payload.ok",
+          "BooleanEquals": true,
+          "Next": "RateTiers"
+        }
+      ],
+      "Default": "FailML3"
+    },
+    "FailML3": {
+      "Type": "Fail",
+      "Error": "ML3 returned ok=false",
+      "Cause": "tradespark-ml-tabnet payload.ok != true"
+    },
+    "RateTiers": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:tradespark-daily-tiers",
+        "Payload": {
+          "as_of.$": "$.preSync.Payload.run_as_of"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.TooManyRequestsException",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException"
+          ],
+          "MaxAttempts": 8,
+          "IntervalSeconds": 30,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 10,
+          "BackoffRate": 2
+        }
+      ],
+      "End": true
+    }
+  }
+}

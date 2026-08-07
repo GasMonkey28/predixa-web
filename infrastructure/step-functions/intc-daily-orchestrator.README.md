@@ -6,6 +6,7 @@ Morning orchestrator for INTC (same shape as AAPL/AMZN/AMD):
 2. **Premarket** — `predixa-premarket-INTC`
 3. **3mix** — nested `Predixa-INTC-ML-Then-Tiers`
 4. **y2y3** — nested `Predixa-INTC-Y2Y3`
+5. **Range Reclaim** � shared Lambda `predixa-range-reclaim` after y2y3 (soft-fail). Writes `range_reclaim/{T}/latest.json`. See `range-reclaim.README.md` + backup `_backups/pre-range-reclaim_*`.
 
 ## Schedule
 

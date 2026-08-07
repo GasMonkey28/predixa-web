@@ -1,5 +1,5 @@
 {
-  "Comment": "PreSync prior trading day into DB, then MLs sequentially, then rate tiers",
+  "Comment": "SPY morning: PreSync → ML1/2/3 → RateTiers → Range Reclaim. Range Reclaim fades Model1 y4/y5 band breakouts; writes range_reclaim/SPY/*.json (see tradespark/range_reclaim/README.md). Backup: infrastructure/step-functions/_backups/pre-range-reclaim_*",
   "StartAt": "PreSyncDb",
   "States": {
     "PreSyncDb": {
@@ -174,7 +174,40 @@
           "BackoffRate": 2
         }
       ],
-      "End": true
+      "ResultPath": "$.tiers",
+      "Next": "RangeReclaim"
+    },
+    "RangeReclaim": {
+      "Comment": "Model Range Reclaim — AFTER Model1 + tiers. Needs y4/y5 + OHLC; tiers/y2y3 hands optional for size. Soft-fail so reclaim never fails morning ML. Private logic: tradespark/range_reclaim.",
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-range-reclaim",
+        "Payload": {
+          "ticker": "SPY",
+          "as_of_date.$": "$.preSync.Payload.run_as_of"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 20,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.range_reclaim_error",
+          "Next": "Succeed"
+        }
+      ],
+      "ResultPath": "$.range_reclaim",
+      "Next": "Succeed"
+    },
+    "Succeed": {
+      "Type": "Succeed"
     }
   }
 }

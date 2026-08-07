@@ -1,5 +1,5 @@
 {
-  "Comment": "ORCL daily orchestrator: Data -> Premarket -> model_3mix (tiers) -> model_y2y3. Input optional {as_of_date}; handlers default to today CT/NY.",
+  "Comment": "ORCL daily orchestrator: Data \u2192 Premarket \u2192 model_3mix \u2192 model_y2y3 \u2192 Range Reclaim. Range Reclaim fades Model1 y4/y5 band breakouts; writes range_reclaim/{T}/*.json only (see tradespark/range_reclaim/README.md). Backup: infrastructure/step-functions/_backups/pre-range-reclaim_*",
   "StartAt": "Data",
   "States": {
     "Data": {
@@ -11,7 +11,9 @@
       },
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "MaxAttempts": 2,
           "IntervalSeconds": 30,
           "BackoffRate": 2
@@ -63,7 +65,9 @@
       },
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "MaxAttempts": 2,
           "IntervalSeconds": 15,
           "BackoffRate": 2
@@ -97,7 +101,9 @@
       },
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "MaxAttempts": 1,
           "IntervalSeconds": 60,
           "BackoffRate": 2
@@ -115,17 +121,51 @@
       },
       "Retry": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "MaxAttempts": 1,
           "IntervalSeconds": 60,
           "BackoffRate": 2
         }
       ],
       "ResultPath": "$.y2y3",
-      "Next": "Succeed"
+      "Next": "RangeReclaim"
     },
     "Succeed": {
       "Type": "Succeed"
+    },
+    "RangeReclaim": {
+      "Comment": "Model Range Reclaim \u2014 AFTER y2y3 so tier+hands available for size bonuses. Logic: pred_high=prev_close+y4, pred_low=prev_close+y5; OS>=0.3% prev_close; short if close>pred_high (1% stop); long if close<pred_low (no stop); size 1.0 +0.5 tier(+0.5 y2y3 agree on longs). Private code in tradespark/range_reclaim.",
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:predixa-range-reclaim",
+        "Payload": {
+          "ticker": "ORCL"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 20,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.range_reclaim_error",
+          "Next": "Succeed"
+        }
+      ],
+      "ResultPath": "$.range_reclaim",
+      "Next": "Succeed"
     }
   }
 }
