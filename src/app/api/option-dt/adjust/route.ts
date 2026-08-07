@@ -14,14 +14,16 @@ import {
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-type AdjustAction = 'buy_more' | 'sell_one' | 'flatten'
+type AdjustAction = 'buy_more' | 'sell_one' | 'flatten' | 'reopen'
 
 interface AdjustBody {
   accountId?: string
   symbol?: string
   action?: AdjustAction
-  /** Extra contracts to buy (buy_more) or sell (sell_one). Default 1. */
+  /** Extra contracts to buy (buy_more) or sell (sell_one). Default 1. For reopen: size to re-open. */
   quantity?: number
+  /** Required for reopen: Long or Short */
+  longShort?: string
 }
 
 function isOptionSymbol(symbol: string, assetType?: string): boolean {
@@ -59,9 +61,15 @@ export async function POST(request: NextRequest) {
 
   const symbol = (body.symbol || '').trim()
   const action = body.action
-  if (!symbol || (action !== 'buy_more' && action !== 'sell_one' && action !== 'flatten')) {
+  if (
+    !symbol ||
+    (action !== 'buy_more' &&
+      action !== 'sell_one' &&
+      action !== 'flatten' &&
+      action !== 'reopen')
+  ) {
     return NextResponse.json(
-      { error: 'symbol and action (buy_more|sell_one|flatten) are required' },
+      { error: 'symbol and action (buy_more|sell_one|flatten|reopen) are required' },
       { status: 400 }
     )
   }
@@ -78,6 +86,49 @@ export async function POST(request: NextRequest) {
     const accountId = body.accountId || connection.selectedAccountId
     if (!accountId) {
       return NextResponse.json({ error: 'Select a paper account first' }, { status: 400 })
+    }
+
+    // Undo flatten: re-open without requiring an existing position.
+    if (action === 'reopen') {
+      const qty = Math.max(1, Math.min(Math.floor(body.quantity ?? 1), 99))
+      const isLong = (body.longShort || 'Long').toLowerCase().startsWith('long')
+      const order: TradeStationOrderRequest = {
+        AccountID: accountId,
+        Symbol: symbol,
+        Quantity: String(qty),
+        OrderType: 'Market',
+        TradeAction: isLong ? 'BUYTOOPEN' : 'SELLTOOPEN',
+        TimeInForce: { Duration: 'DAY' },
+        Route: 'Intelligent',
+      }
+
+      const placed = await placeTradeStationOrder(accessToken, order, 'sim')
+      const orderId = placed.Orders?.[0]?.OrderID
+      const message =
+        placed.Errors?.[0]?.Message ||
+        placed.Errors?.[0]?.Error ||
+        placed.Orders?.[0]?.Error ||
+        placed.Orders?.[0]?.Message
+
+      if (!orderId) {
+        return NextResponse.json(
+          { ok: false, error: message || 'Order rejected', placed },
+          { status: 400, headers: getRateLimitHeaders(clientIp) }
+        )
+      }
+
+      return NextResponse.json(
+        {
+          ok: true,
+          action,
+          symbol,
+          quantity: qty,
+          longShort: isLong ? 'Long' : 'Short',
+          orderId,
+          message,
+        },
+        { headers: getRateLimitHeaders(clientIp) }
+      )
     }
 
     const positions = await fetchTradeStationPositions(accessToken, [accountId], 'sim')

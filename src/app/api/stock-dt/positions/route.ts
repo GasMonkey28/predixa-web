@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { tradingDayFromTimestamp } from '@/lib/dt-position-days'
+import {
+  loadOpenLotEntryDates,
+  positionEntryKey,
+} from '@/lib/server/dt-position-entry-dates'
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 import { logger } from '@/lib/server/logger'
 import { requireSubscriber } from '@/lib/server/require-subscriber'
@@ -18,7 +23,10 @@ function toNum(value: string | number | undefined | null): number {
   return Number.isFinite(n) ? n : 0
 }
 
-function mapStockPosition(p: TradeStationPosition) {
+function mapStockPosition(
+  p: TradeStationPosition,
+  entryDates: Map<string, string>
+) {
   const qty = Math.abs(toNum(p.Quantity))
   const avg = toNum(p.AveragePrice)
   const last = toNum(p.Last)
@@ -26,12 +34,14 @@ function mapStockPosition(p: TradeStationPosition) {
   const totalCost = toNum(p.TotalCost) || qty * avg
   const unrealized = toNum(p.UnrealizedProfitLoss) || marketValue - totalCost
   const isLong = (p.LongShort || '').toLowerCase().startsWith('long')
+  const longShort = isLong ? 'Long' : 'Short'
+  const fromOrders = entryDates.get(positionEntryKey(p.Symbol, longShort))
 
   return {
     positionId: p.PositionID,
     symbol: p.Symbol,
     quantity: qty,
-    longShort: isLong ? 'Long' : 'Short',
+    longShort,
     averagePrice: avg,
     last: last || null,
     marketValue,
@@ -39,6 +49,8 @@ function mapStockPosition(p: TradeStationPosition) {
     unrealizedPnl: unrealized,
     todaysPnl: toNum(p.TodaysProfitLoss) || null,
     assetType: p.AssetType || null,
+    entryDate: fromOrders || tradingDayFromTimestamp(p.Timestamp),
+    timestamp: p.Timestamp || null,
   }
 }
 
@@ -72,9 +84,16 @@ export async function GET(request: NextRequest) {
     }
 
     const raw = await fetchTradeStationPositions(accessToken, [accountId], 'sim')
+    let entryDates = new Map<string, string>()
+    try {
+      entryDates = await loadOpenLotEntryDates(accessToken, accountId)
+    } catch (err) {
+      logger.warn({ err, userId: auth.userId }, 'Stock DT entry-date fill lookup failed; using position timestamps')
+    }
+
     const positions = raw
       .filter((p) => isStockPosition(p.Symbol, p.AssetType))
-      .map(mapStockPosition)
+      .map((p) => mapStockPosition(p, entryDates))
 
     const totals = positions.reduce(
       (acc, p) => {

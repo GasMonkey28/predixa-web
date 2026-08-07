@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { tradingDayFromTimestamp } from '@/lib/dt-position-days'
+import {
+  loadOpenLotEntryDates,
+  positionEntryKey,
+} from '@/lib/server/dt-position-entry-dates'
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 import { logger } from '@/lib/server/logger'
 import { requireSubscriber } from '@/lib/server/require-subscriber'
@@ -52,6 +57,16 @@ export async function GET(request: NextRequest) {
     }
 
     const raw = await fetchTradeStationPositions(accessToken, [accountId], 'sim')
+    let entryDates = new Map<string, string>()
+    try {
+      entryDates = await loadOpenLotEntryDates(accessToken, accountId)
+    } catch (err) {
+      logger.warn(
+        { err, userId: auth.userId },
+        'Option DT entry-date fill lookup failed; using position timestamps'
+      )
+    }
+
     const positions = raw.filter(isOptionPosition).map((p) => {
       const qty = Math.abs(toNum(p.Quantity))
       const avg = toNum(p.AveragePrice)
@@ -61,12 +76,14 @@ export async function GET(request: NextRequest) {
       const unrealized =
         toNum(p.UnrealizedProfitLoss) || marketValue - totalCost
       const isLong = (p.LongShort || '').toLowerCase().startsWith('long')
+      const longShort = isLong ? 'Long' : 'Short'
+      const fromOrders = entryDates.get(positionEntryKey(p.Symbol, longShort))
 
       return {
         positionId: p.PositionID,
         symbol: p.Symbol,
         quantity: qty,
-        longShort: isLong ? 'Long' : 'Short',
+        longShort,
         averagePrice: avg,
         last: last || null,
         marketValue,
@@ -74,6 +91,8 @@ export async function GET(request: NextRequest) {
         unrealizedPnl: unrealized,
         todaysPnl: toNum(p.TodaysProfitLoss) || null,
         assetType: p.AssetType || null,
+        entryDate: fromOrders || tradingDayFromTimestamp(p.Timestamp),
+        timestamp: p.Timestamp || null,
       }
     })
 

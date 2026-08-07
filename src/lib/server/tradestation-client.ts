@@ -54,6 +54,9 @@ export interface TradeStationOrder {
   Status?: string
   FilledPrice?: string
   PriceUsedForBuyingPower?: string
+  /** Equity-style side when present: Buy, Sell, SellShort, BuyToCover, … */
+  Side?: string
+  TradeAction?: string
   Legs?: TradeStationOrderLeg[]
 }
 
@@ -238,7 +241,8 @@ export function historicalOrdersSinceDate(daysBack = 89): string {
 export async function fetchTradeStationHistoricalOrders(
   accessToken: string,
   accountIds: string[],
-  since: string
+  since: string,
+  apiEnv: TradeStationApiEnv = 'live'
 ): Promise<TradeStationOrder[]> {
   if (accountIds.length === 0) return []
 
@@ -252,7 +256,11 @@ export async function fetchTradeStationHistoricalOrders(
     const data = await tradeStationFetch<{
       Orders?: TradeStationOrder[]
       NextToken?: string
-    }>(accessToken, `/brokerage/accounts/${accountIds.join(',')}/historicalorders?${params}`)
+    }>(
+      accessToken,
+      `/brokerage/accounts/${accountIds.join(',')}/historicalorders?${params}`,
+      { apiEnv }
+    )
 
     orders.push(...(data.Orders ?? []))
     nextToken = data.NextToken
@@ -264,7 +272,8 @@ export async function fetchTradeStationHistoricalOrders(
 /** Today's and still-open orders (not in historical until closed/moved). */
 export async function fetchTradeStationCurrentOrders(
   accessToken: string,
-  accountIds: string[]
+  accountIds: string[],
+  apiEnv: TradeStationApiEnv = 'live'
 ): Promise<TradeStationOrder[]> {
   if (accountIds.length === 0) return []
 
@@ -281,7 +290,7 @@ export async function fetchTradeStationCurrentOrders(
     const data = await tradeStationFetch<{
       Orders?: TradeStationOrder[]
       NextToken?: string
-    }>(accessToken, path)
+    }>(accessToken, path, { apiEnv })
 
     orders.push(...(data.Orders ?? []))
     nextToken = data.NextToken

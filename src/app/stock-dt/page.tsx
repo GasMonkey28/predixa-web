@@ -7,11 +7,14 @@ import { fetchAuthSession } from 'aws-amplify/auth'
 
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import DtMarketQuotesBoard from '@/components/dt/DtMarketQuotesBoard'
+import DtPnlCalendar from '@/components/dt/DtPnlCalendar'
 import StockDtPositionsPanel, {
   type StockDtOpenPosition,
 } from '@/components/stock-dt/StockDtPositionsPanel'
 import { useAuthStore } from '@/lib/auth-store'
 import { readDtSimAccountId, writeDtSimAccountId } from '@/lib/dt-account'
+import type { DtFlattenUndoLot } from '@/lib/dt-flatten-undo'
+import type { DtPnlSnapshot } from '@/lib/dt-pnl-types'
 import {
   formatMoney,
   formatSignedMoney,
@@ -226,6 +229,11 @@ function StockDtPageContent() {
   })
   const [positionsLoading, setPositionsLoading] = useState(false)
   const [busySymbol, setBusySymbol] = useState<string | null>(null)
+  const [busyDay, setBusyDay] = useState<string | null>(null)
+  const [flattenUndo, setFlattenUndo] = useState<DtFlattenUndoLot[] | null>(null)
+  const [undoing, setUndoing] = useState(false)
+  const [pnlSnapshot, setPnlSnapshot] = useState<DtPnlSnapshot | null>(null)
+  const [pnlLoading, setPnlLoading] = useState(false)
 
   const refreshTs = useCallback(async () => {
     if (!isAuthenticated) {
@@ -307,9 +315,39 @@ function StockDtPageContent() {
     }
   }, [accountId, tsConnected])
 
+  const loadPnl = useCallback(async () => {
+    if (!accountId || !tsConnected) {
+      setPnlSnapshot(null)
+      return
+    }
+    setPnlLoading(true)
+    try {
+      const res = await fetch(
+        `/api/stock-dt/pnl?accountId=${encodeURIComponent(accountId)}`,
+        {
+          headers: await authHeaders(),
+          credentials: 'include',
+          cache: 'no-store',
+        }
+      )
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+      setPnlSnapshot(body as DtPnlSnapshot)
+    } catch (err) {
+      setPnlSnapshot(null)
+      setError(err instanceof Error ? err.message : 'Failed to load P&L calendar')
+    } finally {
+      setPnlLoading(false)
+    }
+  }, [accountId, tsConnected])
+
   useEffect(() => {
     void loadPositions()
   }, [loadPositions])
+
+  useEffect(() => {
+    void loadPnl()
+  }, [loadPnl])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -468,6 +506,7 @@ function StockDtPageContent() {
         `Placed ${body.placed}, failed ${body.failed}. ${body.note || ''}`.trim()
       )
       void loadPositions()
+      void loadPnl()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Place failed')
     } finally {
@@ -481,6 +520,11 @@ function StockDtPageContent() {
       `Close all stock positions on paper account ${accountId}? (Sell longs / BuyToCover shorts)`
     )
     if (!ok) return
+    const snapshot: DtFlattenUndoLot[] = positions.map((p) => ({
+      symbol: p.symbol,
+      quantity: p.quantity,
+      longShort: p.longShort,
+    }))
     setFlattening(true)
     setError(null)
     try {
@@ -495,8 +539,12 @@ function StockDtPageContent() {
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+      if (snapshot.length > 0 && (body.closed ?? 0) > 0) {
+        setFlattenUndo(snapshot)
+      }
       setPlaceResult(`Flattened ${body.closed}, failed ${body.failed}.`)
       void loadPositions()
+      void loadPnl()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Flatten failed')
     } finally {
@@ -519,6 +567,11 @@ function StockDtPageContent() {
           : `Flatten ${symbol}`
     if (!window.confirm(`${label} on paper account ${accountId}?`)) return
 
+    const prior =
+      action === 'flatten'
+        ? positions.find((p) => p.symbol.toUpperCase() === symbol.toUpperCase())
+        : null
+
     setBusySymbol(symbol)
     setError(null)
     try {
@@ -533,6 +586,15 @@ function StockDtPageContent() {
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+      if (action === 'flatten' && prior) {
+        setFlattenUndo([
+          {
+            symbol: prior.symbol,
+            quantity: prior.quantity,
+            longShort: prior.longShort,
+          },
+        ])
+      }
       setPlaceResult(
         action === 'buy_more'
           ? `Added +${qty} ${symbol} (order ${body.orderId}).`
@@ -541,10 +603,128 @@ function StockDtPageContent() {
             : `Flattened ${symbol} (order ${body.orderId}).`
       )
       void loadPositions()
+      void loadPnl()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Adjust failed')
     } finally {
       setBusySymbol(null)
+    }
+  }
+
+  const flattenDay = async (day: string, symbols: string[]) => {
+    if (!accountId || symbols.length === 0) return
+    if (
+      !window.confirm(
+        `Flatten ${symbols.length} stock position(s) from ${day} on paper account ${accountId}?`
+      )
+    ) {
+      return
+    }
+
+    const symbolSet = new Set(symbols.map((s) => s.toUpperCase()))
+    const snapshot: DtFlattenUndoLot[] = positions
+      .filter((p) => symbolSet.has(p.symbol.toUpperCase()))
+      .map((p) => ({
+        symbol: p.symbol,
+        quantity: p.quantity,
+        longShort: p.longShort,
+      }))
+
+    setBusyDay(day)
+    setError(null)
+    const closed: DtFlattenUndoLot[] = []
+    const failed: string[] = []
+    try {
+      const headers = {
+        ...(await authHeaders()),
+        'Content-Type': 'application/json',
+      }
+      for (const lot of snapshot) {
+        try {
+          const res = await fetch('/api/stock-dt/adjust', {
+            method: 'POST',
+            headers,
+            credentials: 'include',
+            body: JSON.stringify({ accountId, symbol: lot.symbol, action: 'flatten' }),
+          })
+          const body = await res.json()
+          if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+          closed.push(lot)
+        } catch {
+          failed.push(lot.symbol)
+        }
+      }
+      if (closed.length > 0) setFlattenUndo(closed)
+      if (failed.length > 0) {
+        setError(`Day flatten partial: closed ${closed.length}, failed ${failed.join(', ')}`)
+      }
+      setPlaceResult(
+        failed.length === 0
+          ? `Flattened ${closed.length} position(s) from ${day}.`
+          : `Flattened ${closed.length}/${symbols.length} from ${day}.`
+      )
+      void loadPositions()
+      void loadPnl()
+    } finally {
+      setBusyDay(null)
+    }
+  }
+
+  const undoFlatten = async () => {
+    if (!accountId || !flattenUndo || flattenUndo.length === 0) return
+    if (
+      !window.confirm(
+        `Undo flatten — re-open ${flattenUndo.length} stock position(s) at market on ${accountId}?`
+      )
+    ) {
+      return
+    }
+
+    setUndoing(true)
+    setError(null)
+    const restored: string[] = []
+    const failed: string[] = []
+    try {
+      const headers = {
+        ...(await authHeaders()),
+        'Content-Type': 'application/json',
+      }
+      for (const lot of flattenUndo) {
+        try {
+          const res = await fetch('/api/stock-dt/adjust', {
+            method: 'POST',
+            headers,
+            credentials: 'include',
+            body: JSON.stringify({
+              accountId,
+              symbol: lot.symbol,
+              action: 'reopen',
+              quantity: lot.quantity,
+              longShort: lot.longShort,
+            }),
+          })
+          const body = await res.json()
+          if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+          restored.push(lot.symbol)
+        } catch {
+          failed.push(lot.symbol)
+        }
+      }
+      if (failed.length > 0) {
+        setError(`Undo partial: restored ${restored.length}, failed ${failed.join(', ')}`)
+        setFlattenUndo(flattenUndo.filter((l) => failed.includes(l.symbol)))
+      } else {
+        setFlattenUndo(null)
+      }
+      setPlaceResult(
+        failed.length === 0
+          ? `Undid flatten — re-opened ${restored.length} position(s).`
+          : `Undid ${restored.length}/${flattenUndo.length} position(s).`
+      )
+      void loadPositions()
+      void loadPnl()
+    } finally {
+      setUndoing(false)
     }
   }
 
@@ -743,10 +923,25 @@ function StockDtPageContent() {
             totals={positionTotals}
             loading={positionsLoading}
             busySymbol={busySymbol}
+            busyDay={busyDay}
+            undoing={undoing}
+            flattenUndo={flattenUndo}
             onRefresh={() => void loadPositions()}
             onBuyMore={(symbol, qty) => void adjustPosition(symbol, 'buy_more', qty)}
             onSellOne={(symbol, qty) => void adjustPosition(symbol, 'sell_one', qty)}
             onFlatten={(symbol) => void adjustPosition(symbol, 'flatten')}
+            onFlattenDay={(day, symbols) => void flattenDay(day, symbols)}
+            onUndoFlatten={() => void undoFlatten()}
+            onDismissUndo={() => setFlattenUndo(null)}
+          />
+        )}
+
+        {tsConnected && accountId && (
+          <DtPnlCalendar
+            assetLabel="Stock"
+            snapshot={pnlSnapshot}
+            loading={pnlLoading}
+            onRefresh={() => void loadPnl()}
           />
         )}
 
