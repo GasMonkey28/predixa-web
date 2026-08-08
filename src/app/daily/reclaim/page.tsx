@@ -13,7 +13,14 @@ type Signal = {
   size?: number
   tier_bonus?: boolean
   y2y3_agree?: boolean
+  entry_price?: number
+  reclaim_price?: number
+  flat_price?: number
+  band_high?: number
+  band_low?: number
   stop_pct?: number | null
+  stop_price?: number | null
+  exit_rule?: string
   note?: string
 }
 
@@ -199,11 +206,27 @@ function ReclaimPageContent() {
                           <span className="text-xs text-violet-300">+y2y3</span>
                         ) : null}
                       </div>
-                      <p className="text-sm text-gray-300">
-                        Breach {s.breach_date} · OS {s.overshoot?.toFixed?.(2) ?? s.overshoot} (
-                        {s.overshoot_pct?.toFixed?.(2) ?? s.overshoot_pct}%)
-                        {s.stop_pct != null ? ` · stop ${(s.stop_pct * 100).toFixed(0)}%` : ' · no stop'}
+                      <p className="text-lg text-white font-semibold tracking-tight">
+                        Flat / reclaim @{' '}
+                        <span className="text-amber-300">
+                          {s.reclaim_price ?? s.flat_price ?? '—'}
+                        </span>
+                        {s.side === 'long' ? (
+                          <span className="text-sm font-normal text-gray-400"> (pred low)</span>
+                        ) : (
+                          <span className="text-sm font-normal text-gray-400"> (pred high)</span>
+                        )}
                       </p>
+                      <p className="text-sm text-gray-300 mt-1">
+                        Entry ~{s.entry_price ?? '—'}
+                        {s.stop_price != null ? ` · stop ${s.stop_price}` : ' · no stop'}
+                        {' · '}Breach {s.breach_date} · OS{' '}
+                        {s.overshoot?.toFixed?.(2) ?? s.overshoot} (
+                        {s.overshoot_pct?.toFixed?.(2) ?? s.overshoot_pct}%)
+                      </p>
+                      {s.exit_rule ? (
+                        <p className="text-xs text-sky-200/80 mt-1">{s.exit_rule}</p>
+                      ) : null}
                       {s.note ? <p className="text-xs text-gray-500 mt-1">{s.note}</p> : null}
                     </li>
                   ))}
@@ -222,13 +245,14 @@ function ReclaimPageContent() {
                 <th className="py-2 pr-4">As of</th>
                 <th className="py-2 pr-4">Signal</th>
                 <th className="py-2 pr-4">Size</th>
+                <th className="py-2 pr-4">Flat @</th>
                 <th className="py-2 pr-4">Tier / y2y3</th>
               </tr>
             </thead>
             <tbody>
               {board.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-4 text-gray-500">
+                  <td colSpan={6} className="py-4 text-gray-500">
                     No board rows yet.
                   </td>
                 </tr>
@@ -250,6 +274,9 @@ function ReclaimPageContent() {
                       </td>
                       <td className="py-2 pr-4 text-gray-200">
                         {primary?.size != null ? `${primary.size.toFixed(1)}x` : '—'}
+                      </td>
+                      <td className="py-2 pr-4 text-amber-300 font-medium">
+                        {primary?.reclaim_price ?? primary?.flat_price ?? '—'}
                       </td>
                       <td className="py-2 pr-4 text-gray-400">
                         {row.context?.long_tier || '—'}/{row.context?.short_tier || '—'} · hands{' '}
