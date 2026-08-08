@@ -50,11 +50,26 @@ type ReclaimPayload = {
   primary?: Signal | null
 }
 
+type RankedRow = {
+  rank: number
+  ticker: string
+  as_of_date?: string
+  signal: Signal
+  long_tier?: string
+  short_tier?: string
+  y2y3_hands?: number
+}
+
 const TICKER_OPTIONS = ['SPY', ...EQUITY_TICKERS]
 
 function money(n?: number | null) {
   if (n == null || Number.isNaN(Number(n))) return '—'
   return Number(n).toFixed(2)
+}
+
+function pct(n?: number | null) {
+  if (n == null || Number.isNaN(Number(n))) return '—'
+  return `${Number(n).toFixed(2)}%`
 }
 
 function SideBadge({ side }: { side: string }) {
@@ -69,6 +84,109 @@ function SideBadge({ side }: { side: string }) {
     >
       {long ? 'LONG reclaim' : 'SHORT reclaim'}
     </span>
+  )
+}
+
+function rankSignals(board: ReclaimPayload[], side: 'long' | 'short'): RankedRow[] {
+  const rows: Omit<RankedRow, 'rank'>[] = []
+  for (const row of board) {
+    if (!row.ticker || row.fallback) continue
+    for (const signal of row.signals || []) {
+      if (signal.side !== side) continue
+      rows.push({
+        ticker: row.ticker,
+        as_of_date: row.as_of_date,
+        signal,
+        long_tier: row.context?.long_tier,
+        short_tier: row.context?.short_tier,
+        y2y3_hands: row.context?.y2y3_hands,
+      })
+    }
+  }
+  rows.sort((a, b) => {
+    const sizeDiff = (b.signal.size ?? 0) - (a.signal.size ?? 0)
+    if (sizeDiff !== 0) return sizeDiff
+    const pctDiff = (b.signal.overshoot_pct ?? 0) - (a.signal.overshoot_pct ?? 0)
+    if (pctDiff !== 0) return pctDiff
+    return a.ticker.localeCompare(b.ticker)
+  })
+  return rows.map((r, i) => ({ ...r, rank: i + 1 }))
+}
+
+function RankedSignalTable({
+  title,
+  side,
+  rows,
+  onSelect,
+}: {
+  title: string
+  side: 'long' | 'short'
+  rows: RankedRow[]
+  onSelect: (ticker: string) => void
+}) {
+  const accent = side === 'long' ? 'text-emerald-300' : 'text-rose-300'
+  return (
+    <div className="rounded-xl border border-gray-700 bg-gray-900/70 p-5 overflow-x-auto">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className={`text-lg font-semibold ${accent}`}>{title}</h2>
+        <span className="text-xs text-gray-500">ranked by size, then OS%</span>
+      </div>
+      <table className="min-w-full text-sm text-left">
+        <thead className="text-gray-400 border-b border-gray-700">
+          <tr>
+            <th className="py-2 pr-3">#</th>
+            <th className="py-2 pr-3">Ticker</th>
+            <th className="py-2 pr-3">Size</th>
+            <th className="py-2 pr-3">OS %</th>
+            <th className="py-2 pr-3">OS $</th>
+            <th className="py-2 pr-3">Flat @</th>
+            <th className="py-2 pr-3">Entry</th>
+            <th className="py-2 pr-3">Stop</th>
+            <th className="py-2 pr-3">Breach</th>
+            <th className="py-2 pr-3">Bonuses</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={10} className="py-4 text-gray-500">
+                No {side} reclaim signals.
+              </td>
+            </tr>
+          ) : (
+            rows.map((row) => {
+              const s = row.signal
+              return (
+                <tr
+                  key={`${row.ticker}-${s.breach_date}-${s.side}`}
+                  className="border-b border-gray-800 hover:bg-gray-800/40 cursor-pointer"
+                  onClick={() => onSelect(row.ticker)}
+                >
+                  <td className="py-2 pr-3 text-gray-500">{row.rank}</td>
+                  <td className="py-2 pr-3 text-white font-medium">{row.ticker}</td>
+                  <td className="py-2 pr-3 text-white font-semibold">
+                    {(s.size ?? 0).toFixed(1)}x
+                  </td>
+                  <td className="py-2 pr-3 text-amber-300 font-semibold">{pct(s.overshoot_pct)}</td>
+                  <td className="py-2 pr-3 text-gray-300">{money(s.overshoot)}</td>
+                  <td className="py-2 pr-3 text-amber-200">{money(s.reclaim_price ?? s.flat_price)}</td>
+                  <td className="py-2 pr-3 text-gray-300">{money(s.entry_price)}</td>
+                  <td className="py-2 pr-3 text-gray-300">
+                    {s.stop_price != null ? money(s.stop_price) : '—'}
+                  </td>
+                  <td className="py-2 pr-3 text-gray-400">{s.breach_date || '—'}</td>
+                  <td className="py-2 pr-3 text-gray-500">
+                    {[s.tier_bonus ? '+tier' : null, s.y2y3_agree ? '+y2y3' : null]
+                      .filter(Boolean)
+                      .join(' ') || '—'}
+                  </td>
+                </tr>
+              )
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -103,6 +221,8 @@ function ReclaimPageContent() {
   }, [ticker, load])
 
   const active = useMemo(() => data?.signals ?? [], [data])
+  const longRanked = useMemo(() => rankSignals(board, 'long'), [board])
+  const shortRanked = useMemo(() => rankSignals(board, 'short'), [board])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900">
@@ -114,14 +234,14 @@ function ReclaimPageContent() {
         >
           <h1 className="text-4xl font-bold text-white mb-2">Model Reclaim</h1>
           <p className="text-gray-300 max-w-2xl mx-auto">
-            Fade Model1 predicted high/low band breakouts. Size up when tier and y2y3 agree on
-            longs. Shorts use a 1% stop; longs hold to band re-entry.
+            Fade Model1 predicted high/low band breakouts. Long and short boards ranked by size,
+            with exact overshoot %. Flat at band re-entry.
           </p>
         </motion.div>
 
         <div className="mb-6 flex flex-wrap items-center gap-3 justify-between">
           <label className="text-sm text-gray-300 flex items-center gap-2">
-            Ticker
+            Ticker detail
             <select
               value={ticker}
               onChange={(e) => setTicker(e.target.value)}
@@ -134,14 +254,39 @@ function ReclaimPageContent() {
               ))}
             </select>
           </label>
-          <button
-            type="button"
-            onClick={() => load(ticker)}
-            className="rounded-md bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 text-sm"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-3 text-sm text-gray-400">
+            <span>
+              Longs <span className="text-emerald-300 font-medium">{longRanked.length}</span>
+            </span>
+            <span>
+              Shorts <span className="text-rose-300 font-medium">{shortRanked.length}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => load(ticker)}
+              className="rounded-md bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 text-sm"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
+
+        {!loading && (
+          <div className="grid gap-6 mb-10">
+            <RankedSignalTable
+              title={`Long reclaim (${longRanked.length})`}
+              side="long"
+              rows={longRanked}
+              onSelect={setTicker}
+            />
+            <RankedSignalTable
+              title={`Short reclaim (${shortRanked.length})`}
+              side="short"
+              rows={shortRanked}
+              onSelect={setTicker}
+            />
+          </div>
+        )}
 
         {loading && <p className="text-gray-400 text-center py-12">Loading…</p>}
         {error && <p className="text-rose-400 text-center">{error}</p>}
@@ -150,7 +295,7 @@ function ReclaimPageContent() {
           <div className="grid gap-6 lg:grid-cols-3 mb-10">
             <div className="rounded-xl border border-gray-700 bg-gray-900/70 p-5 lg:col-span-1">
               <h2 className="text-white font-semibold mb-3">
-                {data.ticker || ticker} · {data.as_of_date || '—'}
+                Detail · {data.ticker || ticker} · {data.as_of_date || '—'}
               </h2>
               {data.fallback || data.status === 'missing' ? (
                 <p className="text-amber-300 text-sm">
@@ -197,12 +342,12 @@ function ReclaimPageContent() {
             </div>
 
             <div className="rounded-xl border border-gray-700 bg-gray-900/70 p-5 lg:col-span-2">
-              <h2 className="text-white font-semibold mb-3">Active signals</h2>
+              <h2 className="text-white font-semibold mb-3">Active signals (this ticker)</h2>
               {active.length === 0 ? (
                 <div className="space-y-3 text-sm">
                   <p className="text-gray-400">No reclaim breach for this as-of window.</p>
                   <p className="text-gray-300">
-                    Band flat targets (if a breach appears): long flat @{' '}
+                    Band flat targets: long flat @{' '}
                     <span className="text-amber-300 font-semibold">
                       {money(data.range?.long_flat_price ?? data.range?.pred_low)}
                     </span>
@@ -221,7 +366,8 @@ function ReclaimPageContent() {
                     >
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         <SideBadge side={s.side} />
-                        <span className="text-white font-medium">size {s.size?.toFixed(1)}x</span>
+                        <span className="text-white font-medium">size {(s.size ?? 0).toFixed(1)}x</span>
+                        <span className="text-amber-300 font-semibold">{pct(s.overshoot_pct)}</span>
                         {s.tier_bonus ? (
                           <span className="text-xs text-sky-300">+tier</span>
                         ) : null}
@@ -243,9 +389,7 @@ function ReclaimPageContent() {
                       <p className="text-sm text-gray-300 mt-1">
                         Entry ~{money(s.entry_price)}
                         {s.stop_price != null ? ` · stop ${money(s.stop_price)}` : ' · no stop'}
-                        {' · '}Breach {s.breach_date} · OS{' '}
-                        {s.overshoot?.toFixed?.(2) ?? s.overshoot} (
-                        {s.overshoot_pct?.toFixed?.(2) ?? s.overshoot_pct}%)
+                        {' · '}Breach {s.breach_date} · OS ${money(s.overshoot)} ({pct(s.overshoot_pct)})
                       </p>
                       {s.exit_rule ? (
                         <p className="text-xs text-sky-200/80 mt-1">{s.exit_rule}</p>
@@ -259,70 +403,9 @@ function ReclaimPageContent() {
           </div>
         )}
 
-        <div className="rounded-xl border border-gray-700 bg-gray-900/70 p-5 overflow-x-auto">
-          <h2 className="text-white font-semibold mb-3">Board (latest feeders)</h2>
-          <table className="min-w-full text-sm text-left">
-            <thead className="text-gray-400 border-b border-gray-700">
-              <tr>
-                <th className="py-2 pr-4">Ticker</th>
-                <th className="py-2 pr-4">As of</th>
-                <th className="py-2 pr-4">Signal</th>
-                <th className="py-2 pr-4">Size</th>
-                <th className="py-2 pr-4">Flat @</th>
-                <th className="py-2 pr-4">Band L/S flat</th>
-                <th className="py-2 pr-4">Tier / y2y3</th>
-              </tr>
-            </thead>
-            <tbody>
-              {board.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-4 text-gray-500">
-                    No board rows yet.
-                  </td>
-                </tr>
-              ) : (
-                board.map((row) => {
-                  const primary = row.primary || row.signals?.[0]
-                  return (
-                    <tr
-                      key={row.ticker}
-                      className="border-b border-gray-800 hover:bg-gray-800/40 cursor-pointer"
-                      onClick={() => row.ticker && setTicker(row.ticker)}
-                    >
-                      <td className="py-2 pr-4 text-white font-medium">{row.ticker}</td>
-                      <td className="py-2 pr-4 text-gray-300">{row.as_of_date || '—'}</td>
-                      <td className="py-2 pr-4">
-                        {primary ? <SideBadge side={primary.side} /> : (
-                          <span className="text-gray-500">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-4 text-gray-200">
-                        {primary?.size != null ? `${primary.size.toFixed(1)}x` : '—'}
-                      </td>
-                      <td className="py-2 pr-4 text-amber-300 font-medium">
-                        {money(primary?.reclaim_price ?? primary?.flat_price)}
-                      </td>
-                      <td className="py-2 pr-4 text-gray-300">
-                        {money(row.range?.long_flat_price ?? row.range?.pred_low)}
-                        {' / '}
-                        {money(row.range?.short_flat_price ?? row.range?.pred_high)}
-                      </td>
-                      <td className="py-2 pr-4 text-gray-400">
-                        {row.context?.long_tier || '—'}/{row.context?.short_tier || '—'} · hands{' '}
-                        {row.context?.y2y3_hands ?? '—'}
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
         <p className="mt-6 text-xs text-gray-500 max-w-3xl">
-          Research notes live privately under <code>tradespark/range_reclaim/README.md</code>. Step
-          Function backups for reverse:{' '}
-          <code>infrastructure/step-functions/_backups/pre-range-reclaim_*</code>.
+          OS % = overshoot beyond the Model1 band vs prev close. Rank = size first (1.0 / 1.5 /
+          2.0), then higher OS %.
         </p>
       </div>
     </div>
