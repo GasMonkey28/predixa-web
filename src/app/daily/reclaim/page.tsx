@@ -50,6 +50,18 @@ type ReclaimPayload = {
   primary?: Signal | null
 }
 
+type WinRateSide = {
+  win_rate_pct?: number
+  n?: number
+  avg_pnl_pct?: number | null
+  avg_hold?: number | null
+}
+
+type WinRatesPayload = {
+  tickers?: Record<string, { long?: WinRateSide; short?: WinRateSide }>
+  rules?: { note?: string; long?: string; short?: string }
+}
+
 type RankedRow = {
   rank: number
   ticker: string
@@ -58,6 +70,8 @@ type RankedRow = {
   long_tier?: string
   short_tier?: string
   y2y3_hands?: number
+  win_rate_pct?: number
+  win_n?: number
 }
 
 const TICKER_OPTIONS = ['SPY', ...EQUITY_TICKERS]
@@ -87,12 +101,17 @@ function SideBadge({ side }: { side: string }) {
   )
 }
 
-function rankSignals(board: ReclaimPayload[], side: 'long' | 'short'): RankedRow[] {
+function rankSignals(
+  board: ReclaimPayload[],
+  side: 'long' | 'short',
+  winRates?: WinRatesPayload | null
+): RankedRow[] {
   const rows: Omit<RankedRow, 'rank'>[] = []
   for (const row of board) {
     if (!row.ticker || row.fallback) continue
     for (const signal of row.signals || []) {
       if (signal.side !== side) continue
+      const wr = winRates?.tickers?.[row.ticker]?.[side]
       rows.push({
         ticker: row.ticker,
         as_of_date: row.as_of_date,
@@ -100,6 +119,8 @@ function rankSignals(board: ReclaimPayload[], side: 'long' | 'short'): RankedRow
         long_tier: row.context?.long_tier,
         short_tier: row.context?.short_tier,
         y2y3_hands: row.context?.y2y3_hands,
+        win_rate_pct: wr?.win_rate_pct,
+        win_n: wr?.n,
       })
     }
   }
@@ -137,6 +158,8 @@ function RankedSignalTable({
             <th className="py-2 pr-3">#</th>
             <th className="py-2 pr-3">Ticker</th>
             <th className="py-2 pr-3">Size</th>
+            <th className="py-2 pr-3">Win %</th>
+            <th className="py-2 pr-3">n</th>
             <th className="py-2 pr-3">OS %</th>
             <th className="py-2 pr-3">OS $</th>
             <th className="py-2 pr-3">Flat @</th>
@@ -149,7 +172,7 @@ function RankedSignalTable({
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={10} className="py-4 text-gray-500">
+              <td colSpan={12} className="py-4 text-gray-500">
                 No {side} reclaim signals.
               </td>
             </tr>
@@ -167,6 +190,10 @@ function RankedSignalTable({
                   <td className="py-2 pr-3 text-white font-semibold">
                     {(s.size ?? 0).toFixed(1)}x
                   </td>
+                  <td className="py-2 pr-3 text-sky-300 font-semibold">
+                    {row.win_rate_pct != null ? pct(row.win_rate_pct) : '—'}
+                  </td>
+                  <td className="py-2 pr-3 text-gray-400">{row.win_n ?? '—'}</td>
                   <td className="py-2 pr-3 text-amber-300 font-semibold">{pct(s.overshoot_pct)}</td>
                   <td className="py-2 pr-3 text-gray-300">{money(s.overshoot)}</td>
                   <td className="py-2 pr-3 text-amber-200">{money(s.reclaim_price ?? s.flat_price)}</td>
@@ -194,6 +221,7 @@ function ReclaimPageContent() {
   const [ticker, setTicker] = useState('SPY')
   const [data, setData] = useState<ReclaimPayload | null>(null)
   const [board, setBoard] = useState<ReclaimPayload[]>([])
+  const [winRates, setWinRates] = useState<WinRatesPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -209,6 +237,7 @@ function ReclaimPageContent() {
       ])
       setData(one)
       setBoard(Array.isArray(all?.rows) ? all.rows : [])
+      setWinRates(all?.win_rates ?? null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
@@ -221,8 +250,12 @@ function ReclaimPageContent() {
   }, [ticker, load])
 
   const active = useMemo(() => data?.signals ?? [], [data])
-  const longRanked = useMemo(() => rankSignals(board, 'long'), [board])
-  const shortRanked = useMemo(() => rankSignals(board, 'short'), [board])
+  const longRanked = useMemo(() => rankSignals(board, 'long', winRates), [board, winRates])
+  const shortRanked = useMemo(() => rankSignals(board, 'short', winRates), [board, winRates])
+  const detailWin = useMemo(() => {
+    const t = data?.ticker || ticker
+    return winRates?.tickers?.[t] ?? null
+  }, [winRates, data?.ticker, ticker])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900">
@@ -326,6 +359,22 @@ function ReclaimPageContent() {
                     <dd className="text-white">{money(data.range?.min_overshoot)}</dd>
                   </div>
                   <div className="flex justify-between gap-4 pt-2 border-t border-gray-700">
+                    <dt>Hist long win</dt>
+                    <dd className="text-sky-300">
+                      {detailWin?.long?.win_rate_pct != null
+                        ? `${pct(detailWin.long.win_rate_pct)} (n=${detailWin.long.n ?? '—'})`
+                        : '—'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt>Hist short win</dt>
+                    <dd className="text-sky-300">
+                      {detailWin?.short?.win_rate_pct != null
+                        ? `${pct(detailWin.short.win_rate_pct)} (n=${detailWin.short.n ?? '—'})`
+                        : '—'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4 pt-2 border-t border-gray-700">
                     <dt>Long tier</dt>
                     <dd>{data.context?.long_tier ?? '—'}</dd>
                   </div>
@@ -405,7 +454,9 @@ function ReclaimPageContent() {
 
         <p className="mt-6 text-xs text-gray-500 max-w-3xl">
           OS % = overshoot beyond the Model1 band vs prev close. Rank = size first (1.0 / 1.5 /
-          2.0), then higher OS %.
+          2.0), then higher OS %. Win % = historical backtest under production reclaim rules
+          (long: no stop to band; short: 1% stop, unfiltered base). Sample size shown as n.
+          {winRates?.rules?.note ? ` ${winRates.rules.note}` : ''}
         </p>
       </div>
     </div>

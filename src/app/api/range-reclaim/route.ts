@@ -9,6 +9,7 @@ import {
   isSupportedTicker,
   normalizeTicker,
   rangeReclaimLatestKey,
+  rangeReclaimWinRatesKey,
   tickerBucket,
 } from '@/lib/tickers'
 
@@ -52,18 +53,34 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const board = searchParams.get('board') === '1'
+  const stats = searchParams.get('stats') === '1'
   const ticker = normalizeTicker(searchParams.get('ticker'))
 
   try {
+    if (stats) {
+      const { data } = await fetchKey(BUCKET, rangeReclaimWinRatesKey())
+      return NextResponse.json(data, {
+        headers: {
+          'Cache-Control': 'no-store',
+          ...getRateLimitHeaders(clientIp),
+        },
+      })
+    }
+
     if (board) {
       const tickers = ['SPY', ...EQUITY_TICKERS]
-      const settled = await Promise.allSettled(
-        tickers.map(async (t) => {
-          const key = rangeReclaimLatestKey(t)
-          const { data } = await fetchKey(tickerBucket(t, BUCKET), key)
-          return { ticker: t, ...data }
-        })
-      )
+      const [settled, winRatesSettled] = await Promise.all([
+        Promise.allSettled(
+          tickers.map(async (t) => {
+            const key = rangeReclaimLatestKey(t)
+            const { data } = await fetchKey(tickerBucket(t, BUCKET), key)
+            return { ticker: t, ...data }
+          })
+        ),
+        fetchKey(BUCKET, rangeReclaimWinRatesKey())
+          .then((r) => r.data)
+          .catch(() => null),
+      ])
       const rows = settled.map((r, i) =>
         r.status === 'fulfilled'
           ? r.value
@@ -81,6 +98,7 @@ export async function GET(request: Request) {
           generated_at: new Date().toISOString(),
           count: rows.length,
           rows,
+          win_rates: winRatesSettled,
         },
         {
           headers: {

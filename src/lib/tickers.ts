@@ -48,3 +48,8 @@ export function rangeReclaimLatestKey(ticker: string): string {
 export function rangeReclaimDatedKey(ticker: string, date: string): string {
   return `range_reclaim/${normalizeTicker(ticker)}/${date}.json`
 }
+
+/** Historical backtest win rates for Model Reclaim (long/short by ticker). */
+export function rangeReclaimWinRatesKey(): string {
+  return 'range_reclaim/stats/win_rates.json'
+}
