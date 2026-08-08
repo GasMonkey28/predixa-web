@@ -173,7 +173,7 @@ function RankedSignalTable({
           {rows.length === 0 ? (
             <tr>
               <td colSpan={12} className="py-4 text-gray-500">
-                No {side} reclaim signals.
+                No {side} reclaim signals at this win% filter.
               </td>
             </tr>
           ) : (
@@ -222,6 +222,7 @@ function ReclaimPageContent() {
   const [data, setData] = useState<ReclaimPayload | null>(null)
   const [board, setBoard] = useState<ReclaimPayload[]>([])
   const [winRates, setWinRates] = useState<WinRatesPayload | null>(null)
+  const [minWinPct, setMinWinPct] = useState(80)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -250,8 +251,22 @@ function ReclaimPageContent() {
   }, [ticker, load])
 
   const active = useMemo(() => data?.signals ?? [], [data])
-  const longRanked = useMemo(() => rankSignals(board, 'long', winRates), [board, winRates])
-  const shortRanked = useMemo(() => rankSignals(board, 'short', winRates), [board, winRates])
+  const longAll = useMemo(() => rankSignals(board, 'long', winRates), [board, winRates])
+  const shortAll = useMemo(() => rankSignals(board, 'short', winRates), [board, winRates])
+  const longRanked = useMemo(
+    () =>
+      longAll
+        .filter((r) => r.win_rate_pct != null && r.win_rate_pct >= minWinPct)
+        .map((r, i) => ({ ...r, rank: i + 1 })),
+    [longAll, minWinPct]
+  )
+  const shortRanked = useMemo(
+    () =>
+      shortAll
+        .filter((r) => r.win_rate_pct != null && r.win_rate_pct >= minWinPct)
+        .map((r, i) => ({ ...r, rank: i + 1 })),
+    [shortAll, minWinPct]
+  )
   const detailWin = useMemo(() => {
     const t = data?.ticker || ticker
     return winRates?.tickers?.[t] ?? null
@@ -273,26 +288,52 @@ function ReclaimPageContent() {
         </motion.div>
 
         <div className="mb-6 flex flex-wrap items-center gap-3 justify-between">
-          <label className="text-sm text-gray-300 flex items-center gap-2">
-            Ticker detail
-            <select
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value)}
-              className="rounded-md bg-gray-800 border border-gray-700 text-white px-3 py-2"
-            >
-              {TICKER_OPTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="text-sm text-gray-300 flex items-center gap-2">
+              Ticker detail
+              <select
+                value={ticker}
+                onChange={(e) => setTicker(e.target.value)}
+                className="rounded-md bg-gray-800 border border-gray-700 text-white px-3 py-2"
+              >
+                {TICKER_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-gray-300 flex items-center gap-2">
+              Min win %
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={minWinPct}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  if (Number.isNaN(v)) return
+                  setMinWinPct(Math.min(100, Math.max(0, v)))
+                }}
+                className="w-20 rounded-md bg-gray-800 border border-gray-700 text-white px-3 py-2"
+              />
+            </label>
+          </div>
           <div className="flex items-center gap-3 text-sm text-gray-400">
             <span>
-              Longs <span className="text-emerald-300 font-medium">{longRanked.length}</span>
+              Longs{' '}
+              <span className="text-emerald-300 font-medium">
+                {longRanked.length}
+              </span>
+              <span className="text-gray-600">/{longAll.length}</span>
             </span>
             <span>
-              Shorts <span className="text-rose-300 font-medium">{shortRanked.length}</span>
+              Shorts{' '}
+              <span className="text-rose-300 font-medium">
+                {shortRanked.length}
+              </span>
+              <span className="text-gray-600">/{shortAll.length}</span>
             </span>
             <button
               type="button"
@@ -307,13 +348,13 @@ function ReclaimPageContent() {
         {!loading && (
           <div className="grid gap-6 mb-10">
             <RankedSignalTable
-              title={`Long reclaim (${longRanked.length})`}
+              title={`Long reclaim (${longRanked.length} ≥ ${minWinPct}% win)`}
               side="long"
               rows={longRanked}
               onSelect={setTicker}
             />
             <RankedSignalTable
-              title={`Short reclaim (${shortRanked.length})`}
+              title={`Short reclaim (${shortRanked.length} ≥ ${minWinPct}% win)`}
               side="short"
               rows={shortRanked}
               onSelect={setTicker}
@@ -454,8 +495,9 @@ function ReclaimPageContent() {
 
         <p className="mt-6 text-xs text-gray-500 max-w-3xl">
           OS % = overshoot beyond the Model1 band vs prev close. Rank = size first (1.0 / 1.5 /
-          2.0), then higher OS %. Win % = historical backtest under production reclaim rules
-          (long: no stop to band; short: 1% stop, unfiltered base). Sample size shown as n.
+          2.0), then higher OS %. Win % filter defaults to 80% (editable). Win % = historical
+          backtest under production reclaim rules (long: no stop to band; short: 1% stop,
+          unfiltered base). Sample size shown as n.
           {winRates?.rules?.note ? ` ${winRates.rules.note}` : ''}
         </p>
       </div>
