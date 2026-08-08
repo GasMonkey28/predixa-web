@@ -35,6 +35,8 @@ type ReclaimPayload = {
     prev_close?: number
     pred_high?: number
     pred_low?: number
+    long_flat_price?: number
+    short_flat_price?: number
     min_overshoot?: number
     os_pct?: number
   }
@@ -49,6 +51,11 @@ type ReclaimPayload = {
 }
 
 const TICKER_OPTIONS = ['SPY', ...EQUITY_TICKERS]
+
+function money(n?: number | null) {
+  if (n == null || Number.isNaN(Number(n))) return '—'
+  return Number(n).toFixed(2)
+}
 
 function SideBadge({ side }: { side: string }) {
   const long = side === 'long'
@@ -155,19 +162,23 @@ function ReclaimPageContent() {
                 <dl className="space-y-2 text-sm text-gray-300">
                   <div className="flex justify-between gap-4">
                     <dt>Prev close</dt>
-                    <dd className="text-white">{data.range?.prev_close ?? '—'}</dd>
+                    <dd className="text-white">{money(data.range?.prev_close)}</dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt>Pred high</dt>
-                    <dd className="text-rose-300">{data.range?.pred_high ?? '—'}</dd>
+                    <dt>Pred high / short flat</dt>
+                    <dd className="text-rose-300">
+                      {money(data.range?.short_flat_price ?? data.range?.pred_high)}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt>Pred low</dt>
-                    <dd className="text-emerald-300">{data.range?.pred_low ?? '—'}</dd>
+                    <dt>Pred low / long flat</dt>
+                    <dd className="text-emerald-300">
+                      {money(data.range?.long_flat_price ?? data.range?.pred_low)}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt>Min OS</dt>
-                    <dd className="text-white">{data.range?.min_overshoot ?? '—'}</dd>
+                    <dd className="text-white">{money(data.range?.min_overshoot)}</dd>
                   </div>
                   <div className="flex justify-between gap-4 pt-2 border-t border-gray-700">
                     <dt>Long tier</dt>
@@ -188,7 +199,19 @@ function ReclaimPageContent() {
             <div className="rounded-xl border border-gray-700 bg-gray-900/70 p-5 lg:col-span-2">
               <h2 className="text-white font-semibold mb-3">Active signals</h2>
               {active.length === 0 ? (
-                <p className="text-gray-400 text-sm">No reclaim breach for this as-of window.</p>
+                <div className="space-y-3 text-sm">
+                  <p className="text-gray-400">No reclaim breach for this as-of window.</p>
+                  <p className="text-gray-300">
+                    Band flat targets (if a breach appears): long flat @{' '}
+                    <span className="text-amber-300 font-semibold">
+                      {money(data.range?.long_flat_price ?? data.range?.pred_low)}
+                    </span>
+                    {' · '}short flat @{' '}
+                    <span className="text-amber-300 font-semibold">
+                      {money(data.range?.short_flat_price ?? data.range?.pred_high)}
+                    </span>
+                  </p>
+                </div>
               ) : (
                 <ul className="space-y-3">
                   {active.map((s) => (
@@ -209,7 +232,7 @@ function ReclaimPageContent() {
                       <p className="text-lg text-white font-semibold tracking-tight">
                         Flat / reclaim @{' '}
                         <span className="text-amber-300">
-                          {s.reclaim_price ?? s.flat_price ?? '—'}
+                          {money(s.reclaim_price ?? s.flat_price)}
                         </span>
                         {s.side === 'long' ? (
                           <span className="text-sm font-normal text-gray-400"> (pred low)</span>
@@ -218,8 +241,8 @@ function ReclaimPageContent() {
                         )}
                       </p>
                       <p className="text-sm text-gray-300 mt-1">
-                        Entry ~{s.entry_price ?? '—'}
-                        {s.stop_price != null ? ` · stop ${s.stop_price}` : ' · no stop'}
+                        Entry ~{money(s.entry_price)}
+                        {s.stop_price != null ? ` · stop ${money(s.stop_price)}` : ' · no stop'}
                         {' · '}Breach {s.breach_date} · OS{' '}
                         {s.overshoot?.toFixed?.(2) ?? s.overshoot} (
                         {s.overshoot_pct?.toFixed?.(2) ?? s.overshoot_pct}%)
@@ -246,13 +269,14 @@ function ReclaimPageContent() {
                 <th className="py-2 pr-4">Signal</th>
                 <th className="py-2 pr-4">Size</th>
                 <th className="py-2 pr-4">Flat @</th>
+                <th className="py-2 pr-4">Band L/S flat</th>
                 <th className="py-2 pr-4">Tier / y2y3</th>
               </tr>
             </thead>
             <tbody>
               {board.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-4 text-gray-500">
+                  <td colSpan={7} className="py-4 text-gray-500">
                     No board rows yet.
                   </td>
                 </tr>
@@ -276,7 +300,12 @@ function ReclaimPageContent() {
                         {primary?.size != null ? `${primary.size.toFixed(1)}x` : '—'}
                       </td>
                       <td className="py-2 pr-4 text-amber-300 font-medium">
-                        {primary?.reclaim_price ?? primary?.flat_price ?? '—'}
+                        {money(primary?.reclaim_price ?? primary?.flat_price)}
+                      </td>
+                      <td className="py-2 pr-4 text-gray-300">
+                        {money(row.range?.long_flat_price ?? row.range?.pred_low)}
+                        {' / '}
+                        {money(row.range?.short_flat_price ?? row.range?.pred_high)}
                       </td>
                       <td className="py-2 pr-4 text-gray-400">
                         {row.context?.long_tier || '—'}/{row.context?.short_tier || '—'} · hands{' '}
