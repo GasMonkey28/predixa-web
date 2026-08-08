@@ -222,7 +222,8 @@ function ReclaimPageContent() {
   const [data, setData] = useState<ReclaimPayload | null>(null)
   const [board, setBoard] = useState<ReclaimPayload[]>([])
   const [winRates, setWinRates] = useState<WinRatesPayload | null>(null)
-  const [minWinPct, setMinWinPct] = useState(80)
+  const [minWinPctLong, setMinWinPctLong] = useState(80)
+  const [minWinPctShort, setMinWinPctShort] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -256,16 +257,16 @@ function ReclaimPageContent() {
   const longRanked = useMemo(
     () =>
       longAll
-        .filter((r) => r.win_rate_pct != null && r.win_rate_pct >= minWinPct)
+        .filter((r) => r.win_rate_pct != null && r.win_rate_pct >= minWinPctLong)
         .map((r, i) => ({ ...r, rank: i + 1 })),
-    [longAll, minWinPct]
+    [longAll, minWinPctLong]
   )
   const shortRanked = useMemo(
     () =>
       shortAll
-        .filter((r) => r.win_rate_pct != null && r.win_rate_pct >= minWinPct)
+        .filter((r) => r.win_rate_pct != null && r.win_rate_pct >= minWinPctShort)
         .map((r, i) => ({ ...r, rank: i + 1 })),
-    [shortAll, minWinPct]
+    [shortAll, minWinPctShort]
   )
   const detailWin = useMemo(() => {
     const t = data?.ticker || ticker
@@ -304,17 +305,33 @@ function ReclaimPageContent() {
               </select>
             </label>
             <label className="text-sm text-gray-300 flex items-center gap-2">
-              Min win %
+              Long min win %
               <input
                 type="number"
                 min={0}
                 max={100}
                 step={1}
-                value={minWinPct}
+                value={minWinPctLong}
                 onChange={(e) => {
                   const v = Number(e.target.value)
                   if (Number.isNaN(v)) return
-                  setMinWinPct(Math.min(100, Math.max(0, v)))
+                  setMinWinPctLong(Math.min(100, Math.max(0, v)))
+                }}
+                className="w-20 rounded-md bg-gray-800 border border-gray-700 text-white px-3 py-2"
+              />
+            </label>
+            <label className="text-sm text-gray-300 flex items-center gap-2">
+              Short min win %
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={minWinPctShort}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  if (Number.isNaN(v)) return
+                  setMinWinPctShort(Math.min(100, Math.max(0, v)))
                 }}
                 className="w-20 rounded-md bg-gray-800 border border-gray-700 text-white px-3 py-2"
               />
@@ -348,13 +365,13 @@ function ReclaimPageContent() {
         {!loading && (
           <div className="grid gap-6 mb-10">
             <RankedSignalTable
-              title={`Long reclaim (${longRanked.length} ≥ ${minWinPct}% win)`}
+              title={`Long reclaim (${longRanked.length} ≥ ${minWinPctLong}% win)`}
               side="long"
               rows={longRanked}
               onSelect={setTicker}
             />
             <RankedSignalTable
-              title={`Short reclaim (${shortRanked.length} ≥ ${minWinPct}% win)`}
+              title={`Short reclaim (${shortRanked.length} ≥ ${minWinPctShort}% win)`}
               side="short"
               rows={shortRanked}
               onSelect={setTicker}
@@ -495,9 +512,9 @@ function ReclaimPageContent() {
 
         <p className="mt-6 text-xs text-gray-500 max-w-3xl">
           OS % = overshoot beyond the Model1 band vs prev close. Rank = size first (1.0 / 1.5 /
-          2.0), then higher OS %. Win % filter defaults to 80% (editable). Win % = historical
-          backtest under production reclaim rules (long: no stop to band; short: 1% stop,
-          unfiltered base). Sample size shown as n.
+          2.0), then higher OS %. Long min win % defaults to 80; short defaults to 0 (both
+          editable). Win % = historical backtest under production reclaim rules (long: no stop
+          to band; short: 1% stop, unfiltered base). Sample size shown as n.
           {winRates?.rules?.note ? ` ${winRates.rules.note}` : ''}
         </p>
       </div>
