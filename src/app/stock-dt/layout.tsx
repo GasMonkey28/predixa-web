@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import { createMetadata } from '@/lib/seo'
 
 export const metadata: Metadata = createMetadata({
-  title: 'Stock DT | Summary Long/Short Paper Trades | Predixa',
+  title: 'Stock DT | Summary Ranks or Model Reclaim Paper Trades | Predixa',
   description:
-    'Day-trade equities from summary long/short ranks above the 17 line on TradeStation paper, score-weighted across $5k long / $5k short.',
+    'Day-trade equities from summary long/short ranks or Model Reclaim win-rate filters on TradeStation paper, score-weighted across an adjustable per-side budget (default $5k).',
   path: '/stock-dt',
 })
 

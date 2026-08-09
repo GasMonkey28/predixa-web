@@ -1,18 +1,31 @@
+import axios from 'axios'
+
 import {
+  STOCK_DT_RECLAIM_MIN_WIN_PCT,
   STOCK_DT_SCORE_LINE,
   STOCK_DT_SIDE_BUDGET,
+  type StockDtBuySource,
   type StockDtCandidate,
   type StockDtPlanResponse,
   type StockDtSide,
   type StockDtSidePlan,
 } from '@/lib/stock-dt'
 import { dayMoveFromQuote, type DtMarketQuotes, type DtTickerQuote } from '@/lib/dt-quotes'
+import { config } from '@/lib/server/config'
 import { buildTickerRanks } from '@/lib/server/ticker-ranks'
 import {
   fetchQuoteSnapshots,
   type TradeStationQuote,
 } from '@/lib/server/tradestation-client'
 import type { TickerRankRow } from '@/lib/ticker-ranks'
+import {
+  EQUITY_TICKERS,
+  rangeReclaimLatestKey,
+  rangeReclaimWinRatesKey,
+  tickerBucket,
+} from '@/lib/tickers'
+
+const BUCKET = config.marketData.bucket
 
 function toNum(value: string | number | undefined | null): number | undefined {
   if (value == null || value === '') return undefined
@@ -40,10 +53,11 @@ function pickPrice(quote: TradeStationQuote | undefined, side: StockDtSide): num
 function buildMarketSide(
   side: StockDtSide,
   rows: TickerRankRow[],
-  quotesBySymbol: Map<string, TradeStationQuote>
+  quotesBySymbol: Map<string, TradeStationQuote>,
+  minScore: number
 ): DtTickerQuote[] {
   return rows
-    .filter((r) => (r.score ?? Number.NEGATIVE_INFINITY) >= STOCK_DT_SCORE_LINE)
+    .filter((r) => (r.score ?? Number.NEGATIVE_INFINITY) >= minScore)
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     .map((row) => {
       const move = dayMoveFromQuote(quotesBySymbol.get(row.ticker.toUpperCase()))
@@ -63,10 +77,13 @@ function allocateSide(input: {
   side: StockDtSide
   rows: TickerRankRow[]
   quotesBySymbol: Map<string, TradeStationQuote>
+  sideBudget: number
+  minScore: number
+  source: StockDtBuySource
 }): StockDtSidePlan {
-  const { side, rows, quotesBySymbol } = input
+  const { side, rows, quotesBySymbol, sideBudget, minScore, source } = input
   const above = rows
-    .filter((r) => (r.score ?? Number.NEGATIVE_INFINITY) >= STOCK_DT_SCORE_LINE)
+    .filter((r) => (r.score ?? Number.NEGATIVE_INFINITY) >= minScore)
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
 
   const skipped: StockDtSidePlan['skipped'] = []
@@ -97,7 +114,7 @@ function allocateSide(input: {
 
   for (const item of priced) {
     const weight = scoreSum > 0 ? Math.max(item.score, 0) / scoreSum : 1 / priced.length
-    const targetDollars = Math.round(STOCK_DT_SIDE_BUDGET * weight * 100) / 100
+    const targetDollars = Math.round(sideBudget * weight * 100) / 100
     let quantity = Math.floor(targetDollars / item.price)
     if (quantity < 1) quantity = 1
     quantity = Math.min(quantity, 10_000)
@@ -105,6 +122,11 @@ function allocateSide(input: {
     const estimatedCost = Math.round(quantity * item.price * 100) / 100
     const weightPct = Math.round(weight * 1000) / 10
     const move = dayMoveFromQuote(item.quote)
+
+    const reason =
+      source === 'model_reclaim'
+        ? `Win ${item.score.toFixed(1)}% · weighted ${weightPct}% · target $${targetDollars.toFixed(0)}`
+        : `Score-weighted ${weightPct}% · target $${targetDollars.toFixed(0)}`
 
     candidates.push({
       id: `${side}:${item.row.ticker}`,
@@ -125,7 +147,7 @@ function allocateSide(input: {
       targetDollars,
       quantity,
       estimatedCost,
-      reason: `Score-weighted ${weightPct}% · target $${targetDollars.toFixed(0)}`,
+      reason,
     })
   }
 
@@ -133,22 +155,141 @@ function allocateSide(input: {
 
   return {
     side,
-    budget: STOCK_DT_SIDE_BUDGET,
+    budget: sideBudget,
     spent,
-    remaining: Math.round((STOCK_DT_SIDE_BUDGET - spent) * 100) / 100,
+    remaining: Math.round((sideBudget - spent) * 100) / 100,
     candidates,
     skipped,
   }
+}
+
+type ReclaimSignal = { side?: string; size?: number; overshoot_pct?: number }
+type ReclaimRow = {
+  ticker?: string
+  as_of_date?: string
+  fallback?: boolean
+  signals?: ReclaimSignal[]
+}
+type WinRatesPayload = {
+  tickers?: Record<string, { long?: { win_rate_pct?: number }; short?: { win_rate_pct?: number } }>
+}
+
+async function fetchS3Json(bucket: string, key: string): Promise<unknown> {
+  const urls = [
+    `https://s3.amazonaws.com/${bucket}/${key}`,
+    `https://${bucket}.s3.amazonaws.com/${key}`,
+  ]
+  let lastErr: unknown = null
+  for (const url of urls) {
+    try {
+      const response = await axios.get(url, {
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+        timeout: 10_000,
+      })
+      return response.data
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  throw lastErr
+}
+
+async function loadModelReclaimRows(minWinPct: number): Promise<{
+  longRows: TickerRankRow[]
+  shortRows: TickerRankRow[]
+  asOf: string | null
+  warnings: string[]
+}> {
+  const warnings: string[] = []
+  const tickers = ['SPY', ...EQUITY_TICKERS]
+  const [settled, winRatesSettled] = await Promise.all([
+    Promise.allSettled(
+      tickers.map(async (t) => {
+        const key = rangeReclaimLatestKey(t)
+        const data = (await fetchS3Json(tickerBucket(t, BUCKET), key)) as ReclaimRow
+        return { ticker: t, ...data }
+      })
+    ),
+    fetchS3Json(BUCKET, rangeReclaimWinRatesKey())
+      .then((d) => d as WinRatesPayload)
+      .catch(() => null),
+  ])
+
+  const winRates = winRatesSettled
+  if (!winRates?.tickers) {
+    warnings.push('Model Reclaim win rates unavailable — no candidates can pass the win-rate filter.')
+  }
+
+  const longRows: TickerRankRow[] = []
+  const shortRows: TickerRankRow[] = []
+  let asOf: string | null = null
+
+  for (let i = 0; i < settled.length; i++) {
+    const result = settled[i]
+    if (result.status !== 'fulfilled') continue
+    const row = result.value
+    if (!row.ticker || row.fallback) continue
+    if (row.as_of_date && !asOf) asOf = String(row.as_of_date)
+
+    for (const signal of row.signals || []) {
+      const side = signal.side === 'short' ? 'short' : signal.side === 'long' ? 'long' : null
+      if (!side) continue
+      const wr = winRates?.tickers?.[row.ticker]?.[side]?.win_rate_pct
+      if (wr == null || !Number.isFinite(wr) || wr < minWinPct) continue
+
+      const ranked: TickerRankRow = {
+        rank: 0,
+        ticker: row.ticker,
+        score: wr,
+        position_size: signal.size,
+        signal: `reclaim_${side}`,
+        as_of: row.as_of_date ? String(row.as_of_date) : null,
+      }
+      if (side === 'long') longRows.push(ranked)
+      else shortRows.push(ranked)
+    }
+  }
+
+  longRows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+  shortRows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+  longRows.forEach((r, i) => {
+    r.rank = i + 1
+  })
+  shortRows.forEach((r, i) => {
+    r.rank = i + 1
+  })
+
+  if (longRows.length === 0 && shortRows.length === 0) {
+    warnings.push(
+      `No Model Reclaim signals today with win rate ≥ ${minWinPct}%. Adjust the floor or check /daily/reclaim.`
+    )
+  }
+
+  return { longRows, shortRows, asOf, warnings }
+}
+
+function clampBudget(raw: number | undefined | null): number {
+  if (raw == null || !Number.isFinite(raw)) return STOCK_DT_SIDE_BUDGET
+  return Math.max(100, Math.min(1_000_000, Math.round(raw)))
+}
+
+function clampMinWinPct(raw: number | undefined | null): number {
+  if (raw == null || !Number.isFinite(raw)) return STOCK_DT_RECLAIM_MIN_WIN_PCT
+  return Math.max(0, Math.min(100, raw))
 }
 
 export async function buildStockDtPlan(input: {
   accessToken: string
   accountId?: string | null
   tradeScopesOk: boolean
+  source?: StockDtBuySource | null
+  sideBudget?: number | null
+  minWinPct?: number | null
 }): Promise<StockDtPlanResponse> {
-  const ranks = await buildTickerRanks()
-  const summaryLong = ranks.boards.find((b) => b.id === 'summary_long')
-  const summaryShort = ranks.boards.find((b) => b.id === 'summary_short')
+  const source: StockDtBuySource =
+    input.source === 'ticker_ranks' ? 'ticker_ranks' : 'model_reclaim'
+  const sideBudget = clampBudget(input.sideBudget)
+  const minWinPct = clampMinWinPct(input.minWinPct)
   const warnings: string[] = []
 
   if (!input.tradeScopesOk) {
@@ -157,13 +298,31 @@ export async function buildStockDtPlan(input: {
     )
   }
 
-  const longRows = summaryLong?.rows ?? []
-  const shortRows = summaryShort?.rows ?? []
+  let longRows: TickerRankRow[] = []
+  let shortRows: TickerRankRow[] = []
+  let minScore = STOCK_DT_SCORE_LINE
+  let asOf: string | null = null
+
+  if (source === 'model_reclaim') {
+    minScore = minWinPct
+    const reclaim = await loadModelReclaimRows(minWinPct)
+    longRows = reclaim.longRows
+    shortRows = reclaim.shortRows
+    asOf = reclaim.asOf
+    warnings.push(...reclaim.warnings)
+  } else {
+    const ranks = await buildTickerRanks()
+    const summaryLong = ranks.boards.find((b) => b.id === 'summary_long')
+    const summaryShort = ranks.boards.find((b) => b.id === 'summary_short')
+    longRows = summaryLong?.rows ?? []
+    shortRows = summaryShort?.rows ?? []
+  }
+
   const longAbove = longRows.filter(
-    (r) => (r.score ?? Number.NEGATIVE_INFINITY) >= STOCK_DT_SCORE_LINE
+    (r) => (r.score ?? Number.NEGATIVE_INFINITY) >= minScore
   )
   const shortAbove = shortRows.filter(
-    (r) => (r.score ?? Number.NEGATIVE_INFINITY) >= STOCK_DT_SCORE_LINE
+    (r) => (r.score ?? Number.NEGATIVE_INFINITY) >= minScore
   )
 
   const tickers = Array.from(
@@ -186,25 +345,43 @@ export async function buildStockDtPlan(input: {
     }
   }
 
-  const long = allocateSide({ side: 'long', rows: longRows, quotesBySymbol })
-  const short = allocateSide({ side: 'short', rows: shortRows, quotesBySymbol })
+  const long = allocateSide({
+    side: 'long',
+    rows: longRows,
+    quotesBySymbol,
+    sideBudget,
+    minScore,
+    source,
+  })
+  const short = allocateSide({
+    side: 'short',
+    rows: shortRows,
+    quotesBySymbol,
+    sideBudget,
+    minScore,
+    source,
+  })
   const market: DtMarketQuotes = {
-    long: buildMarketSide('long', longRows, quotesBySymbol),
-    short: buildMarketSide('short', shortRows, quotesBySymbol),
+    long: buildMarketSide('long', longRows, quotesBySymbol, minScore),
+    short: buildMarketSide('short', shortRows, quotesBySymbol, minScore),
   }
 
-  const asOf =
-    longAbove[0]?.as_of ||
-    shortAbove[0]?.as_of ||
-    longRows[0]?.as_of ||
-    shortRows[0]?.as_of ||
-    null
+  if (source === 'ticker_ranks') {
+    asOf =
+      longAbove[0]?.as_of ||
+      shortAbove[0]?.as_of ||
+      longRows[0]?.as_of ||
+      shortRows[0]?.as_of ||
+      null
+  }
 
   return {
     generated_at: new Date().toISOString(),
     ranks_as_of: asOf,
-    score_line: STOCK_DT_SCORE_LINE,
-    side_budget: STOCK_DT_SIDE_BUDGET,
+    source,
+    score_line: minScore,
+    min_win_pct: source === 'model_reclaim' ? minWinPct : undefined,
+    side_budget: sideBudget,
     allocation: 'score_weighted',
     market,
     long,

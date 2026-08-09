@@ -21,8 +21,10 @@ import {
   formatSignedPct,
 } from '@/lib/dt-quotes'
 import {
+  STOCK_DT_RECLAIM_MIN_WIN_PCT,
   STOCK_DT_SCORE_LINE,
   STOCK_DT_SIDE_BUDGET,
+  type StockDtBuySource,
   type StockDtCandidate,
   type StockDtPlanResponse,
   type StockDtSide,
@@ -53,6 +55,8 @@ function SideTable({
   title,
   side,
   plan,
+  source,
+  scoreLine,
   selected,
   onToggle,
   onChangeQuantity,
@@ -60,6 +64,8 @@ function SideTable({
   title: string
   side: StockDtSide
   plan: StockDtPlanResponse['long'] | undefined
+  source: StockDtBuySource
+  scoreLine: number
   selected: Set<string>
   onToggle: (id: string) => void
   onChangeQuantity: (candidateId: string, quantity: number) => void
@@ -67,6 +73,10 @@ function SideTable({
   if (!plan) return null
 
   const overSuggested = plan.spent > plan.budget
+  const filterLabel =
+    source === 'model_reclaim'
+      ? `Model Reclaim win ≥ ${scoreLine}%`
+      : `Summary total ≥ ${scoreLine}`
 
   return (
     <section className="rounded-2xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/85 to-zinc-950/90 overflow-hidden">
@@ -74,8 +84,8 @@ function SideTable({
         <div>
           <h2 className="text-base font-semibold text-white">{title}</h2>
           <p className="text-xs text-zinc-400 mt-1">
-            Summary total ≥ {STOCK_DT_SCORE_LINE} · {side === 'long' ? 'Buy' : 'SellShort'} ·
-            score-weighted across ~{money(STOCK_DT_SIDE_BUDGET)}
+            {filterLabel} · {side === 'long' ? 'Buy' : 'SellShort'} · score-weighted across ~
+            {money(plan.budget)}
           </p>
         </div>
         <div className="text-xs text-zinc-400 text-right">
@@ -83,7 +93,7 @@ function SideTable({
             Est. {money(plan.spent)}
             <span className="text-zinc-500"> · suggested start {money(plan.budget)}</span>
           </div>
-          <div className="text-zinc-500">$5k guides initial qty only — not a buy cap</div>
+          <div className="text-zinc-500">Budget guides initial qty only — not a buy cap</div>
         </div>
       </header>
 
@@ -93,7 +103,9 @@ function SideTable({
             <tr>
               <th className="px-3 py-2 text-left">OK</th>
               <th className="px-3 py-2 text-left">Ticker</th>
-              <th className="px-3 py-2 text-right">Score</th>
+              <th className="px-3 py-2 text-right">
+                {source === 'model_reclaim' ? 'Win %' : 'Score'}
+              </th>
               <th className="px-3 py-2 text-right">Last</th>
               <th className="px-3 py-2 text-right">Change</th>
               <th className="px-3 py-2 text-right">Weight</th>
@@ -107,7 +119,9 @@ function SideTable({
             {plan.candidates.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
-                  No tradeable stocks above the {STOCK_DT_SCORE_LINE} line for this side.
+                  {source === 'model_reclaim'
+                    ? `No tradeable Model Reclaim names with win rate ≥ ${scoreLine}% for this side.`
+                    : `No tradeable stocks above the ${scoreLine} line for this side.`}
                 </td>
               </tr>
             )}
@@ -234,6 +248,9 @@ function StockDtPageContent() {
   const [undoing, setUndoing] = useState(false)
   const [pnlSnapshot, setPnlSnapshot] = useState<DtPnlSnapshot | null>(null)
   const [pnlLoading, setPnlLoading] = useState(false)
+  const [buySource, setBuySource] = useState<StockDtBuySource>('model_reclaim')
+  const [sideBudget, setSideBudget] = useState(STOCK_DT_SIDE_BUDGET)
+  const [minWinPct, setMinWinPct] = useState(STOCK_DT_RECLAIM_MIN_WIN_PCT)
 
   const refreshTs = useCallback(async () => {
     if (!isAuthenticated) {
@@ -399,8 +416,23 @@ function StockDtPageContent() {
     setError(null)
     setPlaceResult(null)
     try {
-      const qs = accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''
-      const res = await fetch(`/api/stock-dt/candidates${qs}`, {
+      const budget = Math.max(
+        100,
+        Math.min(1_000_000, Number.isFinite(sideBudget) ? Math.round(sideBudget) : STOCK_DT_SIDE_BUDGET)
+      )
+      const winFloor = Math.max(
+        0,
+        Math.min(
+          100,
+          Number.isFinite(minWinPct) ? minWinPct : STOCK_DT_RECLAIM_MIN_WIN_PCT
+        )
+      )
+      const params = new URLSearchParams()
+      if (accountId) params.set('accountId', accountId)
+      params.set('source', buySource)
+      params.set('budget', String(budget))
+      if (buySource === 'model_reclaim') params.set('minWinPct', String(winFloor))
+      const res = await fetch(`/api/stock-dt/candidates?${params}`, {
         headers: await authHeaders(),
         credentials: 'include',
         cache: 'no-store',
@@ -416,12 +448,14 @@ function StockDtPageContent() {
     } finally {
       setLoadingPlan(false)
     }
-  }, [accountId, tsConnected])
+  }, [accountId, tsConnected, buySource, sideBudget, minWinPct])
 
   useEffect(() => {
     if (!tsConnected || !accountId || !tradeScopesOk) return
     void loadPlan()
-  }, [tsConnected, accountId, tradeScopesOk, loadPlan])
+    // Budget / min-win apply on Reload; auto-load when account or buy source changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tsConnected, accountId, tradeScopesOk, buySource])
 
   useEffect(() => {
     const onVisible = () => {
@@ -748,9 +782,9 @@ function StockDtPageContent() {
               Stock DT
             </h1>
             <p className="text-gray-300 text-lg max-w-2xl">
-              Paper equity day-trades from Summary Long/Short ranks above the{' '}
-              {STOCK_DT_SCORE_LINE} line. Score-weighted across ~{money(STOCK_DT_SIDE_BUDGET)} long
-              and ~{money(STOCK_DT_SIDE_BUDGET)} short (soft guide). Confirm before send. Flat by
+              Paper equity day-trades from Summary ranks (score ≥ {STOCK_DT_SCORE_LINE}) or today&apos;s
+              Model Reclaim names (win ≥ {STOCK_DT_RECLAIM_MIN_WIN_PCT}%). Score-weighted across a soft
+              per-side budget (default {money(STOCK_DT_SIDE_BUDGET)}). Confirm before send. Flat by
               close.
             </p>
           </div>
@@ -766,6 +800,12 @@ function StockDtPageContent() {
               className="font-medium text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
             >
               ← Ticker ranks
+            </Link>
+            <Link
+              href="/daily/reclaim"
+              className="font-medium text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
+            >
+              Model Reclaim →
             </Link>
           </div>
         </motion.div>
@@ -831,6 +871,49 @@ function StockDtPageContent() {
             >
               Use account
             </button>
+            <label className="flex items-center gap-2 text-xs text-zinc-400">
+              <span className="whitespace-nowrap">Buy from</span>
+              <select
+                value={buySource}
+                onChange={(e) => setBuySource(e.target.value as StockDtBuySource)}
+                className="rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-200 text-sm px-3 py-2 min-w-[12rem]"
+              >
+                <option value="model_reclaim">Model Reclaim (win ≥ 80%)</option>
+                <option value="ticker_ranks">Ticker ranks (Summary)</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-zinc-400">
+              <span className="whitespace-nowrap">Budget / side $</span>
+              <input
+                type="number"
+                min={100}
+                max={1_000_000}
+                step={100}
+                value={sideBudget}
+                onChange={(e) => setSideBudget(Number(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void loadPlan()
+                }}
+                className="w-24 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-200 text-sm px-3 py-2 tabular-nums"
+              />
+            </label>
+            {buySource === 'model_reclaim' && (
+              <label className="flex items-center gap-2 text-xs text-zinc-400">
+                <span className="whitespace-nowrap">Min win %</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={minWinPct}
+                  onChange={(e) => setMinWinPct(Number(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void loadPlan()
+                  }}
+                  className="w-20 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-200 text-sm px-3 py-2 tabular-nums"
+                />
+              </label>
+            )}
             <button
               type="button"
               onClick={() => void loadPlan()}
@@ -911,7 +994,11 @@ function StockDtPageContent() {
           {placeResult && <p className="text-sm text-emerald-300">{placeResult}</p>}
           {plan && (
             <p className="text-xs text-zinc-500">
-              Ranks as of {plan.ranks_as_of || '—'} · plan{' '}
+              {plan.source === 'model_reclaim' ? 'Reclaim' : 'Ranks'} as of {plan.ranks_as_of || '—'} ·{' '}
+              {plan.source === 'model_reclaim'
+                ? `win ≥ ${plan.min_win_pct ?? plan.score_line}%`
+                : `score ≥ ${plan.score_line}`}{' '}
+              · budget {money(plan.side_budget)}/side · plan{' '}
               {new Date(plan.generated_at).toLocaleString()} · selected est. {money(selectedCost)}
             </p>
           )}
@@ -947,18 +1034,30 @@ function StockDtPageContent() {
 
         {loadingPlan && (
           <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/70 px-6 py-16 text-center text-zinc-300">
-            Pulling ranks ≥ {STOCK_DT_SCORE_LINE} and equity quotes…
+            {buySource === 'model_reclaim'
+              ? `Pulling Model Reclaim names (win ≥ ${minWinPct}%) and equity quotes…`
+              : `Pulling ranks ≥ ${STOCK_DT_SCORE_LINE} and equity quotes…`}
           </div>
         )}
 
         {plan && !loadingPlan && (
           <>
-            <DtMarketQuotesBoard market={plan.market} scoreLine={STOCK_DT_SCORE_LINE} />
+            <DtMarketQuotesBoard
+              market={plan.market}
+              scoreLine={plan.score_line}
+              filterLabel={
+                plan.source === 'model_reclaim'
+                  ? `Model Reclaim win ≥ ${plan.min_win_pct ?? plan.score_line}%`
+                  : undefined
+              }
+            />
             <div className="grid grid-cols-1 gap-4">
               <SideTable
                 title="Long · Buy shares"
                 side="long"
                 plan={plan.long}
+                source={plan.source}
+                scoreLine={plan.score_line}
                 selected={selected}
                 onToggle={toggle}
                 onChangeQuantity={changeQuantity}
@@ -967,6 +1066,8 @@ function StockDtPageContent() {
                 title="Short · SellShort shares"
                 side="short"
                 plan={plan.short}
+                source={plan.source}
+                scoreLine={plan.score_line}
                 selected={selected}
                 onToggle={toggle}
                 onChangeQuantity={changeQuantity}

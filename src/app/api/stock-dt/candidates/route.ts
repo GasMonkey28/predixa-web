@@ -37,13 +37,20 @@ export async function GET(request: NextRequest) {
 
   try {
     const { accessToken, connection } = await getValidAccessToken(auth.userId)
-    const accountId =
-      request.nextUrl.searchParams.get('accountId') || connection.selectedAccountId
+    const params = request.nextUrl.searchParams
+    const accountId = params.get('accountId') || connection.selectedAccountId
+    const sourceRaw = (params.get('source') || 'model_reclaim').trim().toLowerCase()
+    const source = sourceRaw === 'ticker_ranks' ? 'ticker_ranks' : 'model_reclaim'
+    const budgetRaw = Number(params.get('budget'))
+    const minWinRaw = Number(params.get('minWinPct'))
 
     const plan = await buildStockDtPlan({
       accessToken,
       accountId,
       tradeScopesOk: connectionHasTradeScopes(connection.scope),
+      source,
+      sideBudget: Number.isFinite(budgetRaw) ? budgetRaw : undefined,
+      minWinPct: Number.isFinite(minWinRaw) ? minWinRaw : undefined,
     })
 
     return NextResponse.json(plan, {

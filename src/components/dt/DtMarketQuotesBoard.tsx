@@ -73,9 +73,12 @@ function SideQuotes({ title, rows }: { title: string; rows: DtTickerQuote[] }) {
 export default function DtMarketQuotesBoard({
   market,
   scoreLine,
+  filterLabel,
 }: {
   market?: DtMarketQuotes | null
   scoreLine: number
+  /** Override the default “Summary ranks ≥ N” subtitle. */
+  filterLabel?: string
 }) {
   if (!market) return null
 
@@ -84,7 +87,7 @@ export default function DtMarketQuotesBoard({
       <div>
         <h2 className="text-base font-semibold text-white">Today · long / short tape</h2>
         <p className="text-xs text-zinc-400 mt-1">
-          Summary ranks ≥ {scoreLine} with TradeStation last and day change.
+          {filterLabel || `Summary ranks ≥ ${scoreLine}`} with TradeStation last and day change.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

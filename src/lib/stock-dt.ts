@@ -5,6 +5,10 @@ import type { DtMarketQuotes } from '@/lib/dt-quotes'
 export const STOCK_DT_SCORE_LINE = 17
 /** Soft sizing guide per side — not a hard buy cap. */
 export const STOCK_DT_SIDE_BUDGET = 5000
+/** Default Model Reclaim long/short win-rate floor (%). */
+export const STOCK_DT_RECLAIM_MIN_WIN_PCT = 80
+
+export type StockDtBuySource = 'ticker_ranks' | 'model_reclaim'
 
 export type StockDtSide = 'long' | 'short'
 
@@ -45,7 +49,11 @@ export interface StockDtSidePlan {
 export interface StockDtPlanResponse {
   generated_at: string
   ranks_as_of?: string | null
+  /** Buy universe: Summary ticker ranks or Model Reclaim win-rate filter. */
+  source: StockDtBuySource
   score_line: number
+  /** For model_reclaim: minimum win_rate_pct used as the score line. */
+  min_win_pct?: number
   side_budget: number
   allocation: 'score_weighted'
   market: DtMarketQuotes
