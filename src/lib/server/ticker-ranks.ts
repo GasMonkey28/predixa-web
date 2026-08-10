@@ -1,8 +1,13 @@
 import axios from 'axios'
 
+import { dayMoveFromQuote } from '@/lib/dt-quotes'
 import { config } from '@/lib/server/config'
 import { etDateString, fetchLatestSummary } from '@/lib/server/summary-json'
 import { logger } from '@/lib/server/logger'
+import {
+  fetchQuoteSnapshots,
+  type TradeStationQuote,
+} from '@/lib/server/tradestation-client'
 import { EQUITY_TICKERS, model2ChartKey, tickerBucket } from '@/lib/tickers'
 import {
   compareMix3Composite,
@@ -356,5 +361,50 @@ export async function buildTickerRanks(): Promise<TickerRanksResponse> {
     ticker_count: EQUITY_TICKERS.length,
     boards,
     errors: errors.length ? errors : undefined,
+  }
+}
+
+/** Attach TradeStation day-move fields onto every rank row (best-effort). */
+export async function enrichTickerRanksWithQuotes(
+  data: TickerRanksResponse,
+  accessToken: string
+): Promise<TickerRanksResponse> {
+  const quotesBySymbol = new Map<string, TradeStationQuote>()
+  const tickers = [...EQUITY_TICKERS]
+  const chunkSize = 40
+  for (let i = 0; i < tickers.length; i += chunkSize) {
+    const chunk = tickers.slice(i, i + chunkSize)
+    try {
+      const quotes = await fetchQuoteSnapshots(accessToken, chunk)
+      for (const q of quotes) {
+        if (q.Symbol) quotesBySymbol.set(q.Symbol.toUpperCase(), q)
+      }
+    } catch (error) {
+      logger.warn(
+        { error: (error as Error)?.message, chunk: chunk.slice(0, 3) },
+        'ticker ranks: quote chunk failed'
+      )
+    }
+  }
+
+  if (quotesBySymbol.size === 0) return data
+
+  return {
+    ...data,
+    boards: data.boards.map((board) => ({
+      ...board,
+      rows: board.rows.map((row) => {
+        const move = dayMoveFromQuote(quotesBySymbol.get(row.ticker.toUpperCase()))
+        if (move.last == null && move.netChange == null && move.netChangePct == null) {
+          return row
+        }
+        return {
+          ...row,
+          last: move.last,
+          net_change: move.netChange,
+          net_change_pct: move.netChangePct,
+        }
+      }),
+    })),
   }
 }

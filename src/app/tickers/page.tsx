@@ -6,6 +6,7 @@ import { motion } from 'motion/react'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { formatSignedPct } from '@/lib/dt-quotes'
 import type { TickerRankBoard, TickerRanksResponse } from '@/lib/ticker-ranks'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +25,22 @@ function formatDiff(diff: number | undefined): string {
   if (diff == null || !Number.isFinite(diff)) return '—'
   if (diff > 0) return `+${diff}`
   return String(diff)
+}
+
+function ChangePctCell({ pct }: { pct: number | undefined }) {
+  if (pct == null || !Number.isFinite(pct)) {
+    return <span className="text-zinc-500">—</span>
+  }
+  const positive = pct >= 0
+  return (
+    <span
+      className={`tabular-nums font-medium ${
+        positive ? 'text-emerald-400' : 'text-rose-400'
+      }`}
+    >
+      {formatSignedPct(pct)}
+    </span>
+  )
 }
 
 function sumBoardTotals(board: TickerRankBoard | undefined): number {
@@ -52,7 +69,7 @@ function RankBoardCard({ board }: { board: TickerRankBoard }) {
   const otherLabel = board.id === 'mix3_long' ? 'Short' : board.id === 'mix3_short' ? 'Long' : null
   const mixScoreLabel = board.id === 'summary_long' ? 'R1 score' : 'R2 score'
   const handsOp = board.id === 'summary_long' ? '+' : '−'
-  const colSpan = isMix ? 9 : isSummary ? 6 : 4
+  const colSpan = isMix ? 10 : isSummary ? 7 : 5
   const summaryTotalSum = isSummary
     ? board.rows.reduce((sum, row) => sum + (Number.isFinite(row.score) ? (row.score as number) : 0), 0)
     : null
@@ -88,6 +105,7 @@ function RankBoardCard({ board }: { board: TickerRankBoard }) {
             <tr>
               <th className="px-3 py-2 text-left font-semibold w-12">#</th>
               <th className="px-3 py-2 text-left font-semibold">Ticker</th>
+              <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">Chg %</th>
               {isMix ? (
                 <>
                   <th className="px-3 py-2 text-left font-semibold">{primaryLabel}</th>
@@ -146,6 +164,9 @@ function RankBoardCard({ board }: { board: TickerRankBoard }) {
                       >
                         {row.ticker}
                       </Link>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <ChangePctCell pct={row.net_change_pct} />
                     </td>
                     {isMix ? (
                       <>
@@ -227,7 +248,7 @@ function RankBoardCard({ board }: { board: TickerRankBoard }) {
           {summaryTotalSum != null && (
             <tfoot className="sticky bottom-0 bg-zinc-950/95 border-t border-zinc-700">
               <tr>
-                <td colSpan={5} className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                <td colSpan={6} className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">
                   Sum of totals
                 </td>
                 <td className="px-3 py-2.5 text-right text-base font-bold tabular-nums text-white">

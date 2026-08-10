@@ -3,7 +3,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 import { logger } from '@/lib/server/logger'
 import { requireSubscriber } from '@/lib/server/require-subscriber'
-import { buildTickerRanks } from '@/lib/server/ticker-ranks'
+import {
+  buildTickerRanks,
+  enrichTickerRanksWithQuotes,
+} from '@/lib/server/ticker-ranks'
+import { getValidAccessToken } from '@/lib/server/tradestation-client'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -40,7 +44,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const data = await buildTickerRanks()
+    let data = await buildTickerRanks()
+    try {
+      const { accessToken } = await getValidAccessToken(auth.userId)
+      data = await enrichTickerRanksWithQuotes(data, accessToken)
+    } catch (error) {
+      // Ranks still work without TradeStation; day-change % just stays empty.
+      logger.info(
+        { userId: auth.userId, message: (error as Error)?.message },
+        'ticker ranks: skipping quote enrichment'
+      )
+    }
     return NextResponse.json(data, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',

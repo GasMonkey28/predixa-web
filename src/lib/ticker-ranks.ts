@@ -35,6 +35,12 @@ export interface TickerRankRow {
   position_size?: number
   /** as-of date from the feeder used */
   as_of?: string | null
+  /** Last trade (TradeStation quote, when available) */
+  last?: number
+  /** Day net change $ (TradeStation quote, when available) */
+  net_change?: number
+  /** Day net change % (TradeStation quote, when available) */
+  net_change_pct?: number
   error?: string | null
 }
 export interface TickerRankBoard {
