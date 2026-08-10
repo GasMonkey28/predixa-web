@@ -18,7 +18,7 @@ const navigationItems = [
     icon: '📝',
   },
   {
-    name: 'DT',
+    name: 'Trade',
     icon: '📉',
     items: [
       {
