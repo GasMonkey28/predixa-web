@@ -370,7 +370,7 @@ function TickersRanksPageContent() {
 
         {loading && !data && (
           <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/70 px-6 py-16 text-center text-zinc-300">
-            Ranking {data?.ticker_count ?? 'all'} tickers…
+            Ranking all tickers…
           </div>
         )}
 
