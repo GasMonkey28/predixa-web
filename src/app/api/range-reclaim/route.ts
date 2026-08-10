@@ -1,9 +1,16 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 
 import { config } from '@/lib/server/config'
+import { dayMoveFromQuote } from '@/lib/dt-quotes'
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 import { logger } from '@/lib/server/logger'
+import { requireSubscriber } from '@/lib/server/require-subscriber'
+import {
+  fetchQuoteSnapshots,
+  getValidAccessToken,
+  type TradeStationQuote,
+} from '@/lib/server/tradestation-client'
 import {
   EQUITY_TICKERS,
   isSupportedTicker,
@@ -15,6 +22,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const maxDuration = 60
 
 const BUCKET = config.marketData.bucket
 
@@ -38,7 +46,51 @@ async function fetchKey(bucket: string, key: string) {
   throw lastErr
 }
 
-export async function GET(request: Request) {
+/** Best-effort TradeStation day-move fields on each board row. */
+async function enrichBoardRowsWithQuotes(
+  rows: Array<Record<string, unknown>>,
+  accessToken: string
+): Promise<Array<Record<string, unknown>>> {
+  const symbols = rows
+    .map((r) => (typeof r.ticker === 'string' ? r.ticker.toUpperCase() : ''))
+    .filter(Boolean)
+  if (symbols.length === 0) return rows
+
+  const quotesBySymbol = new Map<string, TradeStationQuote>()
+  const chunkSize = 40
+  for (let i = 0; i < symbols.length; i += chunkSize) {
+    const chunk = symbols.slice(i, i + chunkSize)
+    try {
+      const quotes = await fetchQuoteSnapshots(accessToken, chunk)
+      for (const q of quotes) {
+        if (q.Symbol) quotesBySymbol.set(q.Symbol.toUpperCase(), q)
+      }
+    } catch (error) {
+      logger.warn(
+        { error: (error as Error)?.message, chunk: chunk.slice(0, 3) },
+        'range reclaim board: quote chunk failed'
+      )
+    }
+  }
+
+  if (quotesBySymbol.size === 0) return rows
+
+  return rows.map((row) => {
+    const ticker = typeof row.ticker === 'string' ? row.ticker.toUpperCase() : ''
+    const move = dayMoveFromQuote(quotesBySymbol.get(ticker))
+    if (move.last == null && move.netChange == null && move.netChangePct == null) {
+      return row
+    }
+    return {
+      ...row,
+      last: move.last,
+      net_change: move.netChange,
+      net_change_pct: move.netChangePct,
+    }
+  })
+}
+
+export async function GET(request: NextRequest) {
   const clientIp =
     (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() ||
     request.headers.get('x-real-ip') ||
@@ -81,7 +133,7 @@ export async function GET(request: Request) {
           .then((r) => r.data)
           .catch(() => null),
       ])
-      const rows = settled.map((r, i) =>
+      let rows: Array<Record<string, unknown>> = settled.map((r, i) =>
         r.status === 'fulfilled'
           ? r.value
           : {
@@ -91,6 +143,20 @@ export async function GET(request: Request) {
               fallback: true,
             }
       )
+
+      try {
+        const auth = await requireSubscriber(request)
+        if (auth.ok) {
+          const { accessToken } = await getValidAccessToken(auth.userId)
+          rows = await enrichBoardRowsWithQuotes(rows, accessToken)
+        }
+      } catch (error) {
+        // Board still works without TradeStation; day-change % just stays empty.
+        logger.info(
+          { message: (error as Error)?.message },
+          'range reclaim board: skipping quote enrichment'
+        )
+      }
 
       return NextResponse.json(
         {

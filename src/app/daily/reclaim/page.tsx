@@ -1,10 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { motion } from 'motion/react'
+import { fetchAuthSession } from 'aws-amplify/auth'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AutoRefreshControls from '@/components/ui/AutoRefreshControls'
 import { useAutoRefresh } from '@/hooks/useAutoRefresh'
+import { formatSignedPct } from '@/lib/dt-quotes'
 import { EQUITY_TICKERS } from '@/lib/tickers'
 
 type Signal = {
@@ -33,6 +36,9 @@ type ReclaimPayload = {
   fallback?: boolean
   error?: string
   hint?: string
+  last?: number
+  net_change?: number
+  net_change_pct?: number
   range?: {
     prev_close?: number
     pred_high?: number
@@ -74,6 +80,7 @@ type RankedRow = {
   y2y3_hands?: number
   win_rate_pct?: number
   win_n?: number
+  net_change_pct?: number
 }
 
 const TICKER_OPTIONS = ['SPY', ...EQUITY_TICKERS]
@@ -86,6 +93,22 @@ function money(n?: number | null) {
 function pct(n?: number | null) {
   if (n == null || Number.isNaN(Number(n))) return '—'
   return `${Number(n).toFixed(2)}%`
+}
+
+function ChangePctCell({ value }: { value?: number }) {
+  if (value == null || !Number.isFinite(value)) {
+    return <span className="text-gray-500">—</span>
+  }
+  const positive = value >= 0
+  return (
+    <span
+      className={`tabular-nums font-medium ${
+        positive ? 'text-emerald-400' : 'text-rose-400'
+      }`}
+    >
+      {formatSignedPct(value)}
+    </span>
+  )
 }
 
 function SideBadge({ side }: { side: string }) {
@@ -123,6 +146,7 @@ function rankSignals(
         y2y3_hands: row.context?.y2y3_hands,
         win_rate_pct: wr?.win_rate_pct,
         win_n: wr?.n,
+        net_change_pct: row.net_change_pct,
       })
     }
   }
@@ -162,6 +186,7 @@ function RankedSignalTable({
             <th className="py-2 pr-3">Size</th>
             <th className="py-2 pr-3">Win %</th>
             <th className="py-2 pr-3">n</th>
+            <th className="py-2 pr-3">Chg %</th>
             <th className="py-2 pr-3">OS %</th>
             <th className="py-2 pr-3">OS $</th>
             <th className="py-2 pr-3">Flat @</th>
@@ -174,7 +199,7 @@ function RankedSignalTable({
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={12} className="py-4 text-gray-500">
+              <td colSpan={13} className="py-4 text-gray-500">
                 No {side} reclaim signals at this win% filter.
               </td>
             </tr>
@@ -188,7 +213,15 @@ function RankedSignalTable({
                   onClick={() => onSelect(row.ticker)}
                 >
                   <td className="py-2 pr-3 text-gray-500">{row.rank}</td>
-                  <td className="py-2 pr-3 text-white font-medium">{row.ticker}</td>
+                  <td className="py-2 pr-3">
+                    <Link
+                      href={`/tickers/insight?ticker=${encodeURIComponent(row.ticker)}`}
+                      className="font-medium text-blue-300 hover:text-blue-200"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {row.ticker}
+                    </Link>
+                  </td>
                   <td className="py-2 pr-3 text-white font-semibold">
                     {(s.size ?? 0).toFixed(1)}x
                   </td>
@@ -196,6 +229,9 @@ function RankedSignalTable({
                     {row.win_rate_pct != null ? pct(row.win_rate_pct) : '—'}
                   </td>
                   <td className="py-2 pr-3 text-gray-400">{row.win_n ?? '—'}</td>
+                  <td className="py-2 pr-3">
+                    <ChangePctCell value={row.net_change_pct} />
+                  </td>
                   <td className="py-2 pr-3 text-amber-300 font-semibold">{pct(s.overshoot_pct)}</td>
                   <td className="py-2 pr-3 text-gray-300">{money(s.overshoot)}</td>
                   <td className="py-2 pr-3 text-amber-200">{money(s.reclaim_price ?? s.flat_price)}</td>
@@ -225,7 +261,7 @@ function ReclaimPageContent() {
   const [board, setBoard] = useState<ReclaimPayload[]>([])
   const [winRates, setWinRates] = useState<WinRatesPayload | null>(null)
   const [minWinPctLong, setMinWinPctLong] = useState(80)
-  const [minWinPctShort, setMinWinPctShort] = useState(0)
+  const [minWinPctShort, setMinWinPctShort] = useState(60)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -243,11 +279,19 @@ function ReclaimPageContent() {
       setError(null)
     }
     try {
+      const headers: HeadersInit = {}
+      try {
+        const session = await fetchAuthSession()
+        const idToken = session.tokens?.idToken?.toString()
+        if (idToken) headers.Authorization = `Bearer ${idToken}`
+      } catch {
+        // Quotes enrichment needs auth; board still loads without it.
+      }
       const [one, all] = await Promise.all([
-        fetch(`/api/range-reclaim?ticker=${encodeURIComponent(t)}&t=${Date.now()}`).then((r) =>
-          r.json()
-        ),
-        fetch(`/api/range-reclaim?board=1&t=${Date.now()}`).then((r) => r.json()),
+        fetch(`/api/range-reclaim?ticker=${encodeURIComponent(t)}&t=${Date.now()}`, {
+          headers,
+        }).then((r) => r.json()),
+        fetch(`/api/range-reclaim?board=1&t=${Date.now()}`, { headers }).then((r) => r.json()),
       ])
       setData(one)
       setBoard(Array.isArray(all?.rows) ? all.rows : [])
@@ -408,7 +452,14 @@ function ReclaimPageContent() {
           <div className="grid gap-6 lg:grid-cols-3 mb-10">
             <div className="rounded-xl border border-gray-700 bg-gray-900/70 p-5 lg:col-span-1">
               <h2 className="text-white font-semibold mb-3">
-                Detail · {data.ticker || ticker} · {data.as_of_date || '—'}
+                Detail ·{' '}
+                <Link
+                  href={`/tickers/insight?ticker=${encodeURIComponent(data.ticker || ticker)}`}
+                  className="text-blue-300 hover:text-blue-200"
+                >
+                  {data.ticker || ticker}
+                </Link>{' '}
+                · {data.as_of_date || '—'}
               </h2>
               {data.fallback || data.status === 'missing' ? (
                 <p className="text-amber-300 text-sm">
