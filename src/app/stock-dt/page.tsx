@@ -29,6 +29,7 @@ import {
   type StockDtPlanResponse,
   type StockDtSide,
 } from '@/lib/stock-dt'
+import { formatTradingDayLabel, todayTradingDay } from '@/lib/dt-position-days'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,6 +58,7 @@ function SideTable({
   plan,
   source,
   scoreLine,
+  asOf,
   selected,
   onToggle,
   onChangeQuantity,
@@ -66,6 +68,7 @@ function SideTable({
   plan: StockDtPlanResponse['long'] | undefined
   source: StockDtBuySource
   scoreLine: number
+  asOf?: string | null
   selected: Set<string>
   onToggle: (id: string) => void
   onChangeQuantity: (candidateId: string, quantity: number) => void
@@ -84,8 +87,19 @@ function SideTable({
         <div>
           <h2 className="text-base font-semibold text-white">{title}</h2>
           <p className="text-xs text-zinc-400 mt-1">
-            {filterLabel} · {side === 'long' ? 'Buy' : 'SellShort'} · score-weighted across ~
-            {money(plan.budget)}
+            {filterLabel}
+            {asOf ? (
+              <>
+                {' '}
+                · model <span className="font-mono text-emerald-300/90">{asOf}</span>
+                {asOf === todayTradingDay() ? (
+                  <span className="ml-1 text-emerald-300">· Today</span>
+                ) : (
+                  <span className="ml-1 text-amber-300">· Not today</span>
+                )}
+              </>
+            ) : null}{' '}
+            · {side === 'long' ? 'Buy' : 'SellShort'} · score-weighted across ~{money(plan.budget)}
           </p>
         </div>
         <div className="text-xs text-zinc-400 text-right">
@@ -993,14 +1007,68 @@ function StockDtPageContent() {
           {error && <p className="text-sm text-rose-300">{error}</p>}
           {placeResult && <p className="text-sm text-emerald-300">{placeResult}</p>}
           {plan && (
-            <p className="text-xs text-zinc-500">
-              {plan.source === 'model_reclaim' ? 'Reclaim' : 'Ranks'} as of {plan.ranks_as_of || '—'} ·{' '}
-              {plan.source === 'model_reclaim'
-                ? `win ≥ ${plan.min_win_pct ?? plan.score_line}%`
-                : `score ≥ ${plan.score_line}`}{' '}
-              · budget {money(plan.side_budget)}/side · plan{' '}
-              {new Date(plan.generated_at).toLocaleString()} · selected est. {money(selectedCost)}
-            </p>
+            <div
+              className={`rounded-lg border px-3 py-2 space-y-1 ${
+                plan.ranks_as_of && plan.ranks_as_of === todayTradingDay()
+                  ? 'border-emerald-500/40 bg-emerald-500/10'
+                  : 'border-amber-500/40 bg-amber-500/10'
+              }`}
+            >
+              {(() => {
+                const todayEt = todayTradingDay()
+                const modelDate = plan.ranks_as_of || null
+                const isToday = Boolean(modelDate && modelDate === todayEt)
+                return (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="text-zinc-200">Model date:</span>
+                      <span className="font-mono font-semibold text-white">
+                        {modelDate || '—'}
+                      </span>
+                      {modelDate && (
+                        <span className="text-xs text-zinc-400">
+                          ({formatTradingDayLabel(modelDate, todayEt)})
+                        </span>
+                      )}
+                      <span
+                        className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                          isToday
+                            ? 'bg-emerald-500/25 text-emerald-200'
+                            : 'bg-amber-500/25 text-amber-100'
+                        }`}
+                      >
+                        {isToday ? 'Today' : 'Not today'}
+                      </span>
+                    </div>
+                    {!isToday && (
+                      <p className="text-xs text-amber-100/90">
+                        Today (ET) is <span className="font-mono">{todayEt}</span>
+                        {modelDate
+                          ? ` — feeder is behind; confirm before placing.`
+                          : ' — no as_of_date on plan.'}
+                      </p>
+                    )}
+                    {plan.source === 'model_reclaim' &&
+                      plan.price_as_of &&
+                      plan.price_as_of !== plan.ranks_as_of && (
+                        <p className="text-xs text-zinc-400">
+                          Breach/OHLC bar:{' '}
+                          <span className="font-mono text-zinc-300">{plan.price_as_of}</span>
+                          <span className="text-zinc-500"> (last closed session used for math)</span>
+                        </p>
+                      )}
+                    <p className="text-xs text-zinc-500">
+                      {plan.source === 'model_reclaim'
+                        ? `Model Reclaim · win ≥ ${plan.min_win_pct ?? plan.score_line}%`
+                        : `Ticker ranks · score ≥ ${plan.score_line}`}{' '}
+                      · budget {money(plan.side_budget)}/side · plan built{' '}
+                      {new Date(plan.generated_at).toLocaleString()} · selected est.{' '}
+                      {money(selectedCost)}
+                    </p>
+                  </>
+                )
+              })()}
+            </div>
           )}
         </section>
 
@@ -1058,6 +1126,7 @@ function StockDtPageContent() {
                 plan={plan.long}
                 source={plan.source}
                 scoreLine={plan.score_line}
+                asOf={plan.ranks_as_of}
                 selected={selected}
                 onToggle={toggle}
                 onChangeQuantity={changeQuantity}
@@ -1068,6 +1137,7 @@ function StockDtPageContent() {
                 plan={plan.short}
                 source={plan.source}
                 scoreLine={plan.score_line}
+                asOf={plan.ranks_as_of}
                 selected={selected}
                 onToggle={toggle}
                 onChangeQuantity={changeQuantity}

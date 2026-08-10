@@ -167,6 +167,7 @@ type ReclaimSignal = { side?: string; size?: number; overshoot_pct?: number }
 type ReclaimRow = {
   ticker?: string
   as_of_date?: string
+  price_as_of?: string
   fallback?: boolean
   signals?: ReclaimSignal[]
 }
@@ -198,6 +199,7 @@ async function loadModelReclaimRows(minWinPct: number): Promise<{
   longRows: TickerRankRow[]
   shortRows: TickerRankRow[]
   asOf: string | null
+  priceAsOf: string | null
   warnings: string[]
 }> {
   const warnings: string[] = []
@@ -222,14 +224,22 @@ async function loadModelReclaimRows(minWinPct: number): Promise<{
 
   const longRows: TickerRankRow[] = []
   const shortRows: TickerRankRow[] = []
-  let asOf: string | null = null
+  const asOfCounts = new Map<string, number>()
+  const priceAsOfCounts = new Map<string, number>()
 
   for (let i = 0; i < settled.length; i++) {
     const result = settled[i]
     if (result.status !== 'fulfilled') continue
     const row = result.value
     if (!row.ticker || row.fallback) continue
-    if (row.as_of_date && !asOf) asOf = String(row.as_of_date)
+    if (row.as_of_date) {
+      const d = String(row.as_of_date)
+      asOfCounts.set(d, (asOfCounts.get(d) ?? 0) + 1)
+    }
+    if (row.price_as_of) {
+      const d = String(row.price_as_of)
+      priceAsOfCounts.set(d, (priceAsOfCounts.get(d) ?? 0) + 1)
+    }
 
     for (const signal of row.signals || []) {
       const side = signal.side === 'short' ? 'short' : signal.side === 'long' ? 'long' : null
@@ -250,6 +260,19 @@ async function loadModelReclaimRows(minWinPct: number): Promise<{
     }
   }
 
+  // Prefer newest feeder date (YYYY-MM-DD sorts lexicographically).
+  let asOf: string | null =
+    [...asOfCounts.keys()].sort().at(-1) ?? null
+  // If tradeable candidates exist, prefer the newest candidate as_of.
+  const candidateDates = [...longRows, ...shortRows]
+    .map((r) => r.as_of)
+    .filter((d): d is string => Boolean(d))
+  if (candidateDates.length > 0) {
+    asOf = candidateDates.reduce((best, d) => (d > best ? d : best))
+  }
+  const priceAsOf: string | null =
+    [...priceAsOfCounts.keys()].sort().at(-1) ?? null
+
   longRows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
   shortRows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
   longRows.forEach((r, i) => {
@@ -265,7 +288,7 @@ async function loadModelReclaimRows(minWinPct: number): Promise<{
     )
   }
 
-  return { longRows, shortRows, asOf, warnings }
+  return { longRows, shortRows, asOf, priceAsOf, warnings }
 }
 
 function clampBudget(raw: number | undefined | null): number {
@@ -302,6 +325,7 @@ export async function buildStockDtPlan(input: {
   let shortRows: TickerRankRow[] = []
   let minScore = STOCK_DT_SCORE_LINE
   let asOf: string | null = null
+  let priceAsOf: string | null = null
 
   if (source === 'model_reclaim') {
     minScore = minWinPct
@@ -309,6 +333,7 @@ export async function buildStockDtPlan(input: {
     longRows = reclaim.longRows
     shortRows = reclaim.shortRows
     asOf = reclaim.asOf
+    priceAsOf = reclaim.priceAsOf
     warnings.push(...reclaim.warnings)
   } else {
     const ranks = await buildTickerRanks()
@@ -378,6 +403,7 @@ export async function buildStockDtPlan(input: {
   return {
     generated_at: new Date().toISOString(),
     ranks_as_of: asOf,
+    price_as_of: source === 'model_reclaim' ? priceAsOf : undefined,
     source,
     score_line: minScore,
     min_win_pct: source === 'model_reclaim' ? minWinPct : undefined,

@@ -47,6 +47,8 @@ PreSync (OHLC) → ML1 → ML2 → ML3 → RateTiers → RangeReclaim → Succee
   Hands are **optional** size bonuses; reclaim still runs after tiers with Model1.
 - Soft-fail Catch on RangeReclaim so a reclaim error does not fail morning ML.
 - Do **not** use a separate `predixa-spy-range-reclaim-0840` clock (removed).
+- Feeder `as_of_date` matches other models (**today’s session**). Breach math may
+  still use prior closed bar via `price_as_of` until today’s OHLC exists.
 
 ## Equity Daily (local ASL patched; deploy when ready)
 

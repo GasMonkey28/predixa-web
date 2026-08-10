@@ -49,6 +49,8 @@ export interface StockDtSidePlan {
 export interface StockDtPlanResponse {
   generated_at: string
   ranks_as_of?: string | null
+  /** For model_reclaim: last OHLC bar used for breach math (may lag as_of pre-close). */
+  price_as_of?: string | null
   /** Buy universe: Summary ticker ranks or Model Reclaim win-rate filter. */
   source: StockDtBuySource
   score_line: number
