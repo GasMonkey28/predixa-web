@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import AttractiveChartSection from '@/components/trading/AttractiveChartSection'
 import AttractivePriceCard from '@/components/trading/AttractivePriceCard'
+import AutoRefreshControls from '@/components/ui/AutoRefreshControls'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 
 type ChartType = 'line' | 'candlestick'
 
@@ -39,22 +41,28 @@ export default function WeeklyPriceChartSection({
 }: WeeklyPriceChartSectionProps) {
   const [data, setData] = useState<{ bars?: Array<{ t: string; o: number; h: number; l: number; c: number; v?: number }> } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>('line')
   const [barInterval, setBarInterval] = useState<'15min' | '60min'>('15min')
-  const [refreshKey, setRefreshKey] = useState(0)
   const [weeklyPredictions, setWeeklyPredictions] = useState<WeeklyPredictions>({
     currentWeek: null,
     previousWeek: null,
     nextWeek: null,
   })
 
-  useEffect(() => {
-    async function fetchData() {
+  const fetchData = useCallback(
+    async (opts?: { soft?: boolean }) => {
+      const soft = opts?.soft === true
       try {
-        setLoading(true)
-        setError(null)
-        const barsResponse = await fetch(`/api/bars/weekly?interval=${barInterval}&t=${Date.now()}&r=${Math.random()}`)
+        if (soft) setRefreshing(true)
+        else {
+          setLoading(true)
+          setError(null)
+        }
+        const barsResponse = await fetch(
+          `/api/bars/weekly?interval=${barInterval}&t=${Date.now()}&r=${Math.random()}`
+        )
         const barsResult = await barsResponse.json()
         setData(barsResult)
 
@@ -78,22 +86,28 @@ export default function WeeklyPriceChartSection({
           allWeeks: predictionsResult.allWeeks || undefined,
           publishReady: predictionsResult.publishReady,
         })
+        setError(null)
       } catch {
         setError('Failed to load chart data')
       } finally {
         setLoading(false)
+        setRefreshing(false)
       }
-    }
-    fetchData()
-  }, [refreshKey, barInterval])
+    },
+    [barInterval]
+  )
 
   useEffect(() => {
-    if (weeklyPredictions.nextWeek) return
-    const timer = window.setInterval(() => setRefreshKey((k) => k + 1), 60_000)
-    return () => window.clearInterval(timer)
-  }, [weeklyPredictions.nextWeek])
+    void fetchData()
+  }, [fetchData])
 
-  if (loading) {
+  const softRefresh = useCallback(() => {
+    void fetchData({ soft: true })
+  }, [fetchData])
+
+  const { autoRefresh, setAutoRefresh, intervalMs } = useAutoRefresh(softRefresh)
+
+  if (loading && !data) {
     return (
       <div className={`flex items-center justify-center h-64 ${className}`}>
         <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600" />
@@ -162,6 +176,16 @@ export default function WeeklyPriceChartSection({
 
   return (
     <div className={className}>
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
+        <AutoRefreshControls
+          autoRefresh={autoRefresh}
+          onAutoRefreshChange={setAutoRefresh}
+          intervalMs={intervalMs}
+          onRefresh={softRefresh}
+          refreshing={refreshing || loading}
+        />
+        {refreshing && <span className="text-xs text-blue-300">Updating…</span>}
+      </div>
       {showPriceCard && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -174,10 +198,7 @@ export default function WeeklyPriceChartSection({
               price={currentPrice}
               change={priceChange}
               changePercent={priceChangePercent}
-              onRefresh={() => {
-                setRefreshKey((prev) => prev + 1)
-                setLoading(true)
-              }}
+              onRefresh={softRefresh}
             />
           </div>
         </motion.div>

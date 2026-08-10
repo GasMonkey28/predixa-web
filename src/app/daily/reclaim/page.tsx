@@ -1,8 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import AutoRefreshControls from '@/components/ui/AutoRefreshControls'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 import { EQUITY_TICKERS } from '@/lib/tickers'
 
 type Signal = {
@@ -225,11 +227,21 @@ function ReclaimPageContent() {
   const [minWinPctLong, setMinWinPctLong] = useState(80)
   const [minWinPctShort, setMinWinPctShort] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const inFlightRef = useRef(false)
+  const tickerRef = useRef(ticker)
+  tickerRef.current = ticker
 
-  const load = useCallback(async (t: string) => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (t: string, opts?: { soft?: boolean }) => {
+    if (inFlightRef.current) return
+    inFlightRef.current = true
+    const soft = opts?.soft === true
+    if (soft) setRefreshing(true)
+    else {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const [one, all] = await Promise.all([
         fetch(`/api/range-reclaim?ticker=${encodeURIComponent(t)}&t=${Date.now()}`).then((r) =>
@@ -240,16 +252,25 @@ function ReclaimPageContent() {
       setData(one)
       setBoard(Array.isArray(all?.rows) ? all.rows : [])
       setWinRates(all?.win_rates ?? null)
+      setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
+      inFlightRef.current = false
       setLoading(false)
+      setRefreshing(false)
     }
   }, [])
 
   useEffect(() => {
-    load(ticker)
+    void load(ticker)
   }, [ticker, load])
+
+  const softRefresh = useCallback(() => {
+    void load(tickerRef.current, { soft: true })
+  }, [load])
+
+  const { autoRefresh, setAutoRefresh, intervalMs } = useAutoRefresh(softRefresh)
 
   const active = useMemo(() => data?.signals ?? [], [data])
   const longAll = useMemo(() => rankSignals(board, 'long', winRates), [board, winRates])
@@ -352,17 +373,18 @@ function ReclaimPageContent() {
               </span>
               <span className="text-gray-600">/{shortAll.length}</span>
             </span>
-            <button
-              type="button"
-              onClick={() => load(ticker)}
-              className="rounded-md bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 text-sm"
-            >
-              Refresh
-            </button>
+            {refreshing && <span className="text-blue-300">Updating…</span>}
+            <AutoRefreshControls
+              autoRefresh={autoRefresh}
+              onAutoRefreshChange={setAutoRefresh}
+              intervalMs={intervalMs}
+              onRefresh={() => void load(ticker, { soft: Boolean(data || board.length) })}
+              refreshing={loading || refreshing}
+            />
           </div>
         </div>
 
-        {!loading && (
+        {!loading || board.length > 0 ? (
           <div className="grid gap-6 mb-10">
             <RankedSignalTable
               title={`Long reclaim (${longRanked.length} ≥ ${minWinPctLong}% win)`}
@@ -377,9 +399,9 @@ function ReclaimPageContent() {
               onSelect={setTicker}
             />
           </div>
-        )}
+        ) : null}
 
-        {loading && <p className="text-gray-400 text-center py-12">Loading…</p>}
+        {loading && board.length === 0 && <p className="text-gray-400 text-center py-12">Loading…</p>}
         {error && <p className="text-rose-400 text-center">{error}</p>}
 
         {!loading && data && (

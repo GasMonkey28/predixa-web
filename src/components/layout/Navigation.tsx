@@ -34,25 +34,19 @@ const navigationItems = [
     ],
   },
   {
-    name: 'Tickers',
-    icon: '🏷️',
+    name: 'Model',
+    icon: '📈',
     items: [
       {
-        name: 'Ranks',
+        name: 'Model Tickers',
         href: '/tickers',
         icon: '🏆',
       },
       {
-        name: 'Insight',
+        name: 'Ticker Insight',
         href: '/tickers/insight',
         icon: '🏷️',
       },
-    ],
-  },
-  {
-    name: 'Model',
-    icon: '📈',
-    items: [
       {
         name: 'Model 3 Mixer',
         href: '/daily/model1',

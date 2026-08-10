@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { motion } from 'motion/react'
 import { useParams, useRouter } from 'next/navigation'
 import AttractivePriceCard from '@/components/trading/AttractivePriceCard'
@@ -10,6 +10,8 @@ import Model2Signals from '@/components/trading/Model2Signals'
 import Model2Chart from '@/components/trading/Model2Chart'
 import EconomicCalendarInvesting from '@/components/trading/EconomicCalendarInvesting'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import AutoRefreshControls from '@/components/ui/AutoRefreshControls'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 
 // Force dynamic rendering - this page uses client-side hooks and cannot be statically generated
 export const dynamic = 'force-dynamic'
@@ -26,10 +28,10 @@ function DailyPageContent() {
   const [model2Data, setModel2Data] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [model2Loading, setModel2Loading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>('line')
   const [model2ChartType, setModel2ChartType] = useState<ChartType>('candlestick')
-  const [refreshKey, setRefreshKey] = useState(0)
 
   // Redirect invalid model params
   useEffect(() => {
@@ -38,53 +40,56 @@ function DailyPageContent() {
     }
   }, [modelParam, router])
 
-  // Fetch Model1 data
-  useEffect(() => {
-    if (selectedModel !== 'model1') return
-    
-    async function fetchData() {
-      try {
-        setLoading(true)
-        const response = await fetch(`/api/bars/daily?t=${Date.now()}&r=${Math.random()}`)
-        const result = await response.json()
-        console.log('Fetched Model1 data:', result)
-        setData(result)
-        setError(null)
-      } catch (err) {
-        console.error('Error fetching Model1 data:', err)
-        setError('Failed to load Model1 data')
-      } finally {
-        setLoading(false)
-      }
+  const fetchModel1 = useCallback(async (soft: boolean) => {
+    try {
+      if (soft) setRefreshing(true)
+      else setLoading(true)
+      const response = await fetch(`/api/bars/daily?t=${Date.now()}&r=${Math.random()}`)
+      const result = await response.json()
+      setData(result)
+      setError(null)
+    } catch (err) {
+      console.error('Error fetching Model1 data:', err)
+      setError('Failed to load Model1 data')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-    fetchData()
-  }, [refreshKey, selectedModel])
+  }, [])
 
-  // Fetch Model2 data
-  useEffect(() => {
-    if (selectedModel !== 'model2') return
-    
-    async function fetchModel2Data() {
-      try {
-        setModel2Loading(true)
-        const response = await fetch(`/api/model2/daily?t=${Date.now()}`)
-        const result = await response.json()
-        console.log('Fetched Model2 data:', result)
-        setModel2Data(result)
-        setError(null)
-      } catch (err) {
-        console.error('Error fetching Model2 data:', err)
-        setError('Failed to load Model2 data')
-      } finally {
-        setModel2Loading(false)
-      }
+  const fetchModel2 = useCallback(async (soft: boolean) => {
+    try {
+      if (soft) setRefreshing(true)
+      else setModel2Loading(true)
+      const response = await fetch(`/api/model2/daily?t=${Date.now()}`)
+      const result = await response.json()
+      setModel2Data(result)
+      setError(null)
+    } catch (err) {
+      console.error('Error fetching Model2 data:', err)
+      setError('Failed to load Model2 data')
+    } finally {
+      setModel2Loading(false)
+      setRefreshing(false)
     }
-    fetchModel2Data()
-  }, [selectedModel])
+  }, [])
 
-  const isLoading = selectedModel === 'model1' ? loading : model2Loading
+  useEffect(() => {
+    if (selectedModel === 'model1') void fetchModel1(false)
+    else void fetchModel2(false)
+  }, [selectedModel, fetchModel1, fetchModel2])
 
-  if (isLoading) {
+  const softRefresh = useCallback(() => {
+    if (selectedModel === 'model1') void fetchModel1(true)
+    else void fetchModel2(true)
+  }, [selectedModel, fetchModel1, fetchModel2])
+
+  const { autoRefresh, setAutoRefresh, intervalMs } = useAutoRefresh(softRefresh)
+
+  const isInitialLoading =
+    selectedModel === 'model1' ? loading && !data : model2Loading && !model2Data
+
+  if (isInitialLoading) {
     return (
       <main className="mx-auto max-w-6xl p-6">
         <div className="flex items-center justify-center h-64">
@@ -94,7 +99,7 @@ function DailyPageContent() {
     )
   }
 
-  if (error) {
+  if (error && !data && !model2Data) {
     return (
       <main className="mx-auto max-w-6xl p-6">
         <div className="text-center text-red-600">{error}</div>
@@ -268,6 +273,18 @@ function DailyPageContent() {
             AI-Powered Market Forecast
           </h1>
           <p className="text-gray-300 text-lg mb-4">Signals publish near the opening bell, stay fixed all session, and are built for today—with an occasional carry into tomorrow.</p>
+          <div className="flex justify-center">
+            <AutoRefreshControls
+              autoRefresh={autoRefresh}
+              onAutoRefreshChange={setAutoRefresh}
+              intervalMs={intervalMs}
+              onRefresh={softRefresh}
+              refreshing={refreshing}
+            />
+          </div>
+          {refreshing && (
+            <p className="text-xs text-blue-300 mt-2">Updating price…</p>
+          )}
         </motion.div>
 
         {/* Main Layout: Left Column (Trading Signals + Chart) and Right Column (Economic Calendar) */}
@@ -322,10 +339,7 @@ function DailyPageContent() {
                 price={currentPrice}
                 change={priceChange}
                 changePercent={priceChangePercent}
-                onRefresh={() => {
-                  setRefreshKey(prev => prev + 1)
-                  setLoading(true)
-                }}
+                onRefresh={softRefresh}
               />
             </motion.div>
 

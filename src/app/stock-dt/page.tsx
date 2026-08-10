@@ -6,11 +6,13 @@ import { motion } from 'motion/react'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import AutoRefreshControls from '@/components/ui/AutoRefreshControls'
 import DtMarketQuotesBoard from '@/components/dt/DtMarketQuotesBoard'
 import DtPnlCalendar from '@/components/dt/DtPnlCalendar'
 import StockDtPositionsPanel, {
   type StockDtOpenPosition,
 } from '@/components/stock-dt/StockDtPositionsPanel'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 import { useAuthStore } from '@/lib/auth-store'
 import { readDtSimAccountId, writeDtSimAccountId } from '@/lib/dt-account'
 import type { DtFlattenUndoLot } from '@/lib/dt-flatten-undo'
@@ -471,16 +473,14 @@ function StockDtPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tsConnected, accountId, tradeScopesOk, buySource])
 
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && tsConnected && accountId && tradeScopesOk) {
-        void loadPlan()
-        void loadPositions()
-      }
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [tsConnected, accountId, tradeScopesOk, loadPlan, loadPositions])
+  const softRefreshQuotes = useCallback(() => {
+    void loadPlan()
+    void loadPositions()
+  }, [loadPlan, loadPositions])
+
+  const { autoRefresh, setAutoRefresh, intervalMs } = useAutoRefresh(softRefreshQuotes, {
+    enabled: Boolean(tsConnected && accountId && tradeScopesOk),
+  })
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -936,6 +936,12 @@ function StockDtPageContent() {
             >
               {loadingPlan ? 'Loading quotes…' : 'Reload candidates'}
             </button>
+            <AutoRefreshControls
+              autoRefresh={autoRefresh}
+              onAutoRefreshChange={setAutoRefresh}
+              intervalMs={intervalMs}
+              className="text-zinc-400"
+            />
             <button
               type="button"
               onClick={() => void confirmAndPlace()}

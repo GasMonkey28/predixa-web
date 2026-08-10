@@ -1,13 +1,15 @@
 'use client'
 
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'motion/react'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import AutoRefreshControls from '@/components/ui/AutoRefreshControls'
 import { formatSignedPct } from '@/lib/dt-quotes'
 import type { TickerRankBoard, TickerRanksResponse } from '@/lib/ticker-ranks'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 
 export const dynamic = 'force-dynamic'
 
@@ -267,44 +269,57 @@ function TickersRanksPageContent() {
   const [data, setData] = useState<TickerRanksResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const inFlightRef = useRef(false)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
+  const loadRanks = useCallback(async (opts?: { soft?: boolean }) => {
+    if (inFlightRef.current) return
+    inFlightRef.current = true
+    const soft = opts?.soft === true
+    try {
+      if (soft) setRefreshing(true)
+      else {
         setLoading(true)
         setError(null)
-        const headers: HeadersInit = {}
-        try {
-          const session = await fetchAuthSession()
-          const idToken = session.tokens?.idToken?.toString()
-          if (idToken) headers.Authorization = `Bearer ${idToken}`
-        } catch {
-          // ProtectedRoute should already gate; API will 401 if still unauthenticated
-        }
-        const res = await fetch('/api/tickers/ranks', {
-          cache: 'no-store',
-          credentials: 'include',
-          headers,
-        })
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error(body.error || `HTTP ${res.status}`)
-        }
-        const json = (await res.json()) as TickerRanksResponse
-        if (!cancelled) setData(json)
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load ranks')
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
       }
-    })()
-    return () => {
-      cancelled = true
+      const headers: HeadersInit = {}
+      try {
+        const session = await fetchAuthSession()
+        const idToken = session.tokens?.idToken?.toString()
+        if (idToken) headers.Authorization = `Bearer ${idToken}`
+      } catch {
+        // ProtectedRoute should already gate; API will 401 if still unauthenticated
+      }
+      const res = await fetch('/api/tickers/ranks', {
+        cache: 'no-store',
+        credentials: 'include',
+        headers,
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `HTTP ${res.status}`)
+      }
+      const json = (await res.json()) as TickerRanksResponse
+      setData(json)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load ranks')
+    } finally {
+      inFlightRef.current = false
+      setLoading(false)
+      setRefreshing(false)
     }
   }, [])
+
+  useEffect(() => {
+    void loadRanks()
+  }, [loadRanks])
+
+  const softRefresh = useCallback(() => {
+    void loadRanks({ soft: true })
+  }, [loadRanks])
+
+  const { autoRefresh, setAutoRefresh, intervalMs } = useAutoRefresh(softRefresh)
 
   const summaryLongSum = data
     ? sumBoardTotals(data.boards.find((b) => b.id === 'summary_long'))
@@ -316,6 +331,7 @@ function TickersRanksPageContent() {
   const rank3HandsSum = data
     ? sumBoardHands(data.boards.find((b) => b.id === 'y2y3_long'))
     : 0
+  const busy = loading || refreshing
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
@@ -335,39 +351,52 @@ function TickersRanksPageContent() {
               position size.
             </p>
           </div>
-          <Link
-            href="/tickers/insight"
-            className="text-sm font-medium text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
-          >
-            Per-ticker insight →
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <AutoRefreshControls
+              autoRefresh={autoRefresh}
+              onAutoRefreshChange={setAutoRefresh}
+              intervalMs={intervalMs}
+              onRefresh={() => void loadRanks({ soft: Boolean(data) })}
+              refreshing={busy}
+            />
+            <Link
+              href="/tickers/insight"
+              className="text-sm font-medium text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
+            >
+              Per-ticker insight →
+            </Link>
+          </div>
         </motion.div>
 
-        {loading && (
+        {loading && !data && (
           <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/70 px-6 py-16 text-center text-zinc-300">
             Ranking {data?.ticker_count ?? 'all'} tickers…
           </div>
         )}
 
-        {error && !loading && (
+        {error && !data && (
           <div className="rounded-2xl border border-rose-500/40 bg-rose-950/40 px-6 py-10 text-center text-rose-200">
             {error}
           </div>
         )}
 
-        {data && !loading && (
+        {data && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             className="space-y-4"
           >
-            <p className="text-xs text-zinc-500">
-              {data.ticker_count} tickers · generated{' '}
-              {new Date(data.generated_at).toLocaleString()}
-              {data.errors?.length
-                ? ` · ${data.errors.length} feeder warning${data.errors.length === 1 ? '' : 's'}`
-                : ''}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+              <span>
+                {data.ticker_count} tickers · generated{' '}
+                {new Date(data.generated_at).toLocaleString()}
+                {data.errors?.length
+                  ? ` · ${data.errors.length} feeder warning${data.errors.length === 1 ? '' : 's'}`
+                  : ''}
+              </span>
+              {refreshing && <span className="text-blue-300">Updating quotes…</span>}
+              {error && data && <span className="text-rose-300">Refresh failed: {error}</span>}
+            </div>
             <div className="rounded-2xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/85 to-zinc-950/90 px-4 py-3 backdrop-blur-sm">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
                 <div>

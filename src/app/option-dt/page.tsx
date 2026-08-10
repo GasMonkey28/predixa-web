@@ -6,6 +6,7 @@ import { motion } from 'motion/react'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import AutoRefreshControls from '@/components/ui/AutoRefreshControls'
 import DtMarketQuotesBoard, {
   DtTickerPriceHint,
 } from '@/components/dt/DtMarketQuotesBoard'
@@ -13,6 +14,7 @@ import DtPnlCalendar from '@/components/dt/DtPnlCalendar'
 import OptionDtPositionsPanel, {
   type OptionDtOpenPosition,
 } from '@/components/option-dt/OptionDtPositionsPanel'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 import { useAuthStore } from '@/lib/auth-store'
 import { readDtSimAccountId, writeDtSimAccountId } from '@/lib/dt-account'
 import type { DtFlattenUndoLot } from '@/lib/dt-flatten-undo'
@@ -517,17 +519,14 @@ function OptionDtPageContent() {
     void loadPlan()
   }, [tsConnected, accountId, tradeScopesOk, loadPlan])
 
-  // Refresh candidates when returning to the tab.
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && tsConnected && accountId && tradeScopesOk) {
-        void loadPlan()
-        void loadPositions()
-      }
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [tsConnected, accountId, tradeScopesOk, loadPlan, loadPositions])
+  const softRefreshQuotes = useCallback(() => {
+    void loadPlan()
+    void loadPositions()
+  }, [loadPlan, loadPositions])
+
+  const { autoRefresh, setAutoRefresh, intervalMs } = useAutoRefresh(softRefreshQuotes, {
+    enabled: Boolean(tsConnected && accountId && tradeScopesOk),
+  })
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -1004,6 +1003,12 @@ function OptionDtPageContent() {
             >
               {loadingPlan ? 'Loading chains…' : 'Reload candidates'}
             </button>
+            <AutoRefreshControls
+              autoRefresh={autoRefresh}
+              onAutoRefreshChange={setAutoRefresh}
+              intervalMs={intervalMs}
+              className="text-zinc-400"
+            />
             <button
               type="button"
               onClick={() => void confirmAndPlace()}
