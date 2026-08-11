@@ -45,6 +45,8 @@ function SideQuotes({ title, rows }: { title: string; rows: DtTickerQuote[] }) {
                 <th className="px-3 py-1.5 text-right">Score</th>
                 <th className="px-3 py-1.5 text-right">Last</th>
                 <th className="px-3 py-1.5 text-right">Change</th>
+                <th className="px-3 py-1.5 text-right whitespace-nowrap">vs Open</th>
+                <th className="px-3 py-1.5 text-right whitespace-nowrap">vs Open %</th>
               </tr>
             </thead>
             <tbody>
@@ -59,6 +61,28 @@ function SideQuotes({ title, rows }: { title: string; rows: DtTickerQuote[] }) {
                   </td>
                   <td className="px-3 py-1.5 text-right tabular-nums">
                     <ChangeCell netChange={row.netChange} netChangePct={row.netChangePct} />
+                  </td>
+                  <td
+                    className={`px-3 py-1.5 text-right tabular-nums ${
+                      row.fromOpen == null || !Number.isFinite(row.fromOpen)
+                        ? 'text-zinc-500'
+                        : row.fromOpen >= 0
+                          ? 'text-emerald-400'
+                          : 'text-rose-400'
+                    }`}
+                  >
+                    {formatSignedMoney(row.fromOpen)}
+                  </td>
+                  <td
+                    className={`px-3 py-1.5 text-right tabular-nums ${
+                      row.fromOpenPct == null || !Number.isFinite(row.fromOpenPct)
+                        ? 'text-zinc-500'
+                        : row.fromOpenPct >= 0
+                          ? 'text-emerald-400'
+                          : 'text-rose-400'
+                    }`}
+                  >
+                    {formatSignedPct(row.fromOpenPct)}
                   </td>
                 </tr>
               ))}
@@ -87,7 +111,8 @@ export default function DtMarketQuotesBoard({
       <div>
         <h2 className="text-base font-semibold text-white">Today · long / short tape</h2>
         <p className="text-xs text-zinc-400 mt-1">
-          {filterLabel || `Summary ranks ≥ ${scoreLine}`} with TradeStation last and day change.
+          {filterLabel || `Summary ranks ≥ ${scoreLine}`} with TradeStation last, day change, and vs
+          open.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

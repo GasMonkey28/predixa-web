@@ -2,15 +2,28 @@ import axios from 'axios'
 
 import {
   STOCK_DT_RECLAIM_MIN_WIN_PCT,
+  STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT,
   STOCK_DT_SCORE_LINE,
   STOCK_DT_SIDE_BUDGET,
+  isReclaimBuySource,
+  parseStockDtBuySource,
   type StockDtBuySource,
   type StockDtCandidate,
   type StockDtPlanResponse,
   type StockDtSide,
   type StockDtSidePlan,
 } from '@/lib/stock-dt'
-import { dayMoveFromQuote, type DtMarketQuotes, type DtTickerQuote } from '@/lib/dt-quotes'
+import {
+  dayMoveFromQuote,
+  sessionOpenFromQuote,
+  type DtMarketQuotes,
+  type DtTickerQuote,
+} from '@/lib/dt-quotes'
+import {
+  buildLiveLongCloseRows,
+  lookupReclaimWinRate,
+  type ReclaimCloseFeederRow,
+} from '@/lib/reclaim-close'
 import { config } from '@/lib/server/config'
 import { buildTickerRanks } from '@/lib/server/ticker-ranks'
 import {
@@ -60,15 +73,20 @@ function buildMarketSide(
     .filter((r) => (r.score ?? Number.NEGATIVE_INFINITY) >= minScore)
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     .map((row) => {
-      const move = dayMoveFromQuote(quotesBySymbol.get(row.ticker.toUpperCase()))
+      const quote = quotesBySymbol.get(row.ticker.toUpperCase())
+      const move = dayMoveFromQuote(quote)
+      const vsOpen = sessionOpenFromQuote(quote)
       return {
         ticker: row.ticker,
         side,
         score: row.score ?? 0,
         last: move.last,
         previousClose: move.previousClose,
+        open: vsOpen.open,
         netChange: move.netChange,
         netChangePct: move.netChangePct,
+        fromOpen: vsOpen.fromOpen,
+        fromOpenPct: vsOpen.fromOpenPct,
       }
     })
 }
@@ -123,11 +141,14 @@ function allocateSide(input: {
     const estimatedCost = Math.round(quantity * item.price * 100) / 100
     const weightPct = Math.round(weight * 1000) / 10
     const move = dayMoveFromQuote(item.quote)
+    const vsOpen = sessionOpenFromQuote(item.quote)
 
     const reason =
-      source === 'model_reclaim'
-        ? `Win ${item.score.toFixed(1)}% · weighted ${weightPct}% · target $${targetDollars.toFixed(0)}`
-        : `Score-weighted ${weightPct}% · target $${targetDollars.toFixed(0)}`
+      source === 'model_reclaim_close'
+        ? `Close-entry · win ${item.score.toFixed(1)}% · weighted ${weightPct}% · target $${targetDollars.toFixed(0)}`
+        : source === 'model_reclaim'
+          ? `Win ${item.score.toFixed(1)}% · weighted ${weightPct}% · target $${targetDollars.toFixed(0)}`
+          : `Score-weighted ${weightPct}% · target $${targetDollars.toFixed(0)}`
 
     const exits = reclaimExits?.get(item.row.ticker.toUpperCase())?.[side]
     candidates.push({
@@ -142,8 +163,11 @@ function allocateSide(input: {
       ask: toNum(item.quote.Ask),
       bid: toNum(item.quote.Bid),
       previousClose: move.previousClose,
+      open: vsOpen.open,
       netChange: move.netChange,
       netChangePct: move.netChangePct,
+      fromOpen: vsOpen.fromOpen,
+      fromOpenPct: vsOpen.fromOpenPct,
       price: item.price,
       weight,
       targetDollars,
@@ -186,6 +210,17 @@ type ReclaimRow = {
     short_flat_price?: number
     pred_high?: number
     pred_low?: number
+    prev_close?: number
+    min_overshoot?: number
+    os_pct?: number
+  }
+  last?: number
+  low?: number
+  open?: number
+  net_change_pct?: number
+  context?: {
+    long_tier?: string
+    y2y3_hands?: number
   }
 }
 type WinRatesPayload = {
@@ -269,14 +304,16 @@ async function fetchS3Json(bucket: string, key: string): Promise<unknown> {
   throw lastErr
 }
 
-async function loadModelReclaimRows(minWinPct: number): Promise<{
-  longRows: TickerRankRow[]
-  shortRows: TickerRankRow[]
+type LoadedReclaimFeeders = {
+  feeders: ReclaimRow[]
+  winRates: WinRatesPayload | null
+  reclaimExits: Map<string, { long?: StockDtReclaimExits; short?: StockDtReclaimExits }>
   asOf: string | null
   priceAsOf: string | null
-  reclaimExits: Map<string, { long?: StockDtReclaimExits; short?: StockDtReclaimExits }>
   warnings: string[]
-}> {
+}
+
+async function loadReclaimFeeders(): Promise<LoadedReclaimFeeders> {
   const warnings: string[] = []
   const tickers = ['SPY', ...EQUITY_TICKERS]
   const [settled, winRatesSettled] = await Promise.all([
@@ -297,8 +334,7 @@ async function loadModelReclaimRows(minWinPct: number): Promise<{
     warnings.push('Model Reclaim win rates unavailable — no candidates can pass the win-rate filter.')
   }
 
-  const longRows: TickerRankRow[] = []
-  const shortRows: TickerRankRow[] = []
+  const feeders: ReclaimRow[] = []
   const reclaimExits = new Map<
     string,
     { long?: StockDtReclaimExits; short?: StockDtReclaimExits }
@@ -306,13 +342,14 @@ async function loadModelReclaimRows(minWinPct: number): Promise<{
   const asOfCounts = new Map<string, number>()
   const priceAsOfCounts = new Map<string, number>()
 
-  for (let i = 0; i < settled.length; i++) {
-    const result = settled[i]
+  for (const result of settled) {
     if (result.status !== 'fulfilled') continue
     const row = result.value
-    if (!row.ticker || row.fallback) continue
-    const tickerKey = row.ticker.toUpperCase()
-    reclaimExits.set(tickerKey, {
+    if (row.fallback) continue
+    const ticker = String(row.ticker || '').trim().toUpperCase()
+    if (!ticker) continue
+    feeders.push({ ...row, ticker })
+    reclaimExits.set(ticker, {
       long: reclaimExitsFromFeeder(row, 'long'),
       short: reclaimExitsFromFeeder(row, 'short'),
     })
@@ -324,12 +361,46 @@ async function loadModelReclaimRows(minWinPct: number): Promise<{
       const d = String(row.price_as_of)
       priceAsOfCounts.set(d, (priceAsOfCounts.get(d) ?? 0) + 1)
     }
+  }
 
+  return {
+    feeders,
+    winRates,
+    reclaimExits,
+    asOf: [...asOfCounts.keys()].sort().at(-1) ?? null,
+    priceAsOf: [...priceAsOfCounts.keys()].sort().at(-1) ?? null,
+    warnings,
+  }
+}
+
+function rankReclaimRows(rows: TickerRankRow[]): TickerRankRow[] {
+  rows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+  rows.forEach((r, i) => {
+    r.rank = i + 1
+  })
+  return rows
+}
+
+async function loadModelReclaimRows(minWinLong: number, minWinShort: number): Promise<{
+  longRows: TickerRankRow[]
+  shortRows: TickerRankRow[]
+  asOf: string | null
+  priceAsOf: string | null
+  reclaimExits: Map<string, { long?: StockDtReclaimExits; short?: StockDtReclaimExits }>
+  warnings: string[]
+}> {
+  const loaded = await loadReclaimFeeders()
+  const longRows: TickerRankRow[] = []
+  const shortRows: TickerRankRow[] = []
+
+  for (const row of loaded.feeders) {
+    if (!row.ticker) continue
     for (const signal of row.signals || []) {
       const side = signal.side === 'short' ? 'short' : signal.side === 'long' ? 'long' : null
       if (!side) continue
-      const wr = winRates?.tickers?.[row.ticker]?.[side]?.win_rate_pct
-      if (wr == null || !Number.isFinite(wr) || wr < minWinPct) continue
+      const wr = lookupReclaimWinRate(loaded.winRates, row.ticker, side)?.win_rate_pct
+      const floor = side === 'short' ? minWinShort : minWinLong
+      if (wr == null || !Number.isFinite(wr) || wr < floor) continue
 
       const ranked: TickerRankRow = {
         rank: 0,
@@ -344,35 +415,51 @@ async function loadModelReclaimRows(minWinPct: number): Promise<{
     }
   }
 
-  // Prefer newest feeder date (YYYY-MM-DD sorts lexicographically).
-  let asOf: string | null =
-    [...asOfCounts.keys()].sort().at(-1) ?? null
-  // If tradeable candidates exist, prefer the newest candidate as_of.
+  rankReclaimRows(longRows)
+  rankReclaimRows(shortRows)
+
+  let asOf = loaded.asOf
   const candidateDates = [...longRows, ...shortRows]
     .map((r) => r.as_of)
     .filter((d): d is string => Boolean(d))
   if (candidateDates.length > 0) {
     asOf = candidateDates.reduce((best, d) => (d > best ? d : best))
   }
-  const priceAsOf: string | null =
-    [...priceAsOfCounts.keys()].sort().at(-1) ?? null
 
-  longRows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-  shortRows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-  longRows.forEach((r, i) => {
-    r.rank = i + 1
-  })
-  shortRows.forEach((r, i) => {
-    r.rank = i + 1
-  })
-
+  const warnings = [...loaded.warnings]
   if (longRows.length === 0 && shortRows.length === 0) {
     warnings.push(
-      `No Model Reclaim signals today with win rate ≥ ${minWinPct}%. Adjust the floor or check /daily/reclaim.`
+      `No Model Reclaim signals today with long win ≥ ${minWinLong}% / short win ≥ ${minWinShort}%. Adjust the floor or check /daily/reclaim.`
     )
   }
 
-  return { longRows, shortRows, asOf, priceAsOf, reclaimExits, warnings }
+  return {
+    longRows,
+    shortRows,
+    asOf,
+    priceAsOf: loaded.priceAsOf,
+    reclaimExits: loaded.reclaimExits,
+    warnings,
+  }
+}
+
+function attachLiveQuotesToFeeders(
+  feeders: ReclaimRow[],
+  quotesBySymbol: Map<string, TradeStationQuote>
+): ReclaimCloseFeederRow[] {
+  return feeders.map((row) => {
+    const ticker = (row.ticker || '').toUpperCase()
+    const quote = quotesBySymbol.get(ticker)
+    const move = dayMoveFromQuote(quote)
+    return {
+      ...row,
+      ticker,
+      last: move.last,
+      low: toNum(quote?.Low) ?? move.last,
+      open: toNum(quote?.Open),
+      net_change_pct: move.netChangePct,
+    }
+  })
 }
 
 function clampBudget(raw: number | undefined | null): number {
@@ -380,23 +467,58 @@ function clampBudget(raw: number | undefined | null): number {
   return Math.max(100, Math.min(1_000_000, Math.round(raw)))
 }
 
-function clampMinWinPct(raw: number | undefined | null): number {
-  if (raw == null || !Number.isFinite(raw)) return STOCK_DT_RECLAIM_MIN_WIN_PCT
+function clampMinWinPct(
+  raw: number | undefined | null,
+  fallback: number = STOCK_DT_RECLAIM_MIN_WIN_PCT
+): number {
+  if (raw == null || !Number.isFinite(raw)) return fallback
   return Math.max(0, Math.min(100, raw))
+}
+
+async function fillQuotes(
+  accessToken: string,
+  tickers: string[],
+  warnings: string[]
+): Promise<Map<string, TradeStationQuote>> {
+  const quotesBySymbol = new Map<string, TradeStationQuote>()
+  const unique = Array.from(new Set(tickers.map((t) => t.toUpperCase()).filter(Boolean)))
+  const chunkSize = 40
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize)
+    try {
+      const quotes = await fetchQuoteSnapshots(accessToken, chunk)
+      for (const q of quotes) {
+        if (q.Symbol) quotesBySymbol.set(q.Symbol.toUpperCase(), q)
+      }
+    } catch (error) {
+      warnings.push(
+        `Quote fetch failed for ${chunk.slice(0, 3).join(',')}…: ${(error as Error).message}`
+      )
+    }
+  }
+  return quotesBySymbol
 }
 
 export async function buildStockDtPlan(input: {
   accessToken: string
   accountId?: string | null
   tradeScopesOk: boolean
-  source?: StockDtBuySource | null
+  source?: StockDtBuySource | string | null
   sideBudget?: number | null
   minWinPct?: number | null
+  minWinPctLong?: number | null
+  minWinPctShort?: number | null
 }): Promise<StockDtPlanResponse> {
-  const source: StockDtBuySource =
-    input.source === 'ticker_ranks' ? 'ticker_ranks' : 'model_reclaim'
+  const source = parseStockDtBuySource(input.source)
   const sideBudget = clampBudget(input.sideBudget)
-  const minWinPct = clampMinWinPct(input.minWinPct)
+  const minWinLong = clampMinWinPct(
+    input.minWinPctLong ?? input.minWinPct,
+    STOCK_DT_RECLAIM_MIN_WIN_PCT
+  )
+  const minWinShort = clampMinWinPct(
+    input.minWinPctShort ?? input.minWinPct,
+    STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT
+  )
   const warnings: string[] = []
 
   if (!input.tradeScopesOk) {
@@ -414,15 +536,72 @@ export async function buildStockDtPlan(input: {
     | Map<string, { long?: StockDtReclaimExits; short?: StockDtReclaimExits }>
     | undefined
 
+  let minScoreLong = STOCK_DT_SCORE_LINE
+  let minScoreShort = STOCK_DT_SCORE_LINE
+  let quotesBySymbol = new Map<string, TradeStationQuote>()
+  let liveCloseByTicker = new Map<
+    string,
+    { overshoot: number; overshootPct: number; low?: number }
+  >()
+
   if (source === 'model_reclaim') {
-    minScore = minWinPct
-    const reclaim = await loadModelReclaimRows(minWinPct)
+    minScoreLong = minWinLong
+    minScoreShort = minWinShort
+    minScore = minWinLong
+    const reclaim = await loadModelReclaimRows(minWinLong, minWinShort)
     longRows = reclaim.longRows
     shortRows = reclaim.shortRows
     asOf = reclaim.asOf
     priceAsOf = reclaim.priceAsOf
     reclaimExits = reclaim.reclaimExits
     warnings.push(...reclaim.warnings)
+  } else if (source === 'model_reclaim_close') {
+    minScoreLong = minWinLong
+    minScoreShort = minWinShort
+    minScore = minWinLong
+    const loaded = await loadReclaimFeeders()
+    asOf = loaded.asOf
+    priceAsOf = loaded.priceAsOf
+    reclaimExits = loaded.reclaimExits
+    warnings.push(...loaded.warnings)
+    quotesBySymbol = await fillQuotes(
+      input.accessToken,
+      loaded.feeders.map((row) => row.ticker || ''),
+      warnings
+    )
+    const live = buildLiveLongCloseRows(
+      attachLiveQuotesToFeeders(loaded.feeders, quotesBySymbol),
+      loaded.winRates,
+      minWinLong
+    )
+    liveCloseByTicker = new Map(
+      live.map((row) => [
+        row.ticker.toUpperCase(),
+        {
+          overshoot: row.overshoot,
+          overshootPct: row.overshoot_pct,
+          low: row.low,
+        },
+      ])
+    )
+    longRows = live.map((row) => ({
+      rank: row.rank,
+      ticker: row.ticker,
+      score: row.win_rate_pct ?? 0,
+      position_size: 1,
+      signal: 'reclaim_close_long',
+      as_of: row.as_of_date ? String(row.as_of_date) : null,
+    }))
+    shortRows = []
+    if (quotesBySymbol.size === 0) {
+      warnings.push(
+        'No live quotes — connect TradeStation so Low/Last can detect pred_low breaches.'
+      )
+    } else if (longRows.length === 0) {
+      warnings.push(
+        `No live long pred_low breaches with win ≥ ${minWinLong}%. Same list as /daily/reclaim-close.`
+      )
+    }
   } else {
     const ranks = await buildTickerRanks()
     const summaryLong = ranks.boards.find((b) => b.id === 'summary_long')
@@ -432,30 +611,18 @@ export async function buildStockDtPlan(input: {
   }
 
   const longAbove = longRows.filter(
-    (r) => (r.score ?? Number.NEGATIVE_INFINITY) >= minScore
+    (r) => (r.score ?? Number.NEGATIVE_INFINITY) >= minScoreLong
   )
   const shortAbove = shortRows.filter(
-    (r) => (r.score ?? Number.NEGATIVE_INFINITY) >= minScore
+    (r) => (r.score ?? Number.NEGATIVE_INFINITY) >= minScoreShort
   )
 
-  const tickers = Array.from(
-    new Set([...longAbove, ...shortAbove].map((r) => r.ticker.toUpperCase()))
-  )
-
-  const quotesBySymbol = new Map<string, TradeStationQuote>()
-  const chunkSize = 40
-  for (let i = 0; i < tickers.length; i += chunkSize) {
-    const chunk = tickers.slice(i, i + chunkSize)
-    try {
-      const quotes = await fetchQuoteSnapshots(input.accessToken, chunk)
-      for (const q of quotes) {
-        if (q.Symbol) quotesBySymbol.set(q.Symbol.toUpperCase(), q)
-      }
-    } catch (error) {
-      warnings.push(
-        `Quote fetch failed for ${chunk.slice(0, 3).join(',')}…: ${(error as Error).message}`
-      )
-    }
+  if (source !== 'model_reclaim_close') {
+    quotesBySymbol = await fillQuotes(
+      input.accessToken,
+      [...longAbove, ...shortAbove].map((r) => r.ticker),
+      warnings
+    )
   }
 
   const long = allocateSide({
@@ -463,22 +630,36 @@ export async function buildStockDtPlan(input: {
     rows: longRows,
     quotesBySymbol,
     sideBudget,
-    minScore,
+    minScore: minScoreLong,
     source,
     reclaimExits,
   })
+  if (source === 'model_reclaim_close') {
+    for (const c of long.candidates) {
+      const live = liveCloseByTicker.get(c.ticker.toUpperCase())
+      if (!live) continue
+      c.overshoot = live.overshoot
+      c.overshootPct = live.overshootPct
+      c.dayLow = live.low
+    }
+    long.candidates.sort((a, b) => {
+      const os = (b.overshootPct || 0) - (a.overshootPct || 0)
+      if (os !== 0) return os
+      return (b.summaryScore || 0) - (a.summaryScore || 0)
+    })
+  }
   const short = allocateSide({
     side: 'short',
     rows: shortRows,
     quotesBySymbol,
     sideBudget,
-    minScore,
+    minScore: minScoreShort,
     source,
     reclaimExits,
   })
   const market: DtMarketQuotes = {
-    long: buildMarketSide('long', longRows, quotesBySymbol, minScore),
-    short: buildMarketSide('short', shortRows, quotesBySymbol, minScore),
+    long: buildMarketSide('long', longRows, quotesBySymbol, minScoreLong),
+    short: buildMarketSide('short', shortRows, quotesBySymbol, minScoreShort),
   }
 
   if (source === 'ticker_ranks') {
@@ -493,10 +674,12 @@ export async function buildStockDtPlan(input: {
   return {
     generated_at: new Date().toISOString(),
     ranks_as_of: asOf,
-    price_as_of: source === 'model_reclaim' ? priceAsOf : undefined,
+    price_as_of: isReclaimBuySource(source) ? priceAsOf : undefined,
     source,
     score_line: minScore,
-    min_win_pct: source === 'model_reclaim' ? minWinPct : undefined,
+    min_win_pct: isReclaimBuySource(source) ? minWinLong : undefined,
+    min_win_pct_long: isReclaimBuySource(source) ? minWinLong : undefined,
+    min_win_pct_short: source === 'model_reclaim' ? minWinShort : undefined,
     side_budget: sideBudget,
     allocation: 'score_weighted',
     market,

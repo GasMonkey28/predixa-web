@@ -13,7 +13,12 @@ import {
   type OptionDtSide,
   type OptionDtSidePlan,
 } from '@/lib/option-dt'
-import { dayMoveFromQuote, type DtMarketQuotes, type DtTickerQuote } from '@/lib/dt-quotes'
+import {
+  dayMoveFromQuote,
+  sessionOpenFromQuote,
+  type DtMarketQuotes,
+  type DtTickerQuote,
+} from '@/lib/dt-quotes'
 import { buildTickerRanks } from '@/lib/server/ticker-ranks'
 import {
   collectOptionChainSnapshotDetailed,
@@ -529,15 +534,20 @@ function buildMarketSide(
     .filter((r) => (r.score ?? Number.NEGATIVE_INFINITY) >= OPTION_DT_SCORE_LINE)
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     .map((row) => {
-      const move = dayMoveFromQuote(quotesBySymbol.get(row.ticker.toUpperCase()))
+      const quote = quotesBySymbol.get(row.ticker.toUpperCase())
+      const move = dayMoveFromQuote(quote)
+      const vsOpen = sessionOpenFromQuote(quote)
       return {
         ticker: row.ticker,
         side,
         score: row.score ?? 0,
         last: move.last,
         previousClose: move.previousClose,
+        open: vsOpen.open,
         netChange: move.netChange,
         netChangePct: move.netChangePct,
+        fromOpen: vsOpen.fromOpen,
+        fromOpenPct: vsOpen.fromOpenPct,
       }
     })
 }

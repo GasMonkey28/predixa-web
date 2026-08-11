@@ -7,7 +7,7 @@ import { fetchAuthSession } from 'aws-amplify/auth'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AutoRefreshControls from '@/components/ui/AutoRefreshControls'
 import { useAutoRefresh } from '@/hooks/useAutoRefresh'
-import { formatSignedPct } from '@/lib/dt-quotes'
+import { formatSignedMoney, formatSignedPct } from '@/lib/dt-quotes'
 import { EQUITY_TICKERS } from '@/lib/tickers'
 
 type Signal = {
@@ -37,6 +37,7 @@ type ReclaimPayload = {
   error?: string
   hint?: string
   last?: number
+  open?: number
   net_change?: number
   net_change_pct?: number
   range?: {
@@ -80,7 +81,11 @@ type RankedRow = {
   y2y3_hands?: number
   win_rate_pct?: number
   win_n?: number
+  last?: number
+  open?: number
   net_change_pct?: number
+  from_open?: number
+  from_open_pct?: number
 }
 
 const TICKER_OPTIONS = ['SPY', ...EQUITY_TICKERS]
@@ -137,6 +142,14 @@ function rankSignals(
     for (const signal of row.signals || []) {
       if (signal.side !== side) continue
       const wr = winRates?.tickers?.[row.ticker]?.[side]
+      const last = row.last
+      const open = row.open
+      const fromOpen =
+        last != null && open != null && Number.isFinite(last) && Number.isFinite(open)
+          ? last - open
+          : undefined
+      const fromOpenPct =
+        fromOpen != null && open != null && open > 0 ? (fromOpen / open) * 100 : undefined
       rows.push({
         ticker: row.ticker,
         as_of_date: row.as_of_date,
@@ -146,7 +159,11 @@ function rankSignals(
         y2y3_hands: row.context?.y2y3_hands,
         win_rate_pct: wr?.win_rate_pct,
         win_n: wr?.n,
+        last,
+        open,
         net_change_pct: row.net_change_pct,
+        from_open: fromOpen,
+        from_open_pct: fromOpenPct,
       })
     }
   }
@@ -187,6 +204,10 @@ function RankedSignalTable({
             <th className="py-2 pr-3">Win %</th>
             <th className="py-2 pr-3">n</th>
             <th className="py-2 pr-3">Chg %</th>
+            <th className="py-2 pr-3">Last</th>
+            <th className="py-2 pr-3">Open</th>
+            <th className="py-2 pr-3 whitespace-nowrap">vs Open</th>
+            <th className="py-2 pr-3 whitespace-nowrap">vs Open %</th>
             <th className="py-2 pr-3">OS %</th>
             <th className="py-2 pr-3">OS $</th>
             <th className="py-2 pr-3">Flat @</th>
@@ -199,7 +220,7 @@ function RankedSignalTable({
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={13} className="py-4 text-gray-500">
+              <td colSpan={17} className="py-4 text-gray-500">
                 No {side} reclaim signals at this win% filter.
               </td>
             </tr>
@@ -231,6 +252,22 @@ function RankedSignalTable({
                   <td className="py-2 pr-3 text-gray-400">{row.win_n ?? '—'}</td>
                   <td className="py-2 pr-3">
                     <ChangePctCell value={row.net_change_pct} />
+                  </td>
+                  <td className="py-2 pr-3 text-white tabular-nums">{money(row.last)}</td>
+                  <td className="py-2 pr-3 text-gray-300 tabular-nums">{money(row.open)}</td>
+                  <td
+                    className={`py-2 pr-3 tabular-nums font-medium ${
+                      row.from_open == null || !Number.isFinite(row.from_open)
+                        ? 'text-gray-500'
+                        : row.from_open >= 0
+                          ? 'text-emerald-400'
+                          : 'text-rose-400'
+                    }`}
+                  >
+                    {formatSignedMoney(row.from_open)}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <ChangePctCell value={row.from_open_pct} />
                   </td>
                   <td className="py-2 pr-3 text-amber-300 font-semibold">{pct(s.overshoot_pct)}</td>
                   <td className="py-2 pr-3 text-gray-300">{money(s.overshoot)}</td>

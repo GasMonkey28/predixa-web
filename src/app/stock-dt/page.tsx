@@ -11,6 +11,7 @@ import DtMarketQuotesBoard from '@/components/dt/DtMarketQuotesBoard'
 import DtPnlCalendar from '@/components/dt/DtPnlCalendar'
 import StockDtPositionsPanel, {
   type StockDtOpenPosition,
+  type StockDtWorkingOrder,
 } from '@/components/stock-dt/StockDtPositionsPanel'
 import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 import { useAuthStore } from '@/lib/auth-store'
@@ -24,8 +25,10 @@ import {
 } from '@/lib/dt-quotes'
 import {
   STOCK_DT_RECLAIM_MIN_WIN_PCT,
+  STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT,
   STOCK_DT_SCORE_LINE,
   STOCK_DT_SIDE_BUDGET,
+  isReclaimBuySource,
   type StockDtBuySource,
   type StockDtCandidate,
   type StockDtPlanResponse,
@@ -79,9 +82,11 @@ function SideTable({
 
   const overSuggested = plan.spent > plan.budget
   const filterLabel =
-    source === 'model_reclaim'
-      ? `Model Reclaim win ≥ ${scoreLine}%`
-      : `Summary total ≥ ${scoreLine}`
+    source === 'model_reclaim_close'
+      ? `Live long pred_low breach · win ≥ ${scoreLine}%`
+      : source === 'model_reclaim'
+        ? `Model Reclaim win ≥ ${scoreLine}%`
+        : `Summary total ≥ ${scoreLine}`
 
   return (
     <section className="rounded-2xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/85 to-zinc-950/90 overflow-hidden">
@@ -120,11 +125,19 @@ function SideTable({
               <th className="px-3 py-2 text-left">OK</th>
               <th className="px-3 py-2 text-left">Ticker</th>
               <th className="px-3 py-2 text-right">
-                {source === 'model_reclaim' ? 'Win %' : 'Score'}
+                {isReclaimBuySource(source) ? 'Win %' : 'Score'}
               </th>
               <th className="px-3 py-2 text-right">Last</th>
               <th className="px-3 py-2 text-right">Change</th>
-              {source === 'model_reclaim' && (
+              <th className="px-3 py-2 text-right whitespace-nowrap">vs Open</th>
+              <th className="px-3 py-2 text-right whitespace-nowrap">vs Open %</th>
+              {source === 'model_reclaim_close' && (
+                <>
+                  <th className="px-3 py-2 text-right">Low</th>
+                  <th className="px-3 py-2 text-right whitespace-nowrap">OS %</th>
+                </>
+              )}
+              {isReclaimBuySource(source) && (
                 <>
                   <th className="px-3 py-2 text-right whitespace-nowrap">Target</th>
                   <th className="px-3 py-2 text-right whitespace-nowrap">Stop</th>
@@ -141,12 +154,22 @@ function SideTable({
             {plan.candidates.length === 0 && (
               <tr>
                 <td
-                  colSpan={source === 'model_reclaim' ? 12 : 10}
+                  colSpan={
+                    source === 'model_reclaim_close'
+                      ? 16
+                      : isReclaimBuySource(source)
+                        ? 14
+                        : 12
+                  }
                   className="px-4 py-8 text-center text-zinc-500"
                 >
-                  {source === 'model_reclaim'
-                    ? `No tradeable Model Reclaim names with win rate ≥ ${scoreLine}% for this side.`
-                    : `No tradeable stocks above the ${scoreLine} line for this side.`}
+                  {source === 'model_reclaim_close'
+                    ? side === 'short'
+                      ? 'Reclaim-at Close is long-only — shorts stay empty.'
+                      : `No live long pred_low breaches with win ≥ ${scoreLine}%.`
+                    : source === 'model_reclaim'
+                      ? `No tradeable Model Reclaim names with win rate ≥ ${scoreLine}% for this side.`
+                      : `No tradeable stocks above the ${scoreLine} line for this side.`}
                 </td>
               </tr>
             )}
@@ -194,7 +217,39 @@ function SideTable({
                       </>
                     )}
                   </td>
-                  {source === 'model_reclaim' && (
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${
+                      row.fromOpen == null || !Number.isFinite(row.fromOpen)
+                        ? 'text-zinc-500'
+                        : row.fromOpen >= 0
+                          ? 'text-emerald-400'
+                          : 'text-rose-400'
+                    }`}
+                  >
+                    {formatSignedMoney(row.fromOpen)}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${
+                      row.fromOpenPct == null || !Number.isFinite(row.fromOpenPct)
+                        ? 'text-zinc-500'
+                        : row.fromOpenPct >= 0
+                          ? 'text-emerald-400'
+                          : 'text-rose-400'
+                    }`}
+                  >
+                    {formatSignedPct(row.fromOpenPct)}
+                  </td>
+                  {source === 'model_reclaim_close' && (
+                    <>
+                      <td className="px-3 py-2 text-right tabular-nums text-rose-200">
+                        {money(row.dayLow)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-amber-300">
+                        {formatSignedPct(row.overshootPct)}
+                      </td>
+                    </>
+                  )}
+                  {isReclaimBuySource(source) && (
                     <>
                       <td className="px-3 py-2 text-right tabular-nums text-amber-200">
                         {money(row.targetClose ?? undefined)}
@@ -270,6 +325,8 @@ function StockDtPageContent() {
   const [error, setError] = useState<string | null>(null)
   const [placeResult, setPlaceResult] = useState<string | null>(null)
   const [positions, setPositions] = useState<StockDtOpenPosition[]>([])
+  const [workingOrders, setWorkingOrders] = useState<StockDtWorkingOrder[]>([])
+  const [buyingPower, setBuyingPower] = useState<number | null>(null)
   const [positionTotals, setPositionTotals] = useState({
     marketValue: 0,
     totalCost: 0,
@@ -286,6 +343,7 @@ function StockDtPageContent() {
   const [buySource, setBuySource] = useState<StockDtBuySource>('model_reclaim')
   const [sideBudget, setSideBudget] = useState(STOCK_DT_SIDE_BUDGET)
   const [minWinPct, setMinWinPct] = useState(STOCK_DT_RECLAIM_MIN_WIN_PCT)
+  const [minWinPctShort, setMinWinPctShort] = useState(STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT)
 
   const refreshTs = useCallback(async () => {
     if (!isAuthenticated) {
@@ -340,6 +398,8 @@ function StockDtPageContent() {
   const loadPositions = useCallback(async () => {
     if (!accountId || !tsConnected) {
       setPositions([])
+      setWorkingOrders([])
+      setBuyingPower(null)
       setPositionTotals({ marketValue: 0, totalCost: 0, unrealizedPnl: 0, shares: 0 })
       return
     }
@@ -356,6 +416,12 @@ function StockDtPageContent() {
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
       setPositions((body.positions as StockDtOpenPosition[]) || [])
+      setWorkingOrders((body.workingOrders as StockDtWorkingOrder[]) || [])
+      setBuyingPower(
+        typeof body.buyingPower === 'number' && Number.isFinite(body.buyingPower)
+          ? body.buyingPower
+          : null
+      )
       setPositionTotals(
         body.totals || { marketValue: 0, totalCost: 0, unrealizedPnl: 0, shares: 0 }
       )
@@ -455,18 +521,30 @@ function StockDtPageContent() {
         100,
         Math.min(1_000_000, Number.isFinite(sideBudget) ? Math.round(sideBudget) : STOCK_DT_SIDE_BUDGET)
       )
-      const winFloor = Math.max(
+      const winFloorLong = Math.max(
         0,
         Math.min(
           100,
           Number.isFinite(minWinPct) ? minWinPct : STOCK_DT_RECLAIM_MIN_WIN_PCT
         )
       )
+      const winFloorShort = Math.max(
+        0,
+        Math.min(
+          100,
+          Number.isFinite(minWinPctShort) ? minWinPctShort : STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT
+        )
+      )
       const params = new URLSearchParams()
       if (accountId) params.set('accountId', accountId)
       params.set('source', buySource)
       params.set('budget', String(budget))
-      if (buySource === 'model_reclaim') params.set('minWinPct', String(winFloor))
+      if (isReclaimBuySource(buySource)) {
+        params.set('minWinPctLong', String(winFloorLong))
+        if (buySource === 'model_reclaim') {
+          params.set('minWinPctShort', String(winFloorShort))
+        }
+      }
       const res = await fetch(`/api/stock-dt/candidates?${params}`, {
         headers: await authHeaders(),
         credentials: 'include',
@@ -483,7 +561,7 @@ function StockDtPageContent() {
     } finally {
       setLoadingPlan(false)
     }
-  }, [accountId, tsConnected, buySource, sideBudget, minWinPct])
+  }, [accountId, tsConnected, buySource, sideBudget, minWinPct, minWinPctShort])
 
   useEffect(() => {
     if (!tsConnected || !accountId || !tradeScopesOk) return
@@ -569,11 +647,41 @@ function StockDtPageContent() {
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+      const resultRows = Array.isArray(body.results)
+        ? (body.results as Array<{
+            ticker?: string
+            ok?: boolean
+            status?: string
+            message?: string
+          }>)
+        : []
+      const failBits = resultRows
+        .filter((r) => !r.ok)
+        .map((r) => `${r.ticker || '?'}: ${r.message || 'rejected'}`)
+      const workingBits = resultRows
+        .filter((r) => r.ok && (r.message || '').toLowerCase().includes('working'))
+        .map((r) => `${r.ticker || '?'}: ${r.message}`)
       setPlaceResult(
-        `Placed ${body.placed}, failed ${body.failed}. ${body.note || ''}`.trim()
+        [
+          `Placed ${body.placed}, failed ${body.failed}.`,
+          workingBits.length ? workingBits.join(' · ') : '',
+          failBits.length ? failBits.join(' · ') : '',
+          body.note || '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim()
       )
+      if (body.failed > 0) {
+        setError(failBits.join(' · ') || 'One or more orders were rejected')
+      }
+      // Sim fills can lag the accept — refresh now and once more after a beat.
       void loadPositions()
       void loadPnl()
+      window.setTimeout(() => {
+        void loadPositions()
+        void loadPnl()
+      }, 1500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Place failed')
     } finally {
@@ -815,10 +923,11 @@ function StockDtPageContent() {
               Stock DT
             </h1>
             <p className="text-gray-300 text-lg max-w-2xl">
-              Paper equity day-trades from Summary ranks (score ≥ {STOCK_DT_SCORE_LINE}) or today&apos;s
-              Model Reclaim names (win ≥ {STOCK_DT_RECLAIM_MIN_WIN_PCT}%). Score-weighted across a soft
-              per-side budget (default {money(STOCK_DT_SIDE_BUDGET)}). Confirm before send. Flat by
-              close.
+              Paper equity day-trades from Summary ranks (score ≥ {STOCK_DT_SCORE_LINE}), today&apos;s
+              Model Reclaim names (long win ≥ {STOCK_DT_RECLAIM_MIN_WIN_PCT}%, short ≥{' '}
+              {STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT}%), or live Reclaim-at Close longs still below
+              pred_low. Score-weighted across a soft per-side budget (default{' '}
+              {money(STOCK_DT_SIDE_BUDGET)}). Confirm before send. Flat by close.
             </p>
           </div>
           <div className="flex flex-col items-end gap-1 text-sm">
@@ -839,6 +948,12 @@ function StockDtPageContent() {
               className="font-medium text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
             >
               Model Reclaim →
+            </Link>
+            <Link
+              href="/daily/reclaim-close"
+              className="font-medium text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
+            >
+              Reclaim-at Close →
             </Link>
           </div>
         </motion.div>
@@ -911,7 +1026,13 @@ function StockDtPageContent() {
                 onChange={(e) => setBuySource(e.target.value as StockDtBuySource)}
                 className="rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-200 text-sm px-3 py-2 min-w-[12rem]"
               >
-                <option value="model_reclaim">Model Reclaim (win ≥ 80%)</option>
+                <option value="model_reclaim">
+                  Model Reclaim (long ≥ {STOCK_DT_RECLAIM_MIN_WIN_PCT}% / short ≥{' '}
+                  {STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT}%)
+                </option>
+                <option value="model_reclaim_close">
+                  Model Reclaim-at Close (Long) · win ≥ {STOCK_DT_RECLAIM_MIN_WIN_PCT}%
+                </option>
                 <option value="ticker_ranks">Ticker ranks (Summary)</option>
               </select>
             </label>
@@ -930,22 +1051,41 @@ function StockDtPageContent() {
                 className="w-24 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-200 text-sm px-3 py-2 tabular-nums"
               />
             </label>
-            {buySource === 'model_reclaim' && (
-              <label className="flex items-center gap-2 text-xs text-zinc-400">
-                <span className="whitespace-nowrap">Min win %</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={minWinPct}
-                  onChange={(e) => setMinWinPct(Number(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void loadPlan()
-                  }}
-                  className="w-20 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-200 text-sm px-3 py-2 tabular-nums"
-                />
-              </label>
+            {isReclaimBuySource(buySource) && (
+              <>
+                <label className="flex items-center gap-2 text-xs text-zinc-400">
+                  <span className="whitespace-nowrap">Long min win %</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={minWinPct}
+                    onChange={(e) => setMinWinPct(Number(e.target.value))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void loadPlan()
+                    }}
+                    className="w-20 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-200 text-sm px-3 py-2 tabular-nums"
+                  />
+                </label>
+                {buySource === 'model_reclaim' && (
+                  <label className="flex items-center gap-2 text-xs text-zinc-400">
+                    <span className="whitespace-nowrap">Short min win %</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={minWinPctShort}
+                      onChange={(e) => setMinWinPctShort(Number(e.target.value))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void loadPlan()
+                      }}
+                      className="w-20 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-200 text-sm px-3 py-2 tabular-nums"
+                    />
+                  </label>
+                )}
+              </>
             )}
             <button
               type="button"
@@ -1030,7 +1170,15 @@ function StockDtPageContent() {
             </p>
           ))}
           {error && <p className="text-sm text-rose-300">{error}</p>}
-          {placeResult && <p className="text-sm text-emerald-300">{placeResult}</p>}
+          {placeResult && (
+            <p
+              className={`text-sm ${
+                /failed [1-9]/.test(placeResult) ? 'text-rose-300' : 'text-emerald-300'
+              }`}
+            >
+              {placeResult}
+            </p>
+          )}
           {plan && (
             <div
               className={`rounded-lg border px-3 py-2 space-y-1 ${
@@ -1073,7 +1221,7 @@ function StockDtPageContent() {
                           : ' — no as_of_date on plan.'}
                       </p>
                     )}
-                    {plan.source === 'model_reclaim' &&
+                    {isReclaimBuySource(plan.source) &&
                       plan.price_as_of &&
                       plan.price_as_of !== plan.ranks_as_of && (
                         <p className="text-xs text-zinc-400">
@@ -1083,9 +1231,11 @@ function StockDtPageContent() {
                         </p>
                       )}
                     <p className="text-xs text-zinc-500">
-                      {plan.source === 'model_reclaim'
-                        ? `Model Reclaim · win ≥ ${plan.min_win_pct ?? plan.score_line}%`
-                        : `Ticker ranks · score ≥ ${plan.score_line}`}{' '}
+                      {plan.source === 'model_reclaim_close'
+                        ? `Reclaim-at Close (Long) · live pred_low breach · win ≥ ${plan.min_win_pct_long ?? plan.min_win_pct ?? plan.score_line}%`
+                        : plan.source === 'model_reclaim'
+                          ? `Model Reclaim · long ≥ ${plan.min_win_pct_long ?? plan.min_win_pct ?? plan.score_line}% / short ≥ ${plan.min_win_pct_short ?? STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT}%`
+                          : `Ticker ranks · score ≥ ${plan.score_line}`}{' '}
                       · budget {money(plan.side_budget)}/side · plan built{' '}
                       {new Date(plan.generated_at).toLocaleString()} · selected est.{' '}
                       {money(selectedCost)}
@@ -1100,6 +1250,8 @@ function StockDtPageContent() {
         {tsConnected && accountId && (
           <StockDtPositionsPanel
             positions={positions}
+            workingOrders={workingOrders}
+            buyingPower={buyingPower}
             totals={positionTotals}
             loading={positionsLoading}
             busySymbol={busySymbol}
@@ -1127,9 +1279,11 @@ function StockDtPageContent() {
 
         {loadingPlan && (
           <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/70 px-6 py-16 text-center text-zinc-300">
-            {buySource === 'model_reclaim'
-              ? `Pulling Model Reclaim names (win ≥ ${minWinPct}%) and equity quotes…`
-              : `Pulling ranks ≥ ${STOCK_DT_SCORE_LINE} and equity quotes…`}
+            {buySource === 'model_reclaim_close'
+              ? `Scanning live long pred_low breaches (win ≥ ${minWinPct}%) and equity quotes…`
+              : buySource === 'model_reclaim'
+                ? `Pulling Model Reclaim names (long ≥ ${minWinPct}% / short ≥ ${minWinPctShort}%) and equity quotes…`
+                : `Pulling ranks ≥ ${STOCK_DT_SCORE_LINE} and equity quotes…`}
           </div>
         )}
 
@@ -1139,34 +1293,89 @@ function StockDtPageContent() {
               market={plan.market}
               scoreLine={plan.score_line}
               filterLabel={
-                plan.source === 'model_reclaim'
-                  ? `Model Reclaim win ≥ ${plan.min_win_pct ?? plan.score_line}%`
-                  : undefined
+                plan.source === 'model_reclaim_close'
+                  ? `Reclaim-at Close (Long) · live pred_low breach · win ≥ ${plan.min_win_pct_long ?? plan.min_win_pct}%`
+                  : plan.source === 'model_reclaim'
+                    ? `Model Reclaim long ≥ ${plan.min_win_pct_long ?? plan.min_win_pct}% / short ≥ ${plan.min_win_pct_short ?? STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT}%`
+                    : undefined
               }
             />
             <div className="grid grid-cols-1 gap-4">
+              {plan.source === 'model_reclaim_close' && (
+                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+                    <h3 className="text-sm font-semibold text-emerald-200">
+                      Live long breach ({plan.long.candidates.length})
+                    </h3>
+                    <Link
+                      href="/daily/reclaim-close"
+                      className="text-xs text-blue-300 hover:text-blue-200"
+                    >
+                      Same filter as Reclaim-at Close →
+                    </Link>
+                  </div>
+                  {plan.long.candidates.length === 0 ? (
+                    <p className="text-xs text-zinc-400">
+                      No names currently below pred_low at this win% floor.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {plan.long.candidates.map((c) => (
+                        <span
+                          key={c.id}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-950/80 px-2.5 py-1 font-mono text-sm text-white"
+                        >
+                          {c.ticker}
+                          <span className="text-[11px] text-sky-300">
+                            {c.summaryScore.toFixed(0)}%
+                          </span>
+                          {c.overshootPct != null && Number.isFinite(c.overshootPct) && (
+                            <span className="text-[11px] text-amber-300">
+                              OS {c.overshootPct.toFixed(2)}%
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <SideTable
-                title="Long · Buy shares"
+                title={
+                  plan.source === 'model_reclaim_close'
+                    ? 'Live long breach · Buy at close'
+                    : 'Long · Buy shares'
+                }
                 side="long"
                 plan={plan.long}
                 source={plan.source}
-                scoreLine={plan.score_line}
+                scoreLine={
+                  isReclaimBuySource(plan.source)
+                    ? (plan.min_win_pct_long ?? plan.min_win_pct ?? plan.score_line)
+                    : plan.score_line
+                }
                 asOf={plan.ranks_as_of}
                 selected={selected}
                 onToggle={toggle}
                 onChangeQuantity={changeQuantity}
               />
-              <SideTable
-                title="Short · SellShort shares"
-                side="short"
-                plan={plan.short}
-                source={plan.source}
-                scoreLine={plan.score_line}
-                asOf={plan.ranks_as_of}
-                selected={selected}
-                onToggle={toggle}
-                onChangeQuantity={changeQuantity}
-              />
+              {plan.source !== 'model_reclaim_close' && (
+                <SideTable
+                  title="Short · SellShort shares"
+                  side="short"
+                  plan={plan.short}
+                  source={plan.source}
+                  scoreLine={
+                    plan.source === 'model_reclaim'
+                      ? (plan.min_win_pct_short ?? STOCK_DT_RECLAIM_MIN_WIN_PCT_SHORT)
+                      : plan.score_line
+                  }
+                  asOf={plan.ranks_as_of}
+                  selected={selected}
+                  onToggle={toggle}
+                  onChangeQuantity={changeQuantity}
+                />
+              )}
               <p className="text-xs text-zinc-500 leading-relaxed">
                 Paper trading only (sim-api). Not investment advice. Default is flat by close — use
                 Flatten before the bell.

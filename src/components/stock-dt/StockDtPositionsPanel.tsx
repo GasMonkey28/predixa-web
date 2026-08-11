@@ -9,6 +9,17 @@ import {
 import { formatSignedPct } from '@/lib/dt-quotes'
 import { groupPositionsByTradingDay } from '@/lib/dt-position-days'
 
+export type StockDtWorkingOrder = {
+  orderId: string
+  symbol: string
+  side: string
+  status: string
+  quantity: number
+  message?: string | null
+  filled?: boolean
+  working?: boolean
+}
+
 export type StockDtOpenPosition = {
   positionId: string
   symbol: string
@@ -59,7 +70,9 @@ function dayTotals(rows: StockDtOpenPosition[]) {
 
 export default function StockDtPositionsPanel({
   positions,
+  workingOrders,
   totals,
+  buyingPower,
   loading,
   busySymbol,
   busyDay,
@@ -74,7 +87,9 @@ export default function StockDtPositionsPanel({
   onDismissUndo,
 }: {
   positions: StockDtOpenPosition[]
+  workingOrders?: StockDtWorkingOrder[]
   totals: { marketValue: number; totalCost: number; unrealizedPnl: number; shares: number }
+  buyingPower?: number | null
   loading?: boolean
   busySymbol?: string | null
   busyDay?: string | null
@@ -93,6 +108,7 @@ export default function StockDtPositionsPanel({
   const dayGroups = groupPositionsByTradingDay(positions)
   const anyBusy = Boolean(busySymbol || busyDay || undoing)
   const undoLots = flattenUndo && flattenUndo.length > 0 ? flattenUndo : null
+  const orders = workingOrders ?? []
 
   return (
     <section className="rounded-2xl border border-zinc-800/60 bg-gradient-to-br from-zinc-900/85 to-zinc-950/90 overflow-hidden">
@@ -122,6 +138,11 @@ export default function StockDtPositionsPanel({
             <div className={totals.unrealizedPnl >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
               uPnL {money(totals.unrealizedPnl)} · {totals.shares} sh
             </div>
+            {buyingPower != null && Number.isFinite(buyingPower) && (
+              <div className={buyingPower <= 0 ? 'text-rose-300' : 'text-zinc-400'}>
+                BP {money(buyingPower)}
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -133,6 +154,41 @@ export default function StockDtPositionsPanel({
           </button>
         </div>
       </header>
+
+      {orders.length > 0 && (
+        <div className="border-b border-sky-500/25 bg-sky-500/5 px-4 py-3 space-y-2">
+          <p className="text-xs font-semibold text-sky-200">
+            Working / recent orders — not a position until status is FLL (filled)
+          </p>
+          {orders.some((o) => o.status.toUpperCase() === 'REJ') && (
+            <p className="text-[11px] text-rose-200/90">
+              REJ is TradeStation rejecting the ticket (often buying power / margin). Existing
+              rows below are older fills — rejected names never opened.
+            </p>
+          )}
+          <ul className="space-y-1">
+            {orders.map((o) => (
+              <li key={o.orderId} className="text-xs text-zinc-300 font-mono">
+                <span className="text-white">{o.symbol || '—'}</span>{' '}
+                <span className="text-zinc-500">{o.side}</span>{' '}
+                {o.quantity > 0 ? `${o.quantity} sh · ` : ''}
+                <span
+                  className={
+                    o.status.toUpperCase() === 'REJ'
+                      ? 'text-rose-300'
+                      : o.working
+                        ? 'text-amber-300'
+                        : 'text-emerald-300'
+                  }
+                >
+                  {o.status || '—'}
+                </span>
+                {o.message ? <span className="text-zinc-500"> · {o.message}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {undoLots && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5">

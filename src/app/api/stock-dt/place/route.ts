@@ -5,6 +5,7 @@ import { logger } from '@/lib/server/logger'
 import { requireSubscriber } from '@/lib/server/require-subscriber'
 import { connectionHasTradeScopes } from '@/lib/server/tradestation-config'
 import {
+  fetchTradeStationCurrentOrders,
   getValidAccessToken,
   placeTradeStationOrder,
   type TradeStationOrderRequest,
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
       ticker: string
       ok: boolean
       orderId?: string
+      status?: string
       message?: string
     }> = []
 
@@ -99,6 +101,7 @@ export async function POST(request: NextRequest) {
         TradeAction: tradeAction,
         TimeInForce: { Duration: 'DAY' },
         Route: 'Intelligent',
+        BuyingPowerWarning: 'Confirmed',
       }
 
       try {
@@ -137,13 +140,54 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const acceptedIds = results.map((r) => r.orderId).filter(Boolean) as string[]
+    if (acceptedIds.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 700))
+      try {
+        const live = await fetchTradeStationCurrentOrders(accessToken, [accountId], 'sim')
+        const byId = new Map(live.map((o) => [o.OrderID, o]))
+        for (const row of results) {
+          if (!row.orderId) continue
+          const order = byId.get(row.orderId)
+          if (!order) continue
+          const status = (order.Status || '').toUpperCase()
+          row.status = order.Status
+          const detail =
+            order.RejectReason ||
+            (order.StatusDescription &&
+            order.StatusDescription.toLowerCase() !== 'rejected'
+              ? order.StatusDescription
+              : null) ||
+            order.Status ||
+            row.message
+          if (status === 'REJ' || status === 'CAN' || status === 'EXP' || status === 'OUT') {
+            row.ok = false
+            row.message = detail || 'Order not filled'
+          } else if (status === 'FLL' || status === 'FPR') {
+            row.message = status === 'FLL' ? 'Filled' : 'Partial fill'
+          } else {
+            row.message = `Working (${order.Status || 'ACK'}) — not a position until filled`
+          }
+        }
+      } catch {
+        // Status lookup is best-effort; accept result still stands.
+      }
+    }
+
+    const working = results.filter(
+      (r) => r.ok && r.message?.toLowerCase().includes('working')
+    ).length
+
     return NextResponse.json(
       {
         accountId,
         results,
         placed: results.filter((r) => r.ok).length,
         failed: results.filter((r) => !r.ok).length,
-        note: 'Default plan is flat by close — use Flatten on this page before the close bell.',
+        note:
+          working > 0
+            ? `${working} accepted but not filled yet — Open stock positions only lists fills. Check Working orders below.`
+            : 'Default plan is flat by close — use Flatten on this page before the close bell.',
       },
       { headers: getRateLimitHeaders(clientIp) }
     )

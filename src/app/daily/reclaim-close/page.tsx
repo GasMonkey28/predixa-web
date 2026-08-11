@@ -7,66 +7,19 @@ import { fetchAuthSession } from 'aws-amplify/auth'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AutoRefreshControls from '@/components/ui/AutoRefreshControls'
 import { useAutoRefresh } from '@/hooks/useAutoRefresh'
-import { formatSignedPct } from '@/lib/dt-quotes'
+import { formatSignedMoney, formatSignedPct } from '@/lib/dt-quotes'
+import {
+  buildLiveLongCloseRows,
+  type ReclaimCloseFeederRow,
+  type ReclaimCloseWinRates,
+} from '@/lib/reclaim-close'
 import { EQUITY_TICKERS } from '@/lib/tickers'
 
-type WinRateSide = {
-  win_rate_pct?: number
-  n?: number
-  avg_pnl_pct?: number | null
-  avg_hold?: number | null
-}
-
-type WinRatesPayload = {
-  tickers?: Record<string, { long?: WinRateSide; short?: WinRateSide }>
-  rules?: { note?: string; long?: string; short?: string }
-}
-
-type FeederRow = {
-  ticker?: string
-  as_of_date?: string
-  price_as_of?: string
-  fallback?: boolean
+type FeederRow = ReclaimCloseFeederRow & {
   status?: string
-  last?: number
-  open?: number
-  low?: number
   high?: number
   net_change?: number
-  net_change_pct?: number
-  range?: {
-    prev_close?: number
-    pred_high?: number
-    pred_low?: number
-    long_flat_price?: number
-    min_overshoot?: number
-    os_pct?: number
-  }
-  context?: {
-    long_tier?: string
-    y2y3_hands?: number
-    y2y3_signal?: string
-  }
-}
-
-type LiveLongRow = {
-  rank: number
-  ticker: string
-  as_of_date?: string
-  price_as_of?: string
-  last?: number
-  low?: number
-  open?: number
-  net_change_pct?: number
-  pred_low: number
-  flat_at: number
-  min_overshoot: number
-  overshoot: number
-  overshoot_pct: number
-  win_rate_pct?: number
-  win_n?: number
-  long_tier?: string
-  y2y3_hands?: number
+  context?: ReclaimCloseFeederRow['context'] & { y2y3_signal?: string }
 }
 
 function money(n?: number | null) {
@@ -95,76 +48,9 @@ function ChangePctCell({ value }: { value?: number }) {
   )
 }
 
-/**
- * Live long reclaim-at-close: today's band breached on the live low,
- * and last still outside (below pred_low) so a close print can be the entry.
- */
-function buildLiveLongCloseRows(
-  board: FeederRow[],
-  winRates: WinRatesPayload | null,
-  minWinPct: number
-): LiveLongRow[] {
-  const rows: Omit<LiveLongRow, 'rank'>[] = []
-  for (const row of board) {
-    if (!row.ticker || row.fallback) continue
-    const predLow =
-      row.range?.long_flat_price ?? row.range?.pred_low ?? null
-    const minOs = row.range?.min_overshoot
-    const prev = row.range?.prev_close
-    if (predLow == null || minOs == null || !Number.isFinite(predLow) || !Number.isFinite(minOs)) {
-      continue
-    }
-    const last = row.last
-    const low = row.low ?? last
-    if (last == null || low == null || !Number.isFinite(last) || !Number.isFinite(low)) {
-      continue
-    }
-    // Must still be outside the band at last (close-entry thesis).
-    if (!(last < predLow)) continue
-    const overshoot = predLow - low
-    if (!(overshoot >= minOs)) continue
-
-    const wr = winRates?.tickers?.[row.ticker]?.long
-    const winPct = wr?.win_rate_pct
-    if (winPct == null || !Number.isFinite(winPct) || winPct < minWinPct) continue
-
-    const overshootPct =
-      prev != null && prev > 0 ? (100.0 * overshoot) / prev : Number.NaN
-
-    rows.push({
-      ticker: row.ticker,
-      as_of_date: row.as_of_date,
-      price_as_of: row.price_as_of,
-      last,
-      low,
-      open: row.open,
-      net_change_pct: row.net_change_pct,
-      pred_low: predLow,
-      flat_at: predLow,
-      min_overshoot: minOs,
-      overshoot,
-      overshoot_pct: overshootPct,
-      win_rate_pct: winPct,
-      win_n: wr?.n,
-      long_tier: row.context?.long_tier,
-      y2y3_hands: row.context?.y2y3_hands,
-    })
-  }
-
-  rows.sort((a, b) => {
-    const os = (b.overshoot_pct || 0) - (a.overshoot_pct || 0)
-    if (os !== 0) return os
-    const wr = (b.win_rate_pct || 0) - (a.win_rate_pct || 0)
-    if (wr !== 0) return wr
-    return a.ticker.localeCompare(b.ticker)
-  })
-
-  return rows.map((r, i) => ({ ...r, rank: i + 1 }))
-}
-
 function ReclaimClosePageContent() {
   const [board, setBoard] = useState<FeederRow[]>([])
-  const [winRates, setWinRates] = useState<WinRatesPayload | null>(null)
+  const [winRates, setWinRates] = useState<ReclaimCloseWinRates | null>(null)
   const [minWinPct, setMinWinPct] = useState(80)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -316,6 +202,9 @@ function ReclaimClosePageContent() {
                 <th className="py-2 pr-3">n</th>
                 <th className="py-2 pr-3">Chg %</th>
                 <th className="py-2 pr-3">Last</th>
+                <th className="py-2 pr-3">Open</th>
+                <th className="py-2 pr-3 whitespace-nowrap">vs Open</th>
+                <th className="py-2 pr-3 whitespace-nowrap">vs Open %</th>
                 <th className="py-2 pr-3">Low</th>
                 <th className="py-2 pr-3">OS %</th>
                 <th className="py-2 pr-3">OS $</th>
@@ -327,7 +216,7 @@ function ReclaimClosePageContent() {
             <tbody>
               {ranked.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-4 text-gray-500">
+                  <td colSpan={15} className="py-4 text-gray-500">
                     No live long breaches at this win% filter
                     {quotesOk ? ' right now.' : ' (need live quotes).'}
                   </td>
@@ -355,6 +244,21 @@ function ReclaimClosePageContent() {
                       <ChangePctCell value={row.net_change_pct} />
                     </td>
                     <td className="py-2 pr-3 text-white tabular-nums">{money(row.last)}</td>
+                    <td className="py-2 pr-3 text-gray-300 tabular-nums">{money(row.open)}</td>
+                    <td
+                      className={`py-2 pr-3 tabular-nums font-medium ${
+                        row.from_open == null || !Number.isFinite(row.from_open)
+                          ? 'text-gray-500'
+                          : row.from_open >= 0
+                            ? 'text-emerald-400'
+                            : 'text-rose-400'
+                      }`}
+                    >
+                      {formatSignedMoney(row.from_open)}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <ChangePctCell value={row.from_open_pct} />
+                    </td>
                     <td className="py-2 pr-3 text-rose-200 tabular-nums">{money(row.low)}</td>
                     <td className="py-2 pr-3 text-amber-300 font-semibold">
                       {Number.isFinite(row.overshoot_pct) ? pct(row.overshoot_pct) : '—'}

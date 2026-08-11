@@ -8,9 +8,15 @@ export interface DtTickerQuote {
   score: number
   last?: number
   previousClose?: number
+  /** Today's session open (TradeStation). */
+  open?: number
   netChange?: number
   /** Percent, e.g. 1.25 for +1.25%. */
   netChangePct?: number
+  /** Last − today's open. */
+  fromOpen?: number
+  /** (Last − open) / open × 100. */
+  fromOpenPct?: number
 }
 
 export interface DtMarketQuotes {
@@ -65,6 +71,26 @@ export function dayMoveFromQuote(quote: {
     netChange,
     netChangePct,
   }
+}
+
+/** Session open + last-vs-open from a TradeStation-style quote. */
+export function sessionOpenFromQuote(quote: {
+  Open?: string | number
+  Last?: string | number
+  Close?: string | number
+} | null | undefined): {
+  open?: number
+  fromOpen?: number
+  fromOpenPct?: number
+} {
+  if (!quote) return {}
+  const open = toQuoteNum(quote.Open)
+  const last = toQuoteNum(quote.Last) ?? toQuoteNum(quote.Close)
+  if (open == null || open <= 0) return { open: undefined }
+  const fromOpen = last != null && Number.isFinite(last) ? last - open : undefined
+  const fromOpenPct =
+    fromOpen != null ? (fromOpen / open) * 100 : undefined
+  return { open, fromOpen, fromOpenPct }
 }
 
 export function formatMoney(n: number | undefined | null): string {

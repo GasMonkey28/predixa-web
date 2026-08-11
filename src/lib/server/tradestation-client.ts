@@ -52,11 +52,16 @@ export interface TradeStationOrder {
   OpenedDateTime?: string
   ClosedDateTime?: string
   Status?: string
+  StatusDescription?: string
+  RejectReason?: string
+  Messages?: Array<string | { Message?: string; Description?: string }>
   FilledPrice?: string
   PriceUsedForBuyingPower?: string
   /** Equity-style side when present: Buy, Sell, SellShort, BuyToCover, … */
   Side?: string
   TradeAction?: string
+  Symbol?: string
+  Quantity?: string
   Legs?: TradeStationOrderLeg[]
 }
 
@@ -142,6 +147,8 @@ export interface TradeStationOrderRequest {
   TimeInForce: { Duration: string; Expiration?: string }
   Route?: string
   LimitPrice?: string
+  /** Required on many Reg-T margin / paper accounts or TS rejects with a bare REJ. */
+  BuyingPowerWarning?: 'Enforce' | 'Preconfirmed' | 'Confirmed'
 }
 
 export interface TradeStationPlaceOrderResult {
@@ -216,6 +223,36 @@ export async function fetchTradeStationAccounts(
     { apiEnv }
   )
   return data.Accounts ?? []
+}
+
+export type TradeStationBalance = {
+  AccountID?: string
+  AccountType?: string
+  BuyingPower?: string
+  CashBalance?: string
+  Equity?: string
+  MarketValue?: string
+  TodaysProfitLoss?: string
+  BalanceDetail?: {
+    OvernightBuyingPower?: string
+    DayTrades?: string
+    RequiredMargin?: string
+    UnrealizedProfitLoss?: string
+  }
+}
+
+export async function fetchTradeStationBalances(
+  accessToken: string,
+  accountIds: string[],
+  apiEnv: TradeStationApiEnv = 'sim'
+): Promise<TradeStationBalance[]> {
+  if (accountIds.length === 0) return []
+  const data = await tradeStationFetch<{ Balances?: TradeStationBalance[] }>(
+    accessToken,
+    `/brokerage/accounts/${accountIds.join(',')}/balances`,
+    { apiEnv }
+  )
+  return data.Balances ?? []
 }
 
 export async function fetchTradeStationPositions(

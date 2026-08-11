@@ -12,13 +12,31 @@ import { requireSubscriber } from '@/lib/server/require-subscriber'
 import { isStockPosition, loadReclaimExitLevels, type StockDtReclaimExits } from '@/lib/server/stock-dt'
 import {
   fetchQuoteSnapshots,
+  fetchTradeStationBalances,
+  fetchTradeStationCurrentOrders,
   fetchTradeStationPositions,
   getValidAccessToken,
+  type TradeStationOrder,
   type TradeStationPosition,
   type TradeStationQuote,
 } from '@/lib/server/tradestation-client'
 
 export const dynamic = 'force-dynamic'
+
+function orderRejectMessage(order: TradeStationOrder): string | null {
+  const extras = (order.Messages || [])
+    .map((m) => (typeof m === 'string' ? m : m.Message || m.Description || ''))
+    .filter(Boolean)
+  const desc = order.StatusDescription?.trim()
+  const reason = order.RejectReason?.trim()
+  const parts = [
+    reason && reason.toLowerCase() !== 'rejected' ? reason : null,
+    desc && desc.toLowerCase() !== 'rejected' ? desc : null,
+    ...extras,
+  ].filter(Boolean) as string[]
+  if (parts.length > 0) return parts.join(' · ')
+  return desc || reason || null
+}
 
 function toNum(value: string | number | undefined | null): number {
   if (value == null || value === '') return 0
@@ -91,7 +109,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No paper account selected' }, { status: 400 })
     }
 
-    const raw = await fetchTradeStationPositions(accessToken, [accountId], 'sim')
+    const [raw, currentOrders, balances] = await Promise.all([
+      fetchTradeStationPositions(accessToken, [accountId], 'sim'),
+      fetchTradeStationCurrentOrders(accessToken, [accountId], 'sim').catch(() => [] as TradeStationOrder[]),
+      fetchTradeStationBalances(accessToken, [accountId], 'sim').catch(() => []),
+    ])
     let entryDates = new Map<string, string>()
     try {
       entryDates = await loadOpenLotEntryDates(accessToken, accountId)
@@ -151,12 +173,41 @@ export async function GET(request: NextRequest) {
       { marketValue: 0, totalCost: 0, unrealizedPnl: 0, shares: 0 }
     )
 
+    const workingOrders = currentOrders
+      .map((order) => {
+        const status = (order.Status || '').toUpperCase()
+        const symbol =
+          order.Symbol ||
+          order.Legs?.find((leg) => leg.Symbol)?.Symbol ||
+          ''
+        const qty =
+          Number(order.Quantity) ||
+          Number(order.Legs?.[0]?.QuantityRemaining) ||
+          Number(order.Legs?.[0]?.QuantityOrdered) ||
+          0
+        return {
+          orderId: order.OrderID,
+          symbol,
+          side: order.Side || order.TradeAction || '',
+          status: order.Status || '',
+          quantity: Number.isFinite(qty) ? Math.abs(qty) : 0,
+          message: orderRejectMessage(order),
+          filled: status === 'FLL' || status === 'FPR',
+          working: !['FLL', 'REJ', 'CAN', 'EXP', 'OUT'].includes(status),
+        }
+      })
+      .filter((o) => o.orderId && (o.working || o.status.toUpperCase() === 'REJ'))
+
     return NextResponse.json(
       {
         accountId,
         generated_at: new Date().toISOString(),
         positions,
+        workingOrders,
         totals,
+        buyingPower: toNum(balances[0]?.BuyingPower) || null,
+        cashBalance: toNum(balances[0]?.CashBalance) || null,
+        overnightBuyingPower: toNum(balances[0]?.BalanceDetail?.OvernightBuyingPower) || null,
       },
       { headers: { 'Cache-Control': 'no-store', ...getRateLimitHeaders(clientIp) } }
     )

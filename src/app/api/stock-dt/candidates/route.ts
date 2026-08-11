@@ -4,6 +4,7 @@ import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 import { logger } from '@/lib/server/logger'
 import { requireSubscriber } from '@/lib/server/require-subscriber'
 import { buildStockDtPlan } from '@/lib/server/stock-dt'
+import { parseStockDtBuySource } from '@/lib/stock-dt'
 import { connectionHasTradeScopes } from '@/lib/server/tradestation-config'
 import { getValidAccessToken } from '@/lib/server/tradestation-client'
 
@@ -39,10 +40,11 @@ export async function GET(request: NextRequest) {
     const { accessToken, connection } = await getValidAccessToken(auth.userId)
     const params = request.nextUrl.searchParams
     const accountId = params.get('accountId') || connection.selectedAccountId
-    const sourceRaw = (params.get('source') || 'model_reclaim').trim().toLowerCase()
-    const source = sourceRaw === 'ticker_ranks' ? 'ticker_ranks' : 'model_reclaim'
+    const source = parseStockDtBuySource(params.get('source'))
     const budgetRaw = Number(params.get('budget'))
     const minWinRaw = Number(params.get('minWinPct'))
+    const minWinLongRaw = Number(params.get('minWinPctLong'))
+    const minWinShortRaw = Number(params.get('minWinPctShort'))
 
     const plan = await buildStockDtPlan({
       accessToken,
@@ -51,6 +53,8 @@ export async function GET(request: NextRequest) {
       source,
       sideBudget: Number.isFinite(budgetRaw) ? budgetRaw : undefined,
       minWinPct: Number.isFinite(minWinRaw) ? minWinRaw : undefined,
+      minWinPctLong: Number.isFinite(minWinLongRaw) ? minWinLongRaw : undefined,
+      minWinPctShort: Number.isFinite(minWinShortRaw) ? minWinShortRaw : undefined,
     })
 
     return NextResponse.json(plan, {
