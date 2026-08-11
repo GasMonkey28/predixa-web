@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 
 import { config } from '@/lib/server/config'
-import { dayMoveFromQuote } from '@/lib/dt-quotes'
+import { dayMoveFromQuote, toQuoteNum } from '@/lib/dt-quotes'
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 import { logger } from '@/lib/server/logger'
 import { requireSubscriber } from '@/lib/server/require-subscriber'
@@ -77,13 +77,27 @@ async function enrichBoardRowsWithQuotes(
 
   return rows.map((row) => {
     const ticker = typeof row.ticker === 'string' ? row.ticker.toUpperCase() : ''
-    const move = dayMoveFromQuote(quotesBySymbol.get(ticker))
-    if (move.last == null && move.netChange == null && move.netChangePct == null) {
+    const quote = quotesBySymbol.get(ticker)
+    const move = dayMoveFromQuote(quote)
+    const low = toQuoteNum(quote?.Low)
+    const high = toQuoteNum(quote?.High)
+    const open = toQuoteNum(quote?.Open)
+    if (
+      move.last == null &&
+      move.netChange == null &&
+      move.netChangePct == null &&
+      low == null &&
+      high == null &&
+      open == null
+    ) {
       return row
     }
     return {
       ...row,
       last: move.last,
+      open,
+      low,
+      high,
       net_change: move.netChange,
       net_change_pct: move.netChangePct,
     }

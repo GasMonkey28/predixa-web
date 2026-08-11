@@ -6,6 +6,7 @@ import {
   summarizeFlattenUndo,
   type DtFlattenUndoLot,
 } from '@/lib/dt-flatten-undo'
+import { formatSignedPct } from '@/lib/dt-quotes'
 import { groupPositionsByTradingDay } from '@/lib/dt-position-days'
 
 export type StockDtOpenPosition = {
@@ -15,6 +16,10 @@ export type StockDtOpenPosition = {
   longShort: 'Long' | 'Short' | string
   averagePrice: number
   last: number | null
+  previousClose?: number
+  netChange?: number
+  /** Day net change %, e.g. 1.25 for +1.25%. */
+  netChangePct?: number
   marketValue: number
   totalCost: number
   unrealizedPnl: number
@@ -22,6 +27,10 @@ export type StockDtOpenPosition = {
   assetType?: string | null
   entryDate?: string | null
   timestamp?: string | null
+  /** Model Reclaim flat / band re-entry price when feeder available. */
+  targetClose?: number | null
+  /** Model Reclaim short stop; null for longs / missing feeder. */
+  stopLoss?: number | null
 }
 
 function money(n: number | null | undefined): string {
@@ -215,6 +224,9 @@ export default function StockDtPositionsPanel({
                         <th className="px-3 py-2 text-right">Qty</th>
                         <th className="px-3 py-2 text-right">Avg</th>
                         <th className="px-3 py-2 text-right">Last</th>
+                        <th className="px-3 py-2 text-right whitespace-nowrap">Chg %</th>
+                        <th className="px-3 py-2 text-right whitespace-nowrap">Target</th>
+                        <th className="px-3 py-2 text-right whitespace-nowrap">Stop</th>
                         <th className="px-3 py-2 text-right">MV</th>
                         <th className="px-3 py-2 text-right">uPnL</th>
                         <th className="px-3 py-2 text-right">Actions</th>
@@ -224,6 +236,8 @@ export default function StockDtPositionsPanel({
                       {group.positions.map((p) => {
                         const busy = busySymbol === p.symbol || dayBusy
                         const trimQty = Math.min(size, p.quantity)
+                        const chgPct = p.netChangePct
+                        const chgPositive = (chgPct ?? p.netChange ?? 0) >= 0
                         return (
                           <tr key={p.positionId || p.symbol} className="border-t border-zinc-800/50">
                             <td className="px-3 py-2">
@@ -233,6 +247,25 @@ export default function StockDtPositionsPanel({
                             <td className="px-3 py-2 text-right text-zinc-200">{p.quantity}</td>
                             <td className="px-3 py-2 text-right text-zinc-300">{money(p.averagePrice)}</td>
                             <td className="px-3 py-2 text-right text-zinc-300">{money(p.last)}</td>
+                            <td
+                              className={`px-3 py-2 text-right tabular-nums font-medium ${
+                                chgPct == null || !Number.isFinite(chgPct)
+                                  ? 'text-zinc-500'
+                                  : chgPositive
+                                    ? 'text-emerald-400'
+                                    : 'text-rose-400'
+                              }`}
+                            >
+                              {chgPct == null || !Number.isFinite(chgPct)
+                                ? '—'
+                                : formatSignedPct(chgPct)}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-amber-200">
+                              {money(p.targetClose)}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-rose-200">
+                              {money(p.stopLoss)}
+                            </td>
                             <td className="px-3 py-2 text-right text-zinc-200">{money(p.marketValue)}</td>
                             <td
                               className={`px-3 py-2 text-right font-medium ${

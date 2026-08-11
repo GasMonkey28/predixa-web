@@ -124,6 +124,12 @@ function SideTable({
               </th>
               <th className="px-3 py-2 text-right">Last</th>
               <th className="px-3 py-2 text-right">Change</th>
+              {source === 'model_reclaim' && (
+                <>
+                  <th className="px-3 py-2 text-right whitespace-nowrap">Target</th>
+                  <th className="px-3 py-2 text-right whitespace-nowrap">Stop</th>
+                </>
+              )}
               <th className="px-3 py-2 text-right">Weight</th>
               <th className="px-3 py-2 text-right">Target $</th>
               <th className="px-3 py-2 text-right">Price</th>
@@ -134,7 +140,10 @@ function SideTable({
           <tbody>
             {plan.candidates.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
+                <td
+                  colSpan={source === 'model_reclaim' ? 12 : 10}
+                  className="px-4 py-8 text-center text-zinc-500"
+                >
                   {source === 'model_reclaim'
                     ? `No tradeable Model Reclaim names with win rate ≥ ${scoreLine}% for this side.`
                     : `No tradeable stocks above the ${scoreLine} line for this side.`}
@@ -185,6 +194,16 @@ function SideTable({
                       </>
                     )}
                   </td>
+                  {source === 'model_reclaim' && (
+                    <>
+                      <td className="px-3 py-2 text-right tabular-nums text-amber-200">
+                        {money(row.targetClose ?? undefined)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-rose-200">
+                        {money(row.stopLoss ?? undefined)}
+                      </td>
+                    </>
+                  )}
                   <td className="px-3 py-2 text-right text-zinc-300 tabular-nums">
                     {(row.weight * 100).toFixed(1)}%
                   </td>

@@ -63,6 +63,11 @@ const navigationItems = [
         icon: '♻️'
       },
       {
+        name: 'Model Reclaim-at Close (Long)',
+        href: '/daily/reclaim-close',
+        icon: '🎯'
+      },
+      {
         name: 'Model Weekly',
         href: '/weekly',
         icon: '📊'

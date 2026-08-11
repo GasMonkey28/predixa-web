@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { dayMoveFromQuote } from '@/lib/dt-quotes'
 import { tradingDayFromTimestamp } from '@/lib/dt-position-days'
 import {
   loadOpenLotEntryDates,
@@ -8,11 +9,13 @@ import {
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 import { logger } from '@/lib/server/logger'
 import { requireSubscriber } from '@/lib/server/require-subscriber'
-import { isStockPosition } from '@/lib/server/stock-dt'
+import { isStockPosition, loadReclaimExitLevels, type StockDtReclaimExits } from '@/lib/server/stock-dt'
 import {
+  fetchQuoteSnapshots,
   fetchTradeStationPositions,
   getValidAccessToken,
   type TradeStationPosition,
+  type TradeStationQuote,
 } from '@/lib/server/tradestation-client'
 
 export const dynamic = 'force-dynamic'
@@ -25,7 +28,8 @@ function toNum(value: string | number | undefined | null): number {
 
 function mapStockPosition(
   p: TradeStationPosition,
-  entryDates: Map<string, string>
+  entryDates: Map<string, string>,
+  quotesBySymbol: Map<string, TradeStationQuote>
 ) {
   const qty = Math.abs(toNum(p.Quantity))
   const avg = toNum(p.AveragePrice)
@@ -36,6 +40,7 @@ function mapStockPosition(
   const isLong = (p.LongShort || '').toLowerCase().startsWith('long')
   const longShort = isLong ? 'Long' : 'Short'
   const fromOrders = entryDates.get(positionEntryKey(p.Symbol, longShort))
+  const move = dayMoveFromQuote(quotesBySymbol.get(p.Symbol.toUpperCase()))
 
   return {
     positionId: p.PositionID,
@@ -43,7 +48,10 @@ function mapStockPosition(
     quantity: qty,
     longShort,
     averagePrice: avg,
-    last: last || null,
+    last: move.last ?? (last || null),
+    previousClose: move.previousClose,
+    netChange: move.netChange,
+    netChangePct: move.netChangePct,
     marketValue,
     totalCost,
     unrealizedPnl: unrealized,
@@ -91,9 +99,46 @@ export async function GET(request: NextRequest) {
       logger.warn({ err, userId: auth.userId }, 'Stock DT entry-date fill lookup failed; using position timestamps')
     }
 
-    const positions = raw
-      .filter((p) => isStockPosition(p.Symbol, p.AssetType))
-      .map((p) => mapStockPosition(p, entryDates))
+    const stockRaw = raw.filter((p) => isStockPosition(p.Symbol, p.AssetType))
+    const quotesBySymbol = new Map<string, TradeStationQuote>()
+    const symbols = Array.from(
+      new Set(stockRaw.map((p) => p.Symbol?.toUpperCase()).filter(Boolean) as string[])
+    )
+    if (symbols.length > 0) {
+      try {
+        const quotes = await fetchQuoteSnapshots(accessToken, symbols)
+        for (const q of quotes) {
+          if (q.Symbol) quotesBySymbol.set(q.Symbol.toUpperCase(), q)
+        }
+      } catch (err) {
+        logger.warn(
+          { err, userId: auth.userId, symbols: symbols.slice(0, 5) },
+          'Stock DT positions: quote enrichment failed'
+        )
+      }
+    }
+
+    const positionsBase = stockRaw.map((p) => mapStockPosition(p, entryDates, quotesBySymbol))
+
+    let reclaimBySymbol = new Map<
+      string,
+      { long?: StockDtReclaimExits; short?: StockDtReclaimExits }
+    >()
+    try {
+      reclaimBySymbol = await loadReclaimExitLevels(positionsBase.map((p) => p.symbol))
+    } catch (err) {
+      logger.warn({ err, userId: auth.userId }, 'Stock DT positions: reclaim exits lookup failed')
+    }
+
+    const positions = positionsBase.map((p) => {
+      const side = p.longShort === 'Short' ? 'short' : 'long'
+      const exits = reclaimBySymbol.get(p.symbol.toUpperCase())?.[side]
+      return {
+        ...p,
+        targetClose: exits?.targetClose ?? null,
+        stopLoss: exits?.stopLoss ?? null,
+      }
+    })
 
     const totals = positions.reduce(
       (acc, p) => {

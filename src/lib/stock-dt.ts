@@ -35,6 +35,10 @@ export interface StockDtCandidate {
   quantity: number
   estimatedCost: number
   reason: string
+  /** Model Reclaim band re-entry / flat price (pred_low long, pred_high short). */
+  targetClose?: number | null
+  /** Model Reclaim short stop; null/undefined for longs or non-reclaim. */
+  stopLoss?: number | null
 }
 
 export interface StockDtSidePlan {
