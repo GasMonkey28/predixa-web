@@ -33,11 +33,10 @@ interface WeeklyPredictionsResponse {
   publishReady?: boolean
 }
 
-async function fetchWeeklyPrediction(dateStr: string): Promise<WeeklyPrediction | null> {
+async function fetchWeeklyPrediction(dateStr: string, ticker: string): Promise<WeeklyPrediction | null> {
   const bucket = config.marketData.bucket
-  const ticker = config.marketData.ticker || 'SPY'
   const s3Ticker = ticker.toUpperCase() // S3 uses uppercase ticker
-  
+
   const url = `https://s3.amazonaws.com/${bucket}/weekly/${dateStr}/${s3Ticker}.json`
   
   try {
@@ -70,10 +69,11 @@ async function fetchWeeklyPrediction(dateStr: string): Promise<WeeklyPrediction 
 /** Load the newest distinct weekly publishes available in S3. */
 async function fetchRecentWeeklyPublishes(
   referenceDate: Date = new Date(),
-  limit = 2
+  limit = 2,
+  ticker: string = 'SPY'
 ): Promise<WeeklyPrediction[]> {
   const candidateDates = getWeeklyPublishCandidateDates(referenceDate)
-  const results = await Promise.all(candidateDates.map((dateStr) => fetchWeeklyPrediction(dateStr)))
+  const results = await Promise.all(candidateDates.map((dateStr) => fetchWeeklyPrediction(dateStr, ticker)))
 
   const byAsOfDate = new Map<string, WeeklyPrediction>()
   for (const pred of results) {
@@ -156,7 +156,8 @@ export async function GET(request: Request) {
     const startDateStr = searchParams.get('startDate')
     const endDateStr = searchParams.get('endDate')
     const interval = searchParams.get('interval') || '15min'
-    
+    const ticker = searchParams.get('ticker') || config.marketData.ticker || 'SPY'
+
     const referenceDate = new Date()
     const candidateDates = getWeeklyPublishCandidateDates(referenceDate)
 
@@ -172,16 +173,16 @@ export async function GET(request: Request) {
       console.log(`Fetching predictions for ${weekDates.length} weeks in 60min range`)
       
       // Fetch predictions for all weeks in parallel
-      const weekPromises = weekDates.map(date => 
-        fetchWeeklyPrediction(formatDateYYYYMMDD(date))
+      const weekPromises = weekDates.map(date =>
+        fetchWeeklyPrediction(formatDateYYYYMMDD(date), ticker)
       )
       const weekResults = await Promise.all(weekPromises)
-      
+
       // Filter out null results
       allWeeks = weekResults.filter((pred): pred is WeeklyPrediction => pred !== null)
     }
-    
-    const publishes = await fetchRecentWeeklyPublishes(referenceDate, 2)
+
+    const publishes = await fetchRecentWeeklyPublishes(referenceDate, 2, ticker)
     const classified = classifyWeeklyPredictions(publishes, referenceDate)
 
     console.log('Fetching weekly predictions:', {

@@ -28,23 +28,34 @@ interface WeeklyPredictions {
 }
 
 interface WeeklyPriceChartSectionProps {
-  /** Show SPY price card above the chart (weekly page layout) */
+  /** Show price card above the chart (weekly page layout) */
   showPriceCard?: boolean
   chartHeight?: number
   className?: string
+  /** Ticker to chart (defaults to SPY, matching original single-ticker behavior) */
+  ticker?: string
+  /**
+   * Initial bar interval. Defaults to '15min' (unchanged SPY behavior). Tickers that only
+   * have a 60min S3 feed set up (no 15min schedule yet, e.g. a newly-added ticker) should
+   * pass '60min' here so the first load doesn't 404 against a bars/{ticker}/15min/ key that
+   * doesn't exist.
+   */
+  defaultInterval?: '15min' | '60min'
 }
 
 export default function WeeklyPriceChartSection({
   showPriceCard = false,
   chartHeight = 544,
   className = '',
+  ticker = 'SPY',
+  defaultInterval = '15min',
 }: WeeklyPriceChartSectionProps) {
   const [data, setData] = useState<{ bars?: Array<{ t: string; o: number; h: number; l: number; c: number; v?: number }> } | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>('line')
-  const [barInterval, setBarInterval] = useState<'15min' | '60min'>('15min')
+  const [barInterval, setBarInterval] = useState<'15min' | '60min'>(defaultInterval)
   const [weeklyPredictions, setWeeklyPredictions] = useState<WeeklyPredictions>({
     currentWeek: null,
     previousWeek: null,
@@ -61,12 +72,12 @@ export default function WeeklyPriceChartSection({
           setError(null)
         }
         const barsResponse = await fetch(
-          `/api/bars/weekly?interval=${barInterval}&t=${Date.now()}&r=${Math.random()}`
+          `/api/bars/weekly?interval=${barInterval}&ticker=${ticker}&t=${Date.now()}&r=${Math.random()}`
         )
         const barsResult = await barsResponse.json()
         setData(barsResult)
 
-        let predictionsUrl = `/api/weekly-predictions?t=${Date.now()}&r=${Math.random()}`
+        let predictionsUrl = `/api/weekly-predictions?ticker=${ticker}&t=${Date.now()}&r=${Math.random()}`
         if (barInterval === '60min' && barsResult.bars?.length > 0) {
           const firstBar = barsResult.bars[0]
           const lastBar = barsResult.bars[barsResult.bars.length - 1]
@@ -94,7 +105,7 @@ export default function WeeklyPriceChartSection({
         setRefreshing(false)
       }
     },
-    [barInterval]
+    [barInterval, ticker]
   )
 
   useEffect(() => {
@@ -199,6 +210,7 @@ export default function WeeklyPriceChartSection({
               change={priceChange}
               changePercent={priceChangePercent}
               onRefresh={softRefresh}
+              ticker={ticker}
             />
           </div>
         </motion.div>

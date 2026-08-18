@@ -4,10 +4,6 @@ import axios from 'axios'
 const BUCKET = process.env.NEXT_PUBLIC_S3_BUCKET
 const TICKER = process.env.NEXT_PUBLIC_TICKER || 'SPY'
 
-// CRITICAL FIX: Force lowercase ticker for S3 access - S3 is case sensitive
-// This is the root cause of the 403 errors - S3 requires lowercase ticker
-const S3_TICKER = 'spy'  // Hardcoded to ensure lowercase
-
 if (!BUCKET) {
   console.error('⚠️ NEXT_PUBLIC_S3_BUCKET is not set! Please add it to your .env.local file')
 }
@@ -22,24 +18,29 @@ export type BarsPayload = {
   bars: Bar[]
 }
 
-export async function fetchWeeklyBars(force = false, interval: '15min' | '60min' = '15min'): Promise<BarsPayload> {
+export async function fetchWeeklyBars(
+  force = false,
+  interval: '15min' | '60min' = '15min',
+  ticker: string = TICKER
+): Promise<BarsPayload> {
   if (!BUCKET) {
     throw new Error('NEXT_PUBLIC_S3_BUCKET environment variable is not set. Please add it to your .env.local file.')
   }
-  
+
   // Validate interval parameter
   if (interval !== '15min' && interval !== '60min') {
     throw new Error(`Invalid interval: ${interval}. Must be '15min' or '60min'`)
   }
-  
-  // FORCE COMPLETE REBUILD - MAJOR CHANGE TO BREAK DEPLOYMENT CACHE
-  // Using s3.amazonaws.com format for public access - S3 is case sensitive
-  // CRITICAL FIX: Force lowercase ticker for S3 access - this fixes 403 errors
-  const url = `https://s3.amazonaws.com/${BUCKET}/bars/${S3_TICKER}/${interval}/latest.json`
-  
+
+  // S3 keys are written by the tradier bars Lambda as bars/{symbol-lowercase}/{interval}/latest.json
+  // (was hardcoded to 'spy' here previously -- now driven by the ticker param so other
+  // symbols, e.g. QQQ, resolve to their own S3 object instead of always reading SPY's).
+  const s3Ticker = ticker.toLowerCase()
+  const url = `https://s3.amazonaws.com/${BUCKET}/bars/${s3Ticker}/${interval}/latest.json`
+
   // Removed verbose console.logs to avoid exposing bucket name in browser console
   try {
-    const resp = await axios.get(url, { 
+    const resp = await axios.get(url, {
       headers: {
         ...noCacheHeaders(force)
       }
@@ -53,14 +54,14 @@ export async function fetchWeeklyBars(force = false, interval: '15min' | '60min'
       firstBar: resp.data.bars?.[0],
       lastBar: resp.data.bars?.[resp.data.bars?.length - 1]
     })
-    
-    const normalizedData = normalizeBars(resp.data)
+
+    const normalizedData = normalizeBars(resp.data, ticker)
     console.log('Normalized data:', {
       ticker: normalizedData.ticker,
       barsCount: normalizedData.bars.length,
       lastPrice: normalizedData.bars[normalizedData.bars.length - 1]?.c
     })
-    
+
     return normalizedData
   } catch (error) {
     console.error('S3 bars data not available - THROWING ERROR TO SEE REAL ISSUE')
@@ -68,15 +69,15 @@ export async function fetchWeeklyBars(force = false, interval: '15min' | '60min'
     console.error('Error status:', error instanceof Error && 'status' in error ? error.status : 'unknown')
     console.error('Error response:', error instanceof Error && 'response' in error ? error.response : 'unknown')
     console.error('BUCKET:', BUCKET)
-    console.error('TICKER:', TICKER)
+    console.error('TICKER:', ticker)
     console.error('URL that failed:', url)
     // Throw the error instead of returning mock data to see the real issue
     throw error
   }
 }
 
-export async function fetchDailyBars(force = false): Promise<BarsPayload> {
-  return await fetchWeeklyBars(force)
+export async function fetchDailyBars(force = false, ticker: string = TICKER): Promise<BarsPayload> {
+  return await fetchWeeklyBars(force, '15min', ticker)
 }
 
 export async function fetchFuture(dateISO: string): Promise<any> {
@@ -165,10 +166,10 @@ export async function fetchEconomicCalendarInvesting(calendarDate?: string): Pro
   }
 }
 
-function normalizeBars(raw: any): BarsPayload {
+function normalizeBars(raw: any, fallbackTicker: string = TICKER): BarsPayload {
   const bars = (raw.bars || []).filter((b: any) => b.o != null && b.h != null && b.l != null && b.c != null)
   return {
-    ticker: raw.ticker || raw.symbol || TICKER,
+    ticker: raw.ticker || raw.symbol || fallbackTicker,
     interval: raw.interval || '15min',
     market_open: raw.market_open,
     bars: bars.map((b: any) => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v })),

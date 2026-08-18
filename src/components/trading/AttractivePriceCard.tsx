@@ -6,9 +6,11 @@ interface AttractivePriceCardProps {
   change: number;
   changePercent: number;
   onRefresh?: () => void;
+  /** Ticker symbol to display (defaults to SPY, matching original single-ticker behavior) */
+  ticker?: string;
 }
 
-function AttractivePriceCard({ price, change, changePercent, onRefresh }: AttractivePriceCardProps) {
+function AttractivePriceCard({ price, change, changePercent, onRefresh, ticker = 'SPY' }: AttractivePriceCardProps) {
   const isPositive = change >= 0;
 
   return (
@@ -22,7 +24,7 @@ function AttractivePriceCard({ price, change, changePercent, onRefresh }: Attrac
       
       <div className="relative z-10">
         <div className="flex items-center gap-2 text-zinc-400 mb-2">
-          <span>SPY</span>
+          <span>{ticker}</span>
         </div>
         
         <div>

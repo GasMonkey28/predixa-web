@@ -6,7 +6,7 @@ import WeeklyPriceChartSection from '@/components/trading/WeeklyPriceChartSectio
 
 export const dynamic = 'force-dynamic'
 
-function WeeklyPageContent() {
+function WeeklyQqqPageContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
       <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 animate-pulse" />
@@ -20,13 +20,9 @@ function WeeklyPageContent() {
           <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
             Weekly Market Analysis
           </h1>
-          <p className="text-gray-300 text-lg">SPY &amp; QQQ Weekly OHLC Data &amp; Trading Signals</p>
+          <p className="text-gray-300 text-lg">QQQ Weekly OHLC Data & Trading Signals</p>
         </motion.div>
 
-        <h2 className="text-xl font-semibold text-white mb-4">SPY</h2>
-        <WeeklyPriceChartSection showPriceCard chartHeight={544} className="mb-12" ticker="SPY" />
-
-        <h2 className="text-xl font-semibold text-white mb-4">QQQ</h2>
         <WeeklyPriceChartSection
           showPriceCard
           chartHeight={544}
@@ -39,10 +35,10 @@ function WeeklyPageContent() {
   )
 }
 
-export default function WeeklyPage() {
+export default function WeeklyQqqPage() {
   return (
     <ProtectedRoute requireSubscription>
-      <WeeklyPageContent />
+      <WeeklyQqqPageContent />
     </ProtectedRoute>
   )
 }
