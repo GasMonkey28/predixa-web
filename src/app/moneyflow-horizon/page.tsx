@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { createMetadata } from '@/lib/seo'
 import LiveForecastTable from './LiveForecastTable'
+import HorizonLinesChart from './HorizonLinesChart'
 
 export const metadata: Metadata = createMetadata({
   title: 'SPY Money-Flow Horizon Forecast | 5/10/15/20-Day Range Prediction | Predixa',
@@ -29,6 +30,19 @@ export default function MoneyFlowHorizonPage() {
           Today&apos;s forecast
         </h2>
         <LiveForecastTable />
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+          Forecast history
+        </h2>
+        <p>
+          Daily SPY candles with each horizon&apos;s rolling forecast line overlaid
+          &mdash; every colored line traces that horizon&apos;s predicted close, plotted
+          on the day the forecast was made. Toggle any horizon on or off, and hover
+          a day for the full readout.
+        </p>
+        <HorizonLinesChart />
       </section>
 
       <section className="space-y-4">
