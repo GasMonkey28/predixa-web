@@ -29,7 +29,7 @@ export default function HorizonLinesChart() {
   const svgRef = useRef<SVGSVGElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
-  const visibleRef = useRef<Record<string, boolean>>({ '1d': true, '5d': true, '10d': true, '15d': true, '20d': true })
+  const visibleRef = useRef<Record<string, boolean>>({ '1d': false, '5d': false, '10d': true, '15d': false, '20d': true })
   const [, forceRerender] = useState(0)
 
   useEffect(() => {
