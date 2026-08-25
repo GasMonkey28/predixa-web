@@ -81,6 +81,11 @@ const navigationItems = [
         name: 'Model History',
         href: '/history',
         icon: '📜'
+      },
+      {
+        name: 'Money-Flow Horizon',
+        href: '/moneyflow-horizon',
+        icon: '💰'
       }
     ]
   },
