@@ -43,11 +43,6 @@ const navigationItems = [
         icon: '🏆',
       },
       {
-        name: 'Ticker Insight',
-        href: '/tickers/insight',
-        icon: '🏷️',
-      },
-      {
         name: 'Model 3 Mixer',
         href: '/daily/model1',
         icon: '📊'
@@ -93,6 +88,11 @@ const navigationItems = [
     name: 'Tools',
     icon: '🔧',
     items: [
+      {
+        name: 'Ticker Insight',
+        href: '/tickers/insight',
+        icon: '🏷️',
+      },
       {
         name: 'News',
         href: '/news/spy',
