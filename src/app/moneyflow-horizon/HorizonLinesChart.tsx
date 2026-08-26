@@ -29,6 +29,7 @@ export default function HorizonLinesChart() {
   const svgRef = useRef<SVGSVGElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const visibleRef = useRef<Record<string, boolean>>({ '1d': false, '5d': false, '10d': true, '15d': false, '20d': true })
   const [, forceRerender] = useState(0)
 
@@ -170,6 +171,11 @@ export default function HorizonLinesChart() {
     svg.setAttribute('viewBox', `0 0 ${W} ${HH}`)
     svg.style.width = `${W}px`
     svg.innerHTML = `${gridSvg}${linesSvg}${candlesSvg}${yLabelsSvg}${xLabelsSvg}<line class="mfh-crosshair" id="mfh-crosshair" y1="${M.top}" y2="${HH - M.bottom}"/>`
+
+    // default view to the most recent data, not the oldest
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth
+    }
 
     const crosshair = svg.querySelector('#mfh-crosshair') as SVGLineElement
 
@@ -335,7 +341,7 @@ export default function HorizonLinesChart() {
         ))}
       </div>
 
-      <div className="mfh-scroll">
+      <div className="mfh-scroll" ref={scrollRef}>
         <div className="mfh-chart-wrap" ref={wrapRef}>
           <svg ref={svgRef} preserveAspectRatio="none" />
           <div className="mfh-tooltip" ref={tooltipRef} />
