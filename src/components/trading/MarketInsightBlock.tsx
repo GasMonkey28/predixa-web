@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import { AlertTriangle, BarChart3, Calendar, Layers } from 'lucide-react'
 
@@ -8,6 +8,7 @@ import type { MarketInsightResponse } from '@/lib/server/market-insight-types'
 import MarketInsightTierStance from '@/components/trading/MarketInsightTierStance'
 import MarketInsightModelSignals from '@/components/trading/MarketInsightModelSignals'
 import SessionDateBadge from '@/components/trading/SessionDateBadge'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 
 const sectionIcons: Record<string, typeof BarChart3> = {
   tiers: Layers,
@@ -21,22 +22,25 @@ export default function MarketInsightBlock() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch(`/api/market-insight/daily?t=${Date.now()}`)
-        const json = (await res.json()) as MarketInsightResponse & { error?: string }
-        if (!res.ok) throw new Error(json.error || 'Failed to load market insight')
-        setData(json)
-        setError(null)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load market insight')
-      } finally {
-        setLoading(false)
-      }
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/market-insight/daily?t=${Date.now()}`)
+      const json = (await res.json()) as MarketInsightResponse & { error?: string }
+      if (!res.ok) throw new Error(json.error || 'Failed to load market insight')
+      setData(json)
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load market insight')
+    } finally {
+      setLoading(false)
     }
-    load()
   }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  useAutoRefresh(load)
 
   if (loading) {
     return (

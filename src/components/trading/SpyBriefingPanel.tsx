@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import BriefingSection from '@/app/news/spy/BriefingSection'
 import type { PredixaBriefing } from '@/app/news/spy/types'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 
 function BriefingSkeleton() {
   return (
@@ -23,24 +24,28 @@ export default function SpyBriefingPanel() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const response = await fetch(`/api/news/briefing?mode=pro&t=${Date.now()}`)
-        const result = await response.json()
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to load briefing')
-        }
-        setBriefing(result.briefing ?? null)
-        setArticlesCount(result.articlesCount ?? 0)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load briefing')
-      } finally {
-        setLoading(false)
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/news/briefing?mode=pro&t=${Date.now()}`)
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to load briefing')
       }
+      setBriefing(result.briefing ?? null)
+      setArticlesCount(result.articlesCount ?? 0)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load briefing')
+    } finally {
+      setLoading(false)
     }
-    load()
   }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  useAutoRefresh(load)
 
   if (loading) {
     return <BriefingSkeleton />

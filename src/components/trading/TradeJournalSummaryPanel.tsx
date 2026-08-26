@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { BookOpen, ExternalLink } from 'lucide-react'
 import { useAuthStore } from '@/lib/auth-store'
 import { loadTradeJournal } from '@/lib/trade-journal-storage'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 import {
   INSTRUMENT_OPTIONS,
   calcMonthlyProfitSummaries,
@@ -37,31 +38,27 @@ export default function TradeJournalSummaryPanel() {
   const [monthTotal, setMonthTotal] = useState(0)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const data = await loadTradeJournal(user?.userId)
-        if (cancelled) return
-        setEntries(data.entries)
-        const monthKey = getCurrentMonthKey()
-        const summaries = calcMonthlyProfitSummaries(data.entries, data.monthlyProfitEntries)
-        const current = summaries.find((s) => s.monthKey === monthKey)
-        setMonthTotal(current?.total ?? 0)
-      } catch {
-        if (!cancelled) {
-          setEntries([])
-          setMonthTotal(0)
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
+  const load = useCallback(async () => {
+    try {
+      const data = await loadTradeJournal(user?.userId)
+      setEntries(data.entries)
+      const monthKey = getCurrentMonthKey()
+      const summaries = calcMonthlyProfitSummaries(data.entries, data.monthlyProfitEntries)
+      const current = summaries.find((s) => s.monthKey === monthKey)
+      setMonthTotal(current?.total ?? 0)
+    } catch {
+      setEntries([])
+      setMonthTotal(0)
+    } finally {
+      setLoading(false)
     }
   }, [user?.userId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  useAutoRefresh(load)
 
   const positionSummary = useMemo(() => calcOpenPositionSummary(entries), [entries])
 
