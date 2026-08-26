@@ -68,6 +68,24 @@ export default function HorizonLinesChart() {
       dateIdx[b.date] = i
     })
 
+    // A forecast can exist for a day that has no candle yet (today, still in
+    // progress) -- give those dates their own trailing x-axis slot instead of
+    // silently dropping them.
+    const lastBarDate = bars.length ? bars[bars.length - 1].date : ''
+    const extraDateSet = new Set<string>()
+    seriesData.forEach((s) => {
+      s.data.predictions.forEach((p) => {
+        if (dateIdx[p.origin_date] === undefined && p.origin_date > lastBarDate) {
+          extraDateSet.add(p.origin_date)
+        }
+      })
+    })
+    const extraDates = Array.from(extraDateSet).sort()
+    extraDates.forEach((d, j) => {
+      dateIdx[d] = bars.length + j
+    })
+    const totalSlots = bars.length + extraDates.length
+
     const byDate = seriesData.map((s) => {
       const map: Record<string, { predClose: number; pending: boolean }> = {}
       s.data.predictions.forEach((p) => {
@@ -78,7 +96,7 @@ export default function HorizonLinesChart() {
     })
 
     const plotH = HH - M.top - M.bottom
-    const W = M.left + M.right + bars.length * BAR_W
+    const W = M.left + M.right + totalSlots * BAR_W
 
     const allPrices: number[] = []
     bars.forEach((b) => {
@@ -102,11 +120,13 @@ export default function HorizonLinesChart() {
       yLabelsSvg += `<text class="mfh-axis-label" x="${M.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">$${Math.round(v)}</text>`
     }
 
+    const allDates = bars.map((b) => b.date).concat(extraDates)
+
     let xLabelsSvg = ''
-    const xLabelEvery = Math.ceil(bars.length / 10) || 1
-    bars.forEach((b, i) => {
+    const xLabelEvery = Math.ceil(totalSlots / 10) || 1
+    allDates.forEach((date, i) => {
       if (i % xLabelEvery === 0) {
-        const d = new Date(b.date + 'T00:00:00')
+        const d = new Date(date + 'T00:00:00')
         xLabelsSvg += `<text class="mfh-axis-label" x="${xCenter(i).toFixed(1)}" y="${HH - M.bottom + 16}" text-anchor="middle">${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</text>`
       }
     })
@@ -126,9 +146,9 @@ export default function HorizonLinesChart() {
 
     let linesSvg = ''
     byDate.forEach((s) => {
-      const pts = bars
-        .map((b, i) => {
-          const v = s.byDate[b.date]
+      const pts = allDates
+        .map((date, i) => {
+          const v = s.byDate[date]
           return v ? { i, val: v.predClose, pending: v.pending } : null
         })
         .filter((p): p is { i: number; val: number; pending: boolean } => p !== null)
@@ -157,27 +177,30 @@ export default function HorizonLinesChart() {
       const rect = svg.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const i = Math.floor((mx - M.left) / BAR_W)
-      if (i < 0 || i >= bars.length) {
+      if (i < 0 || i >= totalSlots) {
         tooltip.style.opacity = '0'
         crosshair.style.opacity = '0'
         return
       }
-      const b = bars[i]
+      const date = allDates[i]
+      const b: OhlcBar | undefined = i < bars.length ? bars[i] : undefined
       const x = xCenter(i)
       crosshair.setAttribute('x1', String(x))
       crosshair.setAttribute('x2', String(x))
       crosshair.style.opacity = '1'
 
-      const d = new Date(b.date + 'T00:00:00')
-      let rows = `
+      const d = new Date(date + 'T00:00:00')
+      let rows = b
+        ? `
         <div class="mfh-tt-row"><span>Open</span><span class="mfh-tt-val">$${(b.open ?? 0).toFixed(2)}</span></div>
         <div class="mfh-tt-row"><span>High</span><span class="mfh-tt-val">$${(b.high ?? 0).toFixed(2)}</span></div>
         <div class="mfh-tt-row"><span>Low</span><span class="mfh-tt-val">$${(b.low ?? 0).toFixed(2)}</span></div>
         <div class="mfh-tt-row"><span>Close</span><span class="mfh-tt-val">$${(b.close ?? 0).toFixed(2)}</span></div>
       `
+        : `<div class="mfh-tt-row"><span class="mfh-tt-pending">No OHLC yet -- trading day in progress</span></div>`
       byDate.forEach((s) => {
         if (!visibleRef.current[s.key]) return
-        const v = s.byDate[b.date]
+        const v = s.byDate[date]
         if (!v) return
         rows += `<div class="mfh-tt-row"><span class="mfh-tt-name"><span class="mfh-tt-swatch" style="background:${s.color}"></span>${s.label}</span><span class="mfh-tt-val">$${v.predClose.toFixed(2)}${v.pending ? ' <span class="mfh-tt-pending">(pending)</span>' : ''}</span></div>`
       })
