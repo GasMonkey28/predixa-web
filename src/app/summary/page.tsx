@@ -1,11 +1,14 @@
 'use client'
 
+import Link from 'next/link'
 import { motion } from 'motion/react'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import MarketInsightBlock from '@/components/trading/MarketInsightBlock'
 import WeeklyPriceChartSection from '@/components/trading/WeeklyPriceChartSection'
 import TradeJournalSummaryPanel from '@/components/trading/TradeJournalSummaryPanel'
 import SpyBriefingPanel from '@/components/trading/SpyBriefingPanel'
+import TodaysPlaybookPanel from '@/components/trading/TodaysPlaybookPanel'
+import HorizonLinesChart from '@/app/moneyflow-horizon/HorizonLinesChart'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +31,24 @@ function SummaryPageContent() {
         </motion.div>
 
         <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 border-2 border-blue-500/20 p-6 backdrop-blur-sm mb-6"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-white">Today&apos;s play</h2>
+            <Link
+              href="/summary/playbook"
+              className="text-xs text-blue-400 hover:text-blue-300 underline decoration-dotted"
+            >
+              Full rules &amp; methodology →
+            </Link>
+          </div>
+          <TodaysPlaybookPanel />
+        </motion.div>
+
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
@@ -37,6 +58,18 @@ function SummaryPageContent() {
           <div className="lg:col-span-2 space-y-4">
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 border-2 border-zinc-800/50 p-6 backdrop-blur-sm">
               <MarketInsightBlock />
+            </div>
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 border-2 border-zinc-800/50 p-6 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-bold text-white">Money-flow horizon</h2>
+                <Link
+                  href="/moneyflow-horizon"
+                  className="text-xs text-blue-400 hover:text-blue-300 underline decoration-dotted"
+                >
+                  Full forecast &amp; history →
+                </Link>
+              </div>
+              <HorizonLinesChart />
             </div>
             <WeeklyPriceChartSection chartHeight={544} />
             <SpyBriefingPanel />

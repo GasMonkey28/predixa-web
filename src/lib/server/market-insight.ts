@@ -14,6 +14,7 @@ import type {
   AgreementLabel,
   Bias,
   Direction,
+  HorizonLegPlaybook,
   MarketInsightFacts,
   MarketInsightSection,
 } from '@/lib/server/market-insight-types'
@@ -24,6 +25,24 @@ const MODELS_PREFIX = 'ml_out'
 const MAX_LOOKBACK_DAYS = 10
 const Y_KEYS = ['y1', 'y2', 'y3', 'y4', 'y5', 'y6', 'y7', 'y8'] as const
 const FLAT_THRESHOLD = 0.01
+
+const HORIZON_KEY = 'charts/moneyflow_horizon/latest.json'
+// Only these two horizons carry a backtested position-sizing tier table (see
+// /summary/playbook) -- 5d/15d are shown elsewhere but were never validated
+// as standalone entries, so they're left out of the playbook's z-score/size math.
+const HORIZON_LEGS_TRACKED = ['10d', '20d'] as const
+// Conviction z = |predicted move| / predicted band width, tiered from the
+// pooled percentile distribution of this signal across the backtest (see the
+// MES strategy playbook artifact for the full derivation).
+const HORIZON_SIZE_TIERS: Array<[number, number, string]> = [
+  [0.19, 0, 'no trade'],
+  [0.29, 2, 'small'],
+  [0.37, 4, 'normal'],
+  [0.49, 6, 'normal'],
+  [0.6, 10, 'large'],
+  [Infinity, 20, 'max'],
+]
+const HORIZON_STOP_MULT = 0.5
 
 const tierStrengths: Record<string, number> = {
   SSS: 9,
@@ -90,16 +109,19 @@ function biasToDirection(bias: Bias): Direction | null {
 function computeAgreement(
   tiers: MarketInsightFacts['tiers'],
   model1: MarketInsightFacts['model1'],
-  model2: MarketInsightFacts['model2']
+  model2: MarketInsightFacts['model2'],
+  horizon: MarketInsightFacts['horizon']
 ): MarketInsightFacts['agreement'] {
   const signals: Direction[] = []
   const tierDir = tiers ? biasToDirection(tiers.bias) : null
   const m1Dir = model1 ? biasToDirection(model1.net_bias) : null
   const m2Dir = model2 ? biasToDirection(model2.bias) : null
+  const hDir = horizon ? biasToDirection(horizon.bias) : null
 
   if (tierDir) signals.push(tierDir)
   if (m1Dir) signals.push(m1Dir)
   if (m2Dir) signals.push(m2Dir)
+  if (hDir) signals.push(hDir)
 
   if (signals.length < 2) {
     return {
@@ -175,6 +197,78 @@ async function fetchModel2Today(bucket: string): Promise<Record<string, unknown>
   }
 }
 
+function sizeForZ(z: number): { contracts: number; label: string } {
+  const az = Math.abs(z)
+  for (const [upper, contracts, label] of HORIZON_SIZE_TIERS) {
+    if (az < upper) return { contracts, label }
+  }
+  return { contracts: 20, label: 'max' }
+}
+
+function buildHorizonLeg(horizon: string, leg: Record<string, unknown>): HorizonLegPlaybook | null {
+  const open = Number(leg.open_price)
+  const high = Number(leg.pred_high_price)
+  const low = Number(leg.pred_low_price)
+  const close = Number(leg.pred_close_price)
+  if (![open, high, low, close].every(Number.isFinite)) return null
+
+  const band = high - low
+  if (!(band > 0)) return null
+
+  const move = close - open
+  const z = Math.abs(move) / band
+  const direction: Direction = move > 0 ? 'up' : move < 0 ? 'down' : 'flat'
+  const { contracts, label } = sizeForZ(z)
+
+  return {
+    horizon,
+    open_price: open,
+    pred_high_price: high,
+    pred_low_price: low,
+    pred_close_price: close,
+    direction,
+    z,
+    contracts,
+    tier_label: label,
+    target_price: close,
+    stop_price: direction === 'up' ? open - HORIZON_STOP_MULT * band : open + HORIZON_STOP_MULT * band,
+  }
+}
+
+async function fetchHorizonToday(bucket: string): Promise<MarketInsightFacts['horizon']> {
+  try {
+    const response = await axios.get(s3Url(bucket, HORIZON_KEY), {
+      headers: fetchHeaders,
+      timeout: 10000,
+    })
+    const data = response.data as Record<string, unknown>
+    const predictions = (data.predictions as Record<string, Record<string, unknown>>) || {}
+    const legs: HorizonLegPlaybook[] = []
+    for (const h of HORIZON_LEGS_TRACKED) {
+      const leg = predictions[h]
+      if (!leg) continue
+      const built = buildHorizonLeg(h, leg)
+      if (built) legs.push(built)
+    }
+    if (legs.length === 0) return null
+
+    const ups = legs.filter((l) => l.direction === 'up' && l.contracts > 0).length
+    const downs = legs.filter((l) => l.direction === 'down' && l.contracts > 0).length
+    let bias: Bias = 'neutral'
+    if (ups > 0 && downs === 0) bias = 'long'
+    else if (downs > 0 && ups === 0) bias = 'short'
+    else if (ups > 0 && downs > 0) bias = 'mixed'
+
+    return {
+      as_of_date: String(data.as_of_date ?? ''),
+      legs,
+      bias,
+    }
+  } catch {
+    return null
+  }
+}
+
 async function fetchCurrentWeekly(
   bucket: string,
   ticker: string
@@ -215,6 +309,7 @@ export async function buildMarketInsight(
   const model1Result = await fetchModel1ForDate(bucket, summaryDate)
   const model2Today = await fetchModel2Today(bucket)
   const weeklyRaw = await fetchCurrentWeekly(bucket, ticker)
+  const horizon = await fetchHorizonToday(bucket)
 
   const longTier =
     (summaryData?.long_signal as string) ||
@@ -295,12 +390,14 @@ export async function buildMarketInsight(
       model1: model1 != null,
       model2: model2 != null,
       weekly: weekly != null,
+      horizon: horizon != null,
     },
+    horizon,
     tiers,
     model1,
     model2,
     weekly,
-    agreement: computeAgreement(tiers, model1, model2),
+    agreement: computeAgreement(tiers, model1, model2, horizon),
   }
 
   const sections = buildMarketInsightSections(facts)

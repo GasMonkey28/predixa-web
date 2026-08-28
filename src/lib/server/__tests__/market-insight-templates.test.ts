@@ -3,7 +3,8 @@ import type { MarketInsightFacts } from '@/lib/server/market-insight-types'
 
 const baseFacts: MarketInsightFacts = {
   date: '2026-05-28',
-  sources: { tiers: true, model1: true, model2: true, weekly: false },
+  sources: { tiers: true, model1: true, model2: true, weekly: false, horizon: false },
+  horizon: null,
   tiers: {
     long_tier: 'S',
     short_tier: 'B',

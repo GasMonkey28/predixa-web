@@ -9,8 +9,19 @@ import { useAuthStore } from '@/lib/auth-store'
 const navigationItems = [
   {
     name: 'Summary',
-    href: '/summary',
     icon: '📋',
+    items: [
+      {
+        name: 'Overview',
+        href: '/summary',
+        icon: '📋',
+      },
+      {
+        name: 'Playbook',
+        href: '/summary/playbook',
+        icon: '📘',
+      },
+    ],
   },
   {
     name: 'Journal',

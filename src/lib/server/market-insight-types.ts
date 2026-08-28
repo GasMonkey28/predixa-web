@@ -12,6 +12,20 @@ export interface MarketInsightSection {
   body: string
 }
 
+export interface HorizonLegPlaybook {
+  horizon: string
+  open_price: number
+  pred_high_price: number
+  pred_low_price: number
+  pred_close_price: number
+  direction: Direction
+  z: number
+  contracts: number
+  tier_label: string
+  target_price: number
+  stop_price: number
+}
+
 export interface MarketInsightFacts {
   date: string
   sources: {
@@ -19,7 +33,13 @@ export interface MarketInsightFacts {
     model1: boolean
     model2: boolean
     weekly: boolean
+    horizon: boolean
   }
+  horizon: {
+    as_of_date: string
+    legs: HorizonLegPlaybook[]
+    bias: Bias
+  } | null
   tiers: {
     long_tier: string
     short_tier: string
