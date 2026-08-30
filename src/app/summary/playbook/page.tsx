@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { createMetadata } from '@/lib/seo'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import TodaysPlaybookPanel from '@/components/trading/TodaysPlaybookPanel'
+import GexRegimeBadge from '@/components/trading/GexRegimeBadge'
 
 export const metadata: Metadata = createMetadata({
   title: 'Trading Playbook | Predixa',
@@ -82,6 +83,7 @@ function PlaybookPageContent() {
               positioning. This is the trade being taken — Layers 2 and 3 only decide whether it&apos;s
               allowed through.
             </p>
+            <GexRegimeBadge className="mb-3" />
             <RuleRow
               label="Direction"
               value="Long if the forecast's predicted close sits above today's open; short if below."
