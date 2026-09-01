@@ -100,17 +100,18 @@ export default function MoneyMoveChart() {
     return times.map((t) => byT.get(t)!)
   }, [series, open])
 
-  // right axis = the spread of the targets themselves (plus spot), tightly
-  // fit so a cluster of near-money 0DTE breakevens stays readable; anything
-  // pathologically far is clamped to the edge
+  // right axis = spot in the middle, symmetric, wide enough to hold every
+  // target. No clamp — whatever a contract's breakeven is, the scale grows to
+  // show it. Floor the half-window at ~1.2% of spot so a tight 0DTE cluster
+  // still has vertical room instead of collapsing onto one line.
   const priceDomain = useMemo<[number, number] | undefined>(() => {
     if (!hasTargets || spot == null) return undefined
-    const vals = [spot, ...series.map((s) => s.breakeven)].sort((a, b) => a - b)
-    // trim a lone far outlier so it can't stretch the scale
-    const lo = Math.max(vals[0], spot * 0.9)
-    const hi = Math.min(vals[vals.length - 1], spot * 1.1)
-    const pad = Math.max((hi - lo) * 0.15, 0.5)
-    return [lo - pad, hi + pad]
+    const reach = Math.max(
+      spot * 0.012,
+      ...series.map((s) => Math.abs(s.breakeven - spot))
+    )
+    const half = reach * 1.15
+    return [spot - half, spot + half]
   }, [series, spot, hasTargets])
 
   const targets = useMemo(() => {
