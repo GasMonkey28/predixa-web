@@ -18,6 +18,8 @@ type Payload = {
   as_of?: string
   day?: string
   spot?: number
+  session_open?: number
+  session_close?: number
   minutes?: number
   series?: Series[]
   hint?: string
@@ -54,19 +56,31 @@ export default function MoneyMoveChart() {
   }, [])
 
   const series = useMemo(() => data?.series ?? [], [data])
+  const open = data?.session_open ?? null
+  const close = data?.session_close ?? null
 
-  // pivot: one row per minute, one column per contract
+  // pivot: one row per minute, one column per contract. Every series is
+  // pinned to $0 from the 9:30 open until its first traded minute, so each
+  // line starts flat at the left edge and only rises once money moves.
   const rows = useMemo(() => {
     const byT = new Map<number, Record<string, number>>()
+    if (open != null) byT.set(open, { t: open })
+    for (const s of series) for (const [t] of s.points) if (!byT.has(t)) byT.set(t, { t })
+    const times = [...byT.keys()].sort((a, b) => a - b)
     for (const s of series) {
-      for (const [t, v] of s.points) {
-        const row = byT.get(t) ?? { t }
-        row[s.label] = v
-        byT.set(t, row)
+      const start = s.points[0]?.[0] ?? Infinity
+      const pv = new Map(s.points)
+      let last = 0
+      for (const t of times) {
+        if (t < start) byT.get(t)![s.label] = 0
+        else {
+          if (pv.has(t)) last = pv.get(t)!
+          byT.get(t)![s.label] = last
+        }
       }
     }
-    return [...byT.values()].sort((a, b) => a.t - b.t)
-  }, [series])
+    return times.map((t) => byT.get(t)!)
+  }, [series, open])
 
   if (!data || data.status !== 'ok' || !series.length) {
     return (
@@ -86,7 +100,7 @@ export default function MoneyMoveChart() {
               dataKey="t"
               type="number"
               scale="time"
-              domain={['dataMin', 'dataMax']}
+              domain={[open ?? 'dataMin', close ?? 'dataMax']}
               tickFormatter={fmtTime}
               tick={{ fontSize: 11 }}
               minTickGap={40}
