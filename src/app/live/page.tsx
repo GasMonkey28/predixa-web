@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createMetadata } from '@/lib/seo'
 import OptionChainLive from './OptionChainLive'
+import MoneyMoveChart from './MoneyMoveChart'
 
 export const metadata: Metadata = createMetadata({
   title: 'Live SPY Option Chain | 1-Minute Snapshots | Predixa',
@@ -22,6 +23,17 @@ export default function LivePage() {
           with implied volatility and greeks computed from each quote&apos;s mid.
         </p>
       </header>
+
+      <section className="space-y-3">
+        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+          Today&apos;s money move
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Where the dollars are going — cumulative traded value for today&apos;s 10
+          busiest SPY option contracts, minute by minute.
+        </p>
+        <MoneyMoveChart />
+      </section>
 
       <OptionChainLive />
     </main>
