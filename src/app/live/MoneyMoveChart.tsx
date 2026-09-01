@@ -177,7 +177,14 @@ export default function MoneyMoveChart() {
             )}
             <Tooltip
               labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
-              formatter={(v: number, name) => [fmtM(v), name]}
+              formatter={(v: number, name) => {
+                const s = series.find((x) => x.label === name)
+                const tgt =
+                  s && typeof s.breakeven === 'number' && Number.isFinite(s.breakeven)
+                    ? `  ·  target ${s.breakeven.toFixed(2)}`
+                    : ''
+                return [`${fmtM(v)}${tgt}`, name]
+              }}
               contentStyle={{ fontSize: 12 }}
               itemSorter={(i) => -(i.value as number)}
             />
