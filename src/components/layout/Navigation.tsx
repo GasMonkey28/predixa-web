@@ -24,6 +24,11 @@ const navigationItems = [
     ],
   },
   {
+    name: 'Live',
+    href: '/live',
+    icon: '🔴',
+  },
+  {
     name: 'Journal',
     href: '/trade-journal',
     icon: '📝',
