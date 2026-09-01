@@ -7,6 +7,24 @@ import {
 } from 'recharts'
 
 const POLL_MS = 20_000
+const FULL_POLL_MS = 60_000
+
+// full.json row layout (array-of-arrays); see recorder/webjson.py FULL_FIELDS
+type FullRow = [
+  string, number, number, 'C' | 'P',        // exp, dte, k, cp
+  number | null, number | null, number | null, number | null, // bid, ask, mid, last
+  number, number,                            // vol, oi
+  number | null, number | null,              // iv, delta
+  boolean, boolean,                          // iv_ok, stale
+]
+type FullPayload = {
+  status: string
+  as_of?: string
+  spot?: number
+  expirations?: string[]
+  rows?: FullRow[]
+  hint?: string
+}
 
 type TermPoint = {
   expiration: string
@@ -70,6 +88,7 @@ function ago(iso?: string) {
 
 export default function OptionChainLive() {
   const [data, setData] = useState<Payload | null>(null)
+  const [full, setFull] = useState<FullPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [exp, setExp] = useState<string | null>(null)
   const [tick, setTick] = useState(0) // re-render for the "Xs ago" label
@@ -89,12 +108,23 @@ export default function OptionChainLive() {
           if (!cancelled) setLoading(false)
         })
     }
+    const loadFull = () => {
+      fetch('/api/option-chain/full', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((d: FullPayload) => {
+          if (!cancelled) setFull(d)
+        })
+        .catch(() => {})
+    }
     load()
+    loadFull()
     const poll = setInterval(load, POLL_MS)
+    const pollFull = setInterval(loadFull, FULL_POLL_MS)
     const clock = setInterval(() => setTick((t) => t + 1), 5_000)
     return () => {
       cancelled = true
       clearInterval(poll)
+      clearInterval(pollFull)
       clearInterval(clock)
     }
   }, [])
@@ -107,17 +137,31 @@ export default function OptionChainLive() {
     setExp((cur) => cur ?? firstExp)
   }, [firstExp])
 
+  // full ladder for the selected expiration, from full.json (all strikes);
+  // falls back to the ATM window in latest.json until full.json loads
   const rows = useMemo(() => {
-    const chain = data?.chain ?? []
-    const forExp = chain.filter((r) => r.expiration === exp)
     const byStrike = new Map<number, { C?: ChainRow; P?: ChainRow }>()
-    for (const r of forExp) {
+    const put = (r: ChainRow) => {
       const e = byStrike.get(r.strike) ?? {}
       e[r.type] = r
       byStrike.set(r.strike, e)
     }
+    if (full?.rows?.length) {
+      for (const a of full.rows) {
+        if (a[0] !== exp) continue
+        put({
+          expiration: a[0], dte: a[1], strike: a[2], type: a[3],
+          bid: a[4], ask: a[5], mid: a[6], last: a[7],
+          volume: a[8], oi: a[9], iv: a[10], delta: a[11],
+          gamma: null, theta: null, vega: null,
+          iv_ok: a[12], stale: a[13],
+        })
+      }
+    } else {
+      for (const r of data?.chain ?? []) if (r.expiration === exp) put(r)
+    }
     return [...byStrike.entries()].sort((a, b) => a[0] - b[0])
-  }, [data, exp])
+  }, [full, data, exp])
 
   const atmStrike = useMemo(() => {
     if (spot == null || !rows.length) return null
@@ -250,6 +294,11 @@ export default function OptionChainLive() {
           <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Chain
           </h3>
+          <span className="text-xs text-gray-400">
+            {full?.rows?.length
+              ? `full ladder · ${rows.length} strikes`
+              : 'loading full ladder…'}
+          </span>
           <div className="flex flex-wrap gap-1">
             {term.map((t) => (
               <button
