@@ -32,6 +32,7 @@ type ChainRow = {
   volume: number
   oi: number
   iv: number | null
+  iv_ok?: boolean
   delta: number | null
   gamma: number | null
   theta: number | null
@@ -308,7 +309,7 @@ export default function OptionChainLive() {
                   >
                     <td className={clsx('py-1 pr-3', C?.stale && 'text-gray-400')}>{n2(C?.bid)}</td>
                     <td className={clsx('py-1 pr-3', C?.stale && 'text-gray-400')}>{n2(C?.ask)}</td>
-                    <td className="py-1 pr-3">{pct(C?.iv)}</td>
+                    <td className={clsx('py-1 pr-3', C && C.iv_ok === false && 'text-gray-400 italic')} title={C && C.iv_ok === false ? 'wide/illiquid quote — IV unreliable' : undefined}>{pct(C?.iv)}</td>
                     <td className="py-1 pr-3">{n3(C?.delta)}</td>
                     <td className="py-1 pr-3">{int(C?.volume)}</td>
                     <td className="py-1 pr-3">{int(C?.oi)}</td>
@@ -320,7 +321,7 @@ export default function OptionChainLive() {
                     </td>
                     <td className={clsx('py-1 pr-3', P?.stale && 'text-gray-400')}>{n2(P?.bid)}</td>
                     <td className={clsx('py-1 pr-3', P?.stale && 'text-gray-400')}>{n2(P?.ask)}</td>
-                    <td className="py-1 pr-3">{pct(P?.iv)}</td>
+                    <td className={clsx('py-1 pr-3', P && P.iv_ok === false && 'text-gray-400 italic')} title={P && P.iv_ok === false ? 'wide/illiquid quote — IV unreliable' : undefined}>{pct(P?.iv)}</td>
                     <td className="py-1 pr-3">{n3(P?.delta)}</td>
                     <td className="py-1 pr-3">{int(P?.volume)}</td>
                     <td className="py-1 pr-3">{int(P?.oi)}</td>
