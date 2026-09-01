@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { clsx } from 'clsx'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Legend, ReferenceDot, ReferenceLine,
@@ -42,6 +43,7 @@ const fmtTime = (unixSec: number) =>
 
 export default function MoneyMoveChart() {
   const [data, setData] = useState<Payload | null>(null)
+  const [topN, setTopN] = useState(5)
 
   useEffect(() => {
     let cancelled = false
@@ -58,22 +60,24 @@ export default function MoneyMoveChart() {
     }
   }, [])
 
-  const series = useMemo(() => data?.series ?? [], [data])
+  const all = useMemo(() => data?.series ?? [], [data])
+  const series = useMemo(() => all.slice(0, topN), [all, topN])
   const open = data?.session_open ?? null
   const close = data?.session_close ?? null
   const spot = data?.spot ?? null
-  const hasTargets = series.every((s) => typeof s.breakeven === 'number' && Number.isFinite(s.breakeven))
+  const hasTargets = series.length > 0 && series.every((s) => typeof s.breakeven === 'number' && Number.isFinite(s.breakeven))
 
-  // a color per contract, keyed by call/put family
+  // a stable colour per contract (keyed off the full list so it doesn't
+  // shuffle when topN changes), by call/put family
   const colorOf = useMemo(() => {
     const m = new Map<string, string>()
     let ci = 0
     let pi = 0
-    for (const s of series) {
+    for (const s of all) {
       m.set(s.occ, s.cp === 'C' ? CALL_COLORS[ci++ % CALL_COLORS.length] : PUT_COLORS[pi++ % PUT_COLORS.length])
     }
     return m
-  }, [series])
+  }, [all])
 
   // pivot: every series zero-filled from the 9:30 open until its first trade
   const rows = useMemo(() => {
@@ -125,6 +129,23 @@ export default function MoneyMoveChart() {
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <span className="uppercase tracking-wide">Show top</span>
+        {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+          <button
+            key={n}
+            onClick={() => setTopN(n)}
+            className={clsx(
+              'rounded px-1.5 py-0.5 font-medium tabular-nums',
+              n === topN
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+            )}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
       <div className="h-96 w-full">
         <ResponsiveContainer>
           <LineChart data={rows} margin={{ top: 8, right: 64, bottom: 4, left: 8 }}>
