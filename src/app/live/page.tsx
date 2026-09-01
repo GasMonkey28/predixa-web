@@ -29,8 +29,8 @@ export default function LivePage() {
           Today&apos;s money move
         </h2>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          Where the dollars are going — cumulative traded value for today&apos;s 10
-          busiest SPY option contracts, minute by minute.
+          Where the dollars are going — cumulative traded value for the 10
+          busiest SPY contracts <em>expiring today</em>, minute by minute.
         </p>
         <MoneyMoveChart />
       </section>

@@ -96,31 +96,24 @@ export default function MoneyMoveChart() {
     return times.map((t) => byT.get(t)!)
   }, [series, open])
 
-  // right axis = a readable window around spot; targets far outside it get
-  // pinned to the edge with an arrow rather than blowing up the scale
+  // right axis = the spread of the targets themselves (plus spot), tightly
+  // fit so a cluster of near-money 0DTE breakevens stays readable; anything
+  // pathologically far is clamped to the edge
   const priceDomain = useMemo<[number, number] | undefined>(() => {
     if (!hasTargets || spot == null) return undefined
-    const win = Math.max(spot * 0.035, 8)
-    return [spot - win, spot + win]
-  }, [spot, hasTargets])
+    const vals = [spot, ...series.map((s) => s.breakeven)].sort((a, b) => a - b)
+    // trim a lone far outlier so it can't stretch the scale
+    const lo = Math.max(vals[0], spot * 0.9)
+    const hi = Math.min(vals[vals.length - 1], spot * 1.1)
+    const pad = Math.max((hi - lo) * 0.15, 0.5)
+    return [lo - pad, hi + pad]
+  }, [series, spot, hasTargets])
 
-  // only mark targets that are a real directional call — skip the 0DTE
-  // cluster whose breakeven sits right on top of spot
   const targets = useMemo(() => {
-    if (!hasTargets || spot == null || !priceDomain) return []
+    if (!hasTargets || !priceDomain) return []
     const [lo, hi] = priceDomain
-    return series
-      .filter((s) => Math.abs(s.breakeven - spot) > spot * 0.006)
-      .map((s) => {
-        const clampedLo = s.breakeven < lo
-        const clampedHi = s.breakeven > hi
-        return {
-          ...s,
-          y: Math.min(hi, Math.max(lo, s.breakeven)),
-          text: `${clampedLo ? '↓ ' : clampedHi ? '↑ ' : ''}${s.breakeven.toFixed(2)}`,
-        }
-      })
-  }, [series, spot, hasTargets, priceDomain])
+    return series.map((s) => ({ ...s, y: Math.min(hi, Math.max(lo, s.breakeven)) }))
+  }, [series, hasTargets, priceDomain])
 
   if (!data || data.status !== 'ok' || !series.length) {
     return (
@@ -195,16 +188,10 @@ export default function MoneyMoveChart() {
                 yAxisId="price"
                 x={close}
                 y={s.y}
-                r={3}
+                r={3.5}
                 fill={colorOf.get(s.occ)}
                 stroke="none"
                 ifOverflow="visible"
-                label={{
-                  value: s.text,
-                  position: 'right',
-                  fontSize: 9,
-                  fill: colorOf.get(s.occ),
-                }}
               />
             ))}
           </LineChart>
@@ -245,10 +232,11 @@ export default function MoneyMoveChart() {
       </div>
 
       <p className="text-xs text-gray-400">
-        Left axis: cumulative traded dollars per contract (each minute&apos;s new
-        volume × mid × 100). Right axis: the underlying <em>target</em> — strike
-        ± the option&apos;s price — where that contract breaks even at expiry.
-        Green = calls, red = puts. Top 10 by day total, refreshed every 5 minutes.
+        Contracts <em>expiring today</em> only. Left axis: cumulative traded
+        dollars per contract (each minute&apos;s new volume × mid × 100). Right
+        axis dots: the underlying <em>target</em> — strike ± the option&apos;s
+        price — where each contract breaks even by the close (exact values in
+        the table). Green = calls, red = puts. Top 10 by day total, every 5&nbsp;min.
       </p>
     </div>
   )
