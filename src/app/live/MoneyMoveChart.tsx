@@ -96,15 +96,31 @@ export default function MoneyMoveChart() {
     return times.map((t) => byT.get(t)!)
   }, [series, open])
 
+  // right axis = a readable window around spot; targets far outside it get
+  // pinned to the edge with an arrow rather than blowing up the scale
   const priceDomain = useMemo<[number, number] | undefined>(() => {
-    if (!hasTargets) return undefined
-    const vals = series.map((s) => s.breakeven)
-    if (spot != null) vals.push(spot)
-    const lo = Math.min(...vals)
-    const hi = Math.max(...vals)
-    const pad = Math.max((hi - lo) * 0.08, 1)
-    return [lo - pad, hi + pad]
-  }, [series, spot, hasTargets])
+    if (!hasTargets || spot == null) return undefined
+    const win = Math.max(spot * 0.035, 8)
+    return [spot - win, spot + win]
+  }, [spot, hasTargets])
+
+  // only mark targets that are a real directional call — skip the 0DTE
+  // cluster whose breakeven sits right on top of spot
+  const targets = useMemo(() => {
+    if (!hasTargets || spot == null || !priceDomain) return []
+    const [lo, hi] = priceDomain
+    return series
+      .filter((s) => Math.abs(s.breakeven - spot) > spot * 0.006)
+      .map((s) => {
+        const clampedLo = s.breakeven < lo
+        const clampedHi = s.breakeven > hi
+        return {
+          ...s,
+          y: Math.min(hi, Math.max(lo, s.breakeven)),
+          text: `${clampedLo ? '↓ ' : clampedHi ? '↑ ' : ''}${s.breakeven.toFixed(2)}`,
+        }
+      })
+  }, [series, spot, hasTargets, priceDomain])
 
   if (!data || data.status !== 'ok' || !series.length) {
     return (
@@ -142,8 +158,7 @@ export default function MoneyMoveChart() {
                 domain={priceDomain ?? ['auto', 'auto']}
                 tickFormatter={(v: number) => v.toFixed(0)}
                 tick={{ fontSize: 10 }}
-                width={44}
-                label={{ value: 'target', angle: 90, position: 'insideRight', fontSize: 10, fill: 'currentColor' }}
+                width={40}
               />
             )}
             <Tooltip
@@ -174,17 +189,18 @@ export default function MoneyMoveChart() {
                 label={{ value: `spot ${spot.toFixed(2)}`, position: 'left', fontSize: 10, fill: 'currentColor' }}
               />
             )}
-            {hasTargets && close != null && series.map((s) => (
+            {close != null && targets.map((s) => (
               <ReferenceDot
                 key={`${s.occ}-be`}
                 yAxisId="price"
                 x={close}
-                y={s.breakeven}
+                y={s.y}
                 r={3}
                 fill={colorOf.get(s.occ)}
                 stroke="none"
+                ifOverflow="visible"
                 label={{
-                  value: s.breakeven.toFixed(2),
+                  value: s.text,
                   position: 'right',
                   fontSize: 9,
                   fill: colorOf.get(s.occ),
