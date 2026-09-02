@@ -171,11 +171,9 @@ export default function MoneyMoveChart() {
     return [...byT.values()].sort((a, b) => a.t - b.t)
   }, [series, open])
 
-  // fourth chart: "$ past breakeven" per side — for calls, spot − target; for
-  // puts, target − spot — so for BOTH, above zero = that side's buyers are in
-  // profit. Two busiest calls + two busiest puts (faint) plus each side's
-  // average (bold), SPY on its own axis. Plotting the spread (not the raw
-  // levels) unsqueezes the lines; watch a line cross zero.
+  // fourth chart: distance to target = |target − SPY|, for the two busiest
+  // calls and two busiest puts (faint) plus each side's average (bold), SPY on
+  // its own axis. Small = SPY is close to that side's breakeven.
   const gap = useMemo(() => {
     const sp = data?.spot_path ?? []
     if (sp.length === 0 || !hasTargets) return null
@@ -191,8 +189,7 @@ export default function MoneyMoveChart() {
         const spt = spotAt.get(t)
         if (spt == null) continue
         const row = byT.get(t) ?? { t }
-        const edge = s.cp === 'C' ? spt - be : be - spt
-        row[key] = Math.round(edge * 100) / 100
+        row[key] = Math.round(Math.abs(be - spt) * 100) / 100
         byT.set(t, row)
       }
     }
@@ -208,7 +205,7 @@ export default function MoneyMoveChart() {
       if (ps.length) r.pAvg = mean(ps)
     }
 
-    const labels: Record<string, string> = { spy: 'SPY', cAvg: 'call avg gap', pAvg: 'put avg gap' }
+    const labels: Record<string, string> = { spy: 'SPY', cAvg: 'call avg distance', pAvg: 'put avg distance' }
     calls.forEach((s, i) => (labels[`c${i + 1}`] = s.label))
     puts.forEach((s, i) => (labels[`p${i + 1}`] = s.label))
     return { rows, labels, nCalls: calls.length, nPuts: puts.length }
@@ -455,10 +452,10 @@ export default function MoneyMoveChart() {
               />
               <YAxis
                 yAxisId="gap"
-                tickFormatter={(v: number) => (v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1))}
+                tickFormatter={(v: number) => v.toFixed(1)}
                 tick={{ fontSize: 11 }}
                 width={60}
-                label={{ value: '$ past breakeven', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'currentColor' }}
+                label={{ value: 'distance to target ($)', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'currentColor' }}
               />
               <YAxis
                 yAxisId="spy"
@@ -470,21 +467,10 @@ export default function MoneyMoveChart() {
               />
               <Tooltip
                 labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
-                formatter={(v: number, name) =>
-                  name === 'SPY'
-                    ? [v.toFixed(2), name]
-                    : [`${v > 0 ? '+' : ''}${v.toFixed(2)}`, name]
-                }
+                formatter={(v: number, name) => [v.toFixed(2), name]}
                 contentStyle={{ fontSize: 12 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <ReferenceLine
-                yAxisId="gap"
-                y={0}
-                stroke="currentColor"
-                strokeOpacity={0.4}
-                label={{ value: 'breakeven', position: 'insideBottomRight', fontSize: 9, fill: 'currentColor' }}
-              />
               {Array.from({ length: gap.nCalls }, (_, i) => (
                 <Line
                   key={`c${i + 1}`}
@@ -594,12 +580,11 @@ export default function MoneyMoveChart() {
         whether price is heading toward where the money is. 3rd chart: signed
         <em> delta&nbsp;$</em> per minute — the option&apos;s price change that
         minute × that minute&apos;s volume × 100 (not cumulative; positive =
-        contract richened on volume). 4th chart: <em>$ past breakeven</em> for
-        the two busiest calls and two busiest puts (faint) plus each side&apos;s
-        average (bold), with SPY on the right axis — for both sides, above zero
-        means those buyers are in profit, so a line crossing up through zero is
-        the moment that side&apos;s money starts working. Green = calls, red =
-        puts. Top 10 by day total, refreshed every 5&nbsp;min.
+        contract richened on volume). 4th chart: <em>distance to target</em> =
+        |target − SPY| for the two busiest calls and two busiest puts (faint)
+        plus each side&apos;s average (bold), with SPY on the right axis — the
+        smaller the line, the closer SPY is to that side&apos;s breakeven. Green
+        = calls, red = puts. Top 10 by day total, refreshed every 5&nbsp;min.
       </p>
     </div>
   )
