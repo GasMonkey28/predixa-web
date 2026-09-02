@@ -1,5 +1,14 @@
 # 🚀 Deployment Status
 
+## Operational toggles
+
+- **Close new registration:** set `NEXT_PUBLIC_DISABLE_SIGNUP=true` in the
+  Vercel env for the target project/environment, then redeploy. Full details
+  (what it blocks, the Cognito hard-lock, how to reopen): **`DISABLE_SIGNUP.md`**.
+  Intended ON for the **predixatest** deployment while it's in testing.
+
+---
+
 ## ✅ Completed
 
 1. **Code pushed to GitHub** - All changes committed
