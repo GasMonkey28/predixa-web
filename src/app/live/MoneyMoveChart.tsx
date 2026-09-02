@@ -171,6 +171,63 @@ export default function MoneyMoveChart() {
     return [...byT.values()].sort((a, b) => a.t - b.t)
   }, [series, open])
 
+  // fourth chart: "$ past breakeven" per side — for calls, spot − target; for
+  // puts, target − spot — so for BOTH, above zero = that side's buyers are in
+  // profit. Two busiest calls + two busiest puts (faint) plus each side's
+  // average (bold), SPY on its own axis. Plotting the spread (not the raw
+  // levels) unsqueezes the lines; watch a line cross zero.
+  const gap = useMemo(() => {
+    const sp = data?.spot_path ?? []
+    if (sp.length === 0 || !hasTargets) return null
+    const spotAt = new Map(sp.map(([t, p]) => [t, p]))
+    const calls = all.filter((s) => s.cp === 'C' && (s.be_points?.length ?? 0) > 0).slice(0, 2)
+    const puts = all.filter((s) => s.cp === 'P' && (s.be_points?.length ?? 0) > 0).slice(0, 2)
+    if (!calls.length && !puts.length) return null
+
+    const byT = new Map<number, Record<string, number>>()
+    for (const [t, p] of sp) byT.set(t, { t, spy: p })
+    const fill = (s: Series, key: string) => {
+      for (const [t, be] of s.be_points ?? []) {
+        const spt = spotAt.get(t)
+        if (spt == null) continue
+        const row = byT.get(t) ?? { t }
+        const edge = s.cp === 'C' ? spt - be : be - spt
+        row[key] = Math.round(edge * 100) / 100
+        byT.set(t, row)
+      }
+    }
+    calls.forEach((s, i) => fill(s, `c${i + 1}`))
+    puts.forEach((s, i) => fill(s, `p${i + 1}`))
+
+    const rows = [...byT.values()].sort((a, b) => a.t - b.t)
+    const mean = (xs: number[]) => Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) / 100
+    for (const r of rows) {
+      const cs = calls.map((_, i) => r[`c${i + 1}`]).filter((v): v is number => v != null)
+      const ps = puts.map((_, i) => r[`p${i + 1}`]).filter((v): v is number => v != null)
+      if (cs.length) r.cAvg = mean(cs)
+      if (ps.length) r.pAvg = mean(ps)
+    }
+
+    const labels: Record<string, string> = { spy: 'SPY', cAvg: 'call avg gap', pAvg: 'put avg gap' }
+    calls.forEach((s, i) => (labels[`c${i + 1}`] = s.label))
+    puts.forEach((s, i) => (labels[`p${i + 1}`] = s.label))
+    return { rows, labels, nCalls: calls.length, nPuts: puts.length }
+  }, [data, all, hasTargets])
+
+  const gapSpyDomain = useMemo<[number, number] | undefined>(() => {
+    if (!gap) return undefined
+    let lo = Infinity
+    let hi = -Infinity
+    for (const r of gap.rows) {
+      if (typeof r.spy !== 'number') continue
+      lo = Math.min(lo, r.spy)
+      hi = Math.max(hi, r.spy)
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return undefined
+    const pad = Math.max((hi - lo) * 0.12, 0.25)
+    return [lo - pad, hi + pad]
+  }, [gap])
+
   if (!data || data.status !== 'ok' || !series.length) {
     return (
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6 text-sm text-gray-500 dark:text-gray-400">
@@ -382,6 +439,119 @@ export default function MoneyMoveChart() {
         </div>
       )}
 
+      {gap && (
+        <div className="h-80 w-full text-gray-900 dark:text-white">
+          <ResponsiveContainer>
+            <LineChart data={gap.rows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis
+                dataKey="t"
+                type="number"
+                scale="time"
+                domain={[open ?? 'dataMin', close ?? 'dataMax']}
+                tickFormatter={fmtTime}
+                tick={{ fontSize: 11 }}
+                minTickGap={40}
+              />
+              <YAxis
+                yAxisId="gap"
+                tickFormatter={(v: number) => (v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1))}
+                tick={{ fontSize: 11 }}
+                width={60}
+                label={{ value: '$ past breakeven', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'currentColor' }}
+              />
+              <YAxis
+                yAxisId="spy"
+                orientation="right"
+                domain={gapSpyDomain ?? ['auto', 'auto']}
+                tickFormatter={(v: number) => v.toFixed(0)}
+                tick={{ fontSize: 10 }}
+                width={40}
+              />
+              <Tooltip
+                labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
+                formatter={(v: number, name) =>
+                  name === 'SPY'
+                    ? [v.toFixed(2), name]
+                    : [`${v > 0 ? '+' : ''}${v.toFixed(2)}`, name]
+                }
+                contentStyle={{ fontSize: 12 }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <ReferenceLine
+                yAxisId="gap"
+                y={0}
+                stroke="currentColor"
+                strokeOpacity={0.4}
+                label={{ value: 'breakeven', position: 'insideBottomRight', fontSize: 9, fill: 'currentColor' }}
+              />
+              {Array.from({ length: gap.nCalls }, (_, i) => (
+                <Line
+                  key={`c${i + 1}`}
+                  yAxisId="gap"
+                  type="monotone"
+                  dataKey={`c${i + 1}`}
+                  name={gap.labels[`c${i + 1}`]}
+                  stroke="#15803d"
+                  strokeWidth={1}
+                  strokeOpacity={0.45}
+                  strokeDasharray="3 3"
+                  dot={false}
+                  legendType="none"
+                  connectNulls
+                />
+              ))}
+              {Array.from({ length: gap.nPuts }, (_, i) => (
+                <Line
+                  key={`p${i + 1}`}
+                  yAxisId="gap"
+                  type="monotone"
+                  dataKey={`p${i + 1}`}
+                  name={gap.labels[`p${i + 1}`]}
+                  stroke="#dc2626"
+                  strokeWidth={1}
+                  strokeOpacity={0.45}
+                  strokeDasharray="3 3"
+                  dot={false}
+                  legendType="none"
+                  connectNulls
+                />
+              ))}
+              <Line
+                yAxisId="gap"
+                type="monotone"
+                dataKey="cAvg"
+                name="top-2 call avg"
+                stroke="#15803d"
+                strokeWidth={2.5}
+                dot={false}
+                connectNulls
+              />
+              <Line
+                yAxisId="gap"
+                type="monotone"
+                dataKey="pAvg"
+                name="top-2 put avg"
+                stroke="#dc2626"
+                strokeWidth={2.5}
+                dot={false}
+                connectNulls
+              />
+              <Line
+                yAxisId="spy"
+                type="monotone"
+                dataKey="spy"
+                name="SPY"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeOpacity={0.55}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs tabular-nums">
           <thead>
@@ -424,8 +594,12 @@ export default function MoneyMoveChart() {
         whether price is heading toward where the money is. 3rd chart: signed
         <em> delta&nbsp;$</em> per minute — the option&apos;s price change that
         minute × that minute&apos;s volume × 100 (not cumulative; positive =
-        contract richened on volume). Green = calls, red = puts. Top 10 by day
-        total, refreshed every 5&nbsp;min.
+        contract richened on volume). 4th chart: <em>$ past breakeven</em> for
+        the two busiest calls and two busiest puts (faint) plus each side&apos;s
+        average (bold), with SPY on the right axis — for both sides, above zero
+        means those buyers are in profit, so a line crossing up through zero is
+        the moment that side&apos;s money starts working. Green = calls, red =
+        puts. Top 10 by day total, refreshed every 5&nbsp;min.
       </p>
     </div>
   )
