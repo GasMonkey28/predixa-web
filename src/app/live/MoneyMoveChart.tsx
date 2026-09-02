@@ -171,59 +171,43 @@ export default function MoneyMoveChart() {
     return [...byT.values()].sort((a, b) => a.t - b.t)
   }, [series, open])
 
-  // fourth chart: distance to target = |target − SPY|, for the two busiest
-  // calls and two busiest puts (faint) plus each side's average (bold), SPY on
-  // its own axis. Small = SPY is close to that side's breakeven.
+  // fourth chart: how far apart the two biggest bets on each side sit —
+  // |target #1 − target #2| for the two busiest calls, and the same for the
+  // two busiest puts. Small = the big money agrees on a level; widening = it's
+  // splitting.
   const gap = useMemo(() => {
-    const sp = data?.spot_path ?? []
-    if (sp.length === 0 || !hasTargets) return null
-    const spotAt = new Map(sp.map(([t, p]) => [t, p]))
+    if (!hasTargets) return null
     const calls = all.filter((s) => s.cp === 'C' && (s.be_points?.length ?? 0) > 0).slice(0, 2)
     const puts = all.filter((s) => s.cp === 'P' && (s.be_points?.length ?? 0) > 0).slice(0, 2)
-    if (!calls.length && !puts.length) return null
+    if (calls.length < 2 && puts.length < 2) return null
 
-    const byT = new Map<number, Record<string, number>>()
-    for (const [t, p] of sp) byT.set(t, { t, spy: p })
-    const fill = (s: Series, key: string) => {
-      for (const [t, be] of s.be_points ?? []) {
-        const spt = spotAt.get(t)
-        if (spt == null) continue
-        const row = byT.get(t) ?? { t }
-        row[key] = Math.round(Math.abs(be - spt) * 100) / 100
-        byT.set(t, row)
+    const spread = (pair: Series[]): Map<number, number> => {
+      const m = new Map<number, number>()
+      if (pair.length < 2) return m
+      const b = new Map(pair[1].be_points ?? [])
+      for (const [t, v1] of pair[0].be_points ?? []) {
+        const v2 = b.get(t)
+        if (v2 != null) m.set(t, Math.round(Math.abs(v1 - v2) * 100) / 100)
       }
+      return m
     }
-    calls.forEach((s, i) => fill(s, `c${i + 1}`))
-    puts.forEach((s, i) => fill(s, `p${i + 1}`))
+    const cS = spread(calls)
+    const pS = spread(puts)
 
-    const rows = [...byT.values()].sort((a, b) => a.t - b.t)
-    const mean = (xs: number[]) => Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) / 100
-    for (const r of rows) {
-      const cs = calls.map((_, i) => r[`c${i + 1}`]).filter((v): v is number => v != null)
-      const ps = puts.map((_, i) => r[`p${i + 1}`]).filter((v): v is number => v != null)
-      if (cs.length) r.cAvg = mean(cs)
-      if (ps.length) r.pAvg = mean(ps)
+    const times = [...new Set([...cS.keys(), ...pS.keys()])].sort((a, b) => a - b)
+    const rows = times.map((t) => {
+      const r: Record<string, number> = { t }
+      if (cS.has(t)) r.cDiff = cS.get(t)!
+      if (pS.has(t)) r.pDiff = pS.get(t)!
+      return r
+    })
+
+    const labels: Record<string, string> = {
+      cDiff: calls.length === 2 ? `calls: ${calls[0].label} vs ${calls[1].label}` : 'call target spread',
+      pDiff: puts.length === 2 ? `puts: ${puts[0].label} vs ${puts[1].label}` : 'put target spread',
     }
-
-    const labels: Record<string, string> = { spy: 'SPY', cAvg: 'call avg distance', pAvg: 'put avg distance' }
-    calls.forEach((s, i) => (labels[`c${i + 1}`] = s.label))
-    puts.forEach((s, i) => (labels[`p${i + 1}`] = s.label))
-    return { rows, labels, nCalls: calls.length, nPuts: puts.length }
-  }, [data, all, hasTargets])
-
-  const gapSpyDomain = useMemo<[number, number] | undefined>(() => {
-    if (!gap) return undefined
-    let lo = Infinity
-    let hi = -Infinity
-    for (const r of gap.rows) {
-      if (typeof r.spy !== 'number') continue
-      lo = Math.min(lo, r.spy)
-      hi = Math.max(hi, r.spy)
-    }
-    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return undefined
-    const pad = Math.max((hi - lo) * 0.12, 0.25)
-    return [lo - pad, hi + pad]
-  }, [gap])
+    return { rows, labels, hasCalls: calls.length === 2, hasPuts: puts.length === 2 }
+  }, [all, hasTargets])
 
   if (!data || data.status !== 'ok' || !series.length) {
     return (
@@ -437,7 +421,7 @@ export default function MoneyMoveChart() {
       )}
 
       {gap && (
-        <div className="h-80 w-full text-gray-900 dark:text-white">
+        <div className="h-72 w-full text-gray-900 dark:text-white">
           <ResponsiveContainer>
             <LineChart data={gap.rows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
@@ -451,88 +435,44 @@ export default function MoneyMoveChart() {
                 minTickGap={40}
               />
               <YAxis
-                yAxisId="gap"
-                tickFormatter={(v: number) => v.toFixed(1)}
+                yAxisId="spread"
+                tickFormatter={(v: number) => `$${v.toFixed(1)}`}
                 tick={{ fontSize: 11 }}
                 width={60}
-                label={{ value: 'distance to target ($)', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'currentColor' }}
+                label={{ value: 'top-2 target spread', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'currentColor' }}
               />
-              <YAxis
-                yAxisId="spy"
-                orientation="right"
-                domain={gapSpyDomain ?? ['auto', 'auto']}
-                tickFormatter={(v: number) => v.toFixed(0)}
-                tick={{ fontSize: 10 }}
-                width={40}
-              />
+              {/* keeps the plot area aligned with the charts above */}
+              <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
               <Tooltip
                 labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
-                formatter={(v: number, name) => [v.toFixed(2), name]}
+                formatter={(v: number, name) => [`$${v.toFixed(2)}`, name]}
                 contentStyle={{ fontSize: 12 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              {Array.from({ length: gap.nCalls }, (_, i) => (
+              {gap.hasCalls && (
                 <Line
-                  key={`c${i + 1}`}
-                  yAxisId="gap"
+                  yAxisId="spread"
                   type="monotone"
-                  dataKey={`c${i + 1}`}
-                  name={gap.labels[`c${i + 1}`]}
+                  dataKey="cDiff"
+                  name={gap.labels.cDiff}
                   stroke="#15803d"
-                  strokeWidth={1}
-                  strokeOpacity={0.45}
-                  strokeDasharray="3 3"
+                  strokeWidth={2}
                   dot={false}
-                  legendType="none"
                   connectNulls
                 />
-              ))}
-              {Array.from({ length: gap.nPuts }, (_, i) => (
+              )}
+              {gap.hasPuts && (
                 <Line
-                  key={`p${i + 1}`}
-                  yAxisId="gap"
+                  yAxisId="spread"
                   type="monotone"
-                  dataKey={`p${i + 1}`}
-                  name={gap.labels[`p${i + 1}`]}
+                  dataKey="pDiff"
+                  name={gap.labels.pDiff}
                   stroke="#dc2626"
-                  strokeWidth={1}
-                  strokeOpacity={0.45}
-                  strokeDasharray="3 3"
+                  strokeWidth={2}
                   dot={false}
-                  legendType="none"
                   connectNulls
                 />
-              ))}
-              <Line
-                yAxisId="gap"
-                type="monotone"
-                dataKey="cAvg"
-                name="top-2 call avg"
-                stroke="#15803d"
-                strokeWidth={2.5}
-                dot={false}
-                connectNulls
-              />
-              <Line
-                yAxisId="gap"
-                type="monotone"
-                dataKey="pAvg"
-                name="top-2 put avg"
-                stroke="#dc2626"
-                strokeWidth={2.5}
-                dot={false}
-                connectNulls
-              />
-              <Line
-                yAxisId="spy"
-                type="monotone"
-                dataKey="spy"
-                name="SPY"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeOpacity={0.55}
-                dot={false}
-              />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -580,11 +520,11 @@ export default function MoneyMoveChart() {
         whether price is heading toward where the money is. 3rd chart: signed
         <em> delta&nbsp;$</em> per minute — the option&apos;s price change that
         minute × that minute&apos;s volume × 100 (not cumulative; positive =
-        contract richened on volume). 4th chart: <em>distance to target</em> =
-        |target − SPY| for the two busiest calls and two busiest puts (faint)
-        plus each side&apos;s average (bold), with SPY on the right axis — the
-        smaller the line, the closer SPY is to that side&apos;s breakeven. Green
-        = calls, red = puts. Top 10 by day total, refreshed every 5&nbsp;min.
+        contract richened on volume). 4th chart: <em>top-2 target spread</em> —
+        the gap between the target prices of the two biggest call bets (green)
+        and of the two biggest put bets (red); small = the big money agrees on a
+        level, widening = it&apos;s splitting. Top 10 by day total, refreshed
+        every 5&nbsp;min.
       </p>
     </div>
   )
