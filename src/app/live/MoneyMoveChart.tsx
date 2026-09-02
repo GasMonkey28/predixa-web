@@ -59,7 +59,7 @@ const monthlyLabel = (iso?: string) => {
 }
 
 function MoneyMoveTrack({
-  heading, sub, allSeries, spotPath, open, close, spot, topN,
+  heading, sub, allSeries, spotPath, open, close, spot,
 }: {
   heading: string
   sub: string
@@ -68,9 +68,9 @@ function MoneyMoveTrack({
   open: number | null
   close: number | null
   spot: number | null
-  topN: number
 }) {
   const all = allSeries
+  const [topN, setTopN] = useState(5)
   const series = useMemo(() => all.slice(0, topN), [all, topN])
   const hasTargets =
     series.length > 0 &&
@@ -220,9 +220,28 @@ function MoneyMoveTrack({
 
   return (
     <div className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{heading}</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400">{sub}</p>
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{heading}</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{sub}</p>
+        </div>
+        <div className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+          <span className="uppercase tracking-wide">Top</span>
+          {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+            <button
+              key={n}
+              onClick={() => setTopN(n)}
+              className={clsx(
+                'rounded px-1.5 py-0.5 font-medium tabular-nums',
+                n === topN
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+              )}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="h-96 w-full">
@@ -492,7 +511,6 @@ function MoneyMoveTrack({
 
 export default function MoneyMoveChart() {
   const [data, setData] = useState<Payload | null>(null)
-  const [topN, setTopN] = useState(5)
 
   useEffect(() => {
     let cancelled = false
@@ -543,24 +561,6 @@ export default function MoneyMoveChart() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <span className="uppercase tracking-wide">Show top</span>
-        {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-          <button
-            key={n}
-            onClick={() => setTopN(n)}
-            className={clsx(
-              'rounded px-1.5 py-0.5 font-medium tabular-nums',
-              n === topN
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-            )}
-          >
-            {n}
-          </button>
-        ))}
-      </div>
-
       <div className="grid gap-x-8 gap-y-8 md:grid-cols-2 xl:grid-cols-3">
         {columns.map((c) =>
           c.series.length ? (
@@ -573,7 +573,6 @@ export default function MoneyMoveChart() {
               open={open}
               close={close}
               spot={spot}
-              topN={topN}
             />
           ) : (
             <div key={c.key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
