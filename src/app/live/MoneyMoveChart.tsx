@@ -61,7 +61,7 @@ const monthlyLabel = (iso?: string) => {
 }
 
 function MoneyMoveTrack({
-  heading, sub, allSeries, spotPath, open, close, spot, toggle,
+  heading, sub, allSeries, spotPath, open, close, spot, toggle, ul = 'SPY',
 }: {
   heading: string
   sub: string
@@ -71,6 +71,7 @@ function MoneyMoveTrack({
   close: number | null
   spot: number | null
   toggle?: { label: string; value: boolean; onChange: (v: boolean) => void }
+  ul?: string
 }) {
   const all = allSeries
   const [topN, setTopN] = useState(5)
@@ -360,7 +361,7 @@ function MoneyMoveTrack({
               <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
               <Tooltip
                 labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
-                formatter={(v: number, name) => [v.toFixed(2), name === '__spot' ? 'SPY' : name]}
+                formatter={(v: number, name) => [v.toFixed(2), name === '__spot' ? ul : name]}
                 contentStyle={{ fontSize: 12 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -382,7 +383,7 @@ function MoneyMoveTrack({
                 yAxisId="lvl"
                 type="monotone"
                 dataKey="__spot"
-                name="SPY"
+                name={ul}
                 stroke="currentColor"
                 strokeWidth={2.5}
                 dot={false}
@@ -526,14 +527,15 @@ function MoneyMoveTrack({
   )
 }
 
-export default function MoneyMoveChart() {
+export default function MoneyMoveChart({ symbol = 'SPY' }: { symbol?: string }) {
   const [data, setData] = useState<Payload | null>(null)
   const [excludeToday, setExcludeToday] = useState(true)
 
   useEffect(() => {
     let cancelled = false
+    setData(null)
     const load = () =>
-      fetch('/api/option-chain/money-move', { cache: 'no-store' })
+      fetch(`/api/option-chain/money-move?symbol=${encodeURIComponent(symbol)}`, { cache: 'no-store' })
         .then((r) => r.json())
         .then((d: Payload) => !cancelled && setData(d))
         .catch(() => {})
@@ -543,7 +545,7 @@ export default function MoneyMoveChart() {
       cancelled = true
       clearInterval(id)
     }
-  }, [])
+  }, [symbol])
 
   if (
     !data ||
@@ -622,6 +624,7 @@ export default function MoneyMoveChart() {
               close={close}
               spot={spot}
               toggle={c.toggle}
+              ul={symbol}
             />
           ) : (
             <div key={c.key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">

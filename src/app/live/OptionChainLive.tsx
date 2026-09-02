@@ -86,18 +86,22 @@ function ago(iso?: string) {
   return `${Math.round(s / 60)}m ago`
 }
 
-export default function OptionChainLive() {
+export default function OptionChainLive({ symbol = 'SPY' }: { symbol?: string }) {
   const [data, setData] = useState<Payload | null>(null)
   const [full, setFull] = useState<FullPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [exp, setExp] = useState<string | null>(null)
   const [, setTick] = useState(0) // re-render for the "Xs ago" label
   const [showFull, setShowFull] = useState(false) // the 13k-row ladder is opt-in
+  const q = `?symbol=${encodeURIComponent(symbol)}`
 
   useEffect(() => {
     let cancelled = false
+    setData(null)
+    setLoading(true)
+    setExp(null)
     const load = () => {
-      fetch('/api/option-chain', { cache: 'no-store' })
+      fetch(`/api/option-chain${q}`, { cache: 'no-store' })
         .then((r) => r.json())
         .then((d: Payload) => {
           if (!cancelled) setData(d)
@@ -117,7 +121,7 @@ export default function OptionChainLive() {
       clearInterval(poll)
       clearInterval(clock)
     }
-  }, [])
+  }, [q])
 
   // the full strike ladder (~13k rows, ~220 KB gz) only loads while it's open
   useEffect(() => {
@@ -127,7 +131,7 @@ export default function OptionChainLive() {
     }
     let cancelled = false
     const loadFull = () => {
-      fetch('/api/option-chain/full', { cache: 'no-store' })
+      fetch(`/api/option-chain/full${q}`, { cache: 'no-store' })
         .then((r) => r.json())
         .then((d: FullPayload) => {
           if (!cancelled) setFull(d)
@@ -140,7 +144,7 @@ export default function OptionChainLive() {
       cancelled = true
       clearInterval(pollFull)
     }
-  }, [showFull])
+  }, [showFull, q])
 
   const term = useMemo(() => data?.term_structure ?? [], [data])
   const spot = data?.spot ?? null
@@ -206,7 +210,7 @@ export default function OptionChainLive() {
       {/* header */}
       <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
         <div>
-          <div className="text-xs uppercase tracking-wide text-gray-400">SPY spot</div>
+          <div className="text-xs uppercase tracking-wide text-gray-400">{symbol} spot</div>
           <div className="text-3xl font-bold tabular-nums text-gray-900 dark:text-white">
             {n2(data.spot)}
           </div>
