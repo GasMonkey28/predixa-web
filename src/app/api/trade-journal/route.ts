@@ -8,6 +8,8 @@ import {
   MonthlyProfitEntry,
   normalizeEntry,
   normalizeMonthlyProfitEntry,
+  normalizeSacrificePoolEntry,
+  SacrificePoolEntry,
   TradeJournalData,
   TradeJournalEntry,
 } from '@/lib/trade-journal-types'
@@ -81,15 +83,30 @@ function sanitizeMonthlyProfitEntries(entries: unknown): MonthlyProfitEntry[] {
     .map((entry, index) => normalizeMonthlyProfitEntry(entry as Partial<MonthlyProfitEntry>, index))
 }
 
+function sanitizeSacrificePoolEntries(entries: unknown): SacrificePoolEntry[] {
+  if (!Array.isArray(entries)) return []
+
+  return entries
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry, index) =>
+      normalizeSacrificePoolEntry(entry as Partial<SacrificePoolEntry>, index)
+    )
+}
+
 function sanitizeJournalData(body: unknown): TradeJournalData {
   if (!body || typeof body !== 'object') {
-    return { entries: [], monthlyProfitEntries: [] }
+    return { entries: [], monthlyProfitEntries: [], sacrificePoolEntries: [] }
   }
 
-  const data = body as { entries?: unknown; monthlyProfitEntries?: unknown }
+  const data = body as {
+    entries?: unknown
+    monthlyProfitEntries?: unknown
+    sacrificePoolEntries?: unknown
+  }
   return {
     entries: sanitizeEntries(data.entries),
     monthlyProfitEntries: sanitizeMonthlyProfitEntries(data.monthlyProfitEntries),
+    sacrificePoolEntries: sanitizeSacrificePoolEntries(data.sacrificePoolEntries),
   }
 }
 
@@ -115,6 +132,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       entries: sanitizeEntries(result.Item?.entries),
       monthlyProfitEntries: sanitizeMonthlyProfitEntries(result.Item?.monthlyProfitEntries),
+      sacrificePoolEntries: sanitizeSacrificePoolEntries(result.Item?.sacrificePoolEntries),
       updatedAt: result.Item?.updatedAt ?? null,
     })
   } catch (error: unknown) {
@@ -147,6 +165,7 @@ export async function PUT(request: NextRequest) {
           userId,
           entries: journal.entries,
           monthlyProfitEntries: journal.monthlyProfitEntries,
+          sacrificePoolEntries: journal.sacrificePoolEntries,
           updatedAt: now,
         },
       })

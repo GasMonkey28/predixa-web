@@ -22,6 +22,11 @@ export interface TradeJournalEntry {
   /** Point P&L transferred to another position (excluded from monthly P&L). */
   pointsContributed: number | null
   contributedToEntryId: string | null
+  /**
+   * Point P&L (usually a loss) parked in the per-instrument Sacrifice pool instead
+   * of being booked to monthly P&L. Set when the position was closed via "Sacrifice".
+   */
+  pointsSacrificed?: number | null
   source?: 'manual' | 'tradestation'
   externalId?: string | null
   tradestationBuyFillId?: string | null
@@ -36,9 +41,34 @@ export interface MonthlyProfitEntry {
   note: string
 }
 
+/**
+ * One lot in the per-instrument Sacrifice pool. `points` is signed:
+ * a sacrificed loss is negative, a later profit contribution is positive.
+ * The running pool total = sum of all lots for that instrument, and it is
+ * deliberately kept out of monthly P&L until the user resolves it.
+ */
+export interface SacrificePoolEntry {
+  id: string
+  instrumentType: InstrumentType
+  points: number
+  date: string
+  note: string
+  kind: 'sacrifice' | 'contribution' | 'manual'
+  sourceEntryId: string | null
+}
+
+export interface SacrificePoolTotal {
+  instrumentType: InstrumentType
+  label: string
+  points: number
+  sacrificeCount: number
+  contributionCount: number
+}
+
 export interface TradeJournalData {
   entries: TradeJournalEntry[]
   monthlyProfitEntries: MonthlyProfitEntry[]
+  sacrificePoolEntries: SacrificePoolEntry[]
 }
 
 export interface TradeJournalDocument extends TradeJournalData {
@@ -223,6 +253,8 @@ export function calcOpenPositionSummary(entries: TradeJournalEntry[]): OpenPosit
 
 export function getEntryProfit(entry: TradeJournalEntry): number | null {
   if (entry.pointsContributed != null && entry.soldPrice != null) return 0
+  // Sacrificed positions moved their (loss) points to the parked pool, not monthly P&L.
+  if (entry.pointsSacrificed != null && entry.soldPrice != null) return 0
   return (
     entry.profit ??
     calcProfit(entry.buyPrice, entry.soldPrice, entry.instrumentType, entry.positionSize)
@@ -424,6 +456,89 @@ export function createMonthlyProfitEntry(monthKey?: string): MonthlyProfitEntry 
   )
 }
 
+function instrumentShortLabel(instrumentType: InstrumentType): string {
+  return INSTRUMENT_OPTIONS.find((o) => o.value === instrumentType)?.shortLabel ?? instrumentType
+}
+
+export function normalizeSacrificePoolEntry(
+  entry: Partial<SacrificePoolEntry>,
+  index: number
+): SacrificePoolEntry {
+  const instrumentType =
+    entry.instrumentType === 'stock' ||
+    entry.instrumentType === 'future' ||
+    entry.instrumentType === 'mini_future'
+      ? entry.instrumentType
+      : DEFAULT_INSTRUMENT_TYPE
+
+  const kind =
+    entry.kind === 'sacrifice' || entry.kind === 'contribution' || entry.kind === 'manual'
+      ? entry.kind
+      : 'sacrifice'
+
+  return {
+    id: typeof entry.id === 'string' && entry.id ? entry.id : `sacrifice-${index}`,
+    instrumentType,
+    points: coerceNumber(entry.points) ?? 0,
+    date:
+      typeof entry.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(entry.date)
+        ? entry.date.slice(0, 10)
+        : new Date().toISOString().slice(0, 10),
+    note: typeof entry.note === 'string' ? entry.note : '',
+    kind,
+    sourceEntryId: typeof entry.sourceEntryId === 'string' ? entry.sourceEntryId : null,
+  }
+}
+
+export function createSacrificePoolEntry(
+  data: Partial<SacrificePoolEntry> & { points: number; instrumentType: InstrumentType }
+): SacrificePoolEntry {
+  return normalizeSacrificePoolEntry(
+    {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString().slice(0, 10),
+      note: '',
+      kind: 'sacrifice',
+      sourceEntryId: null,
+      ...data,
+    },
+    0
+  )
+}
+
+/** Running Sacrifice-pool total per instrument. Only instruments with activity are returned. */
+export function calcSacrificePoolTotals(
+  poolEntries: SacrificePoolEntry[] = []
+): SacrificePoolTotal[] {
+  const byInstrument = new Map<InstrumentType, SacrificePoolTotal>()
+
+  for (const entry of poolEntries) {
+    const current =
+      byInstrument.get(entry.instrumentType) ?? {
+        instrumentType: entry.instrumentType,
+        label: instrumentShortLabel(entry.instrumentType),
+        points: 0,
+        sacrificeCount: 0,
+        contributionCount: 0,
+      }
+    current.points += entry.points
+    if (entry.kind === 'contribution') current.contributionCount += 1
+    else if (entry.kind === 'sacrifice') current.sacrificeCount += 1
+    byInstrument.set(entry.instrumentType, current)
+  }
+
+  return Array.from(byInstrument.values()).sort((a, b) => a.label.localeCompare(b.label))
+}
+
+export function getSacrificePoolPoints(
+  poolEntries: SacrificePoolEntry[] = [],
+  instrumentType: InstrumentType
+): number {
+  return poolEntries
+    .filter((entry) => entry.instrumentType === instrumentType)
+    .reduce((sum, entry) => sum + entry.points, 0)
+}
+
 export function withRecalculatedProfit(entry: TradeJournalEntry): TradeJournalEntry {
   return {
     ...entry,
@@ -467,6 +582,7 @@ export function normalizeEntry(entry: Partial<TradeJournalEntry>, index: number)
     pointsContributed: coerceNumber(entry.pointsContributed),
     contributedToEntryId:
       typeof entry.contributedToEntryId === 'string' ? entry.contributedToEntryId : null,
+    pointsSacrificed: coerceNumber(entry.pointsSacrificed),
     rating: typeof entry.rating === 'string' ? entry.rating : '',
     source: entry.source === 'tradestation' ? 'tradestation' : 'manual',
     externalId: typeof entry.externalId === 'string' ? entry.externalId : null,

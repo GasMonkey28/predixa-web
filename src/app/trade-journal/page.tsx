@@ -8,15 +8,19 @@ import { useAuthStore } from '@/lib/auth-store'
 import {
   TradeJournalEntry,
   MonthlyProfitEntry,
+  SacrificePoolEntry,
   InstrumentType,
   INSTRUMENT_OPTIONS,
   calcMonthlyProfitSummaries,
   calcOpenPositionSummary,
   calcPointPnL,
+  calcSacrificePoolTotals,
+  createSacrificePoolEntry,
   defaultProfitMonthOnClose,
   ensureMonthsInSummaries,
   getContributeRecipientTargets,
   getCurrentMonthKey,
+  getSacrificePoolPoints,
   type OpenPositionSummary,
   applyRollOverDiff,
   createEmptyEntry,
@@ -70,6 +74,7 @@ export default function TradeJournalPage() {
   const { user, isAuthenticated } = useAuthStore()
   const [entries, setEntries] = useState<TradeJournalEntry[]>([])
   const [monthlyProfitEntries, setMonthlyProfitEntries] = useState<MonthlyProfitEntry[]>([])
+  const [sacrificePoolEntries, setSacrificePoolEntries] = useState<SacrificePoolEntry[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
@@ -103,18 +108,20 @@ export default function TradeJournalPage() {
     undoStackRef.current.push({
       entries: JSON.parse(JSON.stringify(entries)) as TradeJournalEntry[],
       monthlyProfitEntries: JSON.parse(JSON.stringify(monthlyProfitEntries)),
+      sacrificePoolEntries: JSON.parse(JSON.stringify(sacrificePoolEntries)),
     })
     if (undoStackRef.current.length > UNDO_STACK_LIMIT) {
       undoStackRef.current.shift()
     }
     setUndoCount(undoStackRef.current.length)
-  }, [entries, monthlyProfitEntries])
+  }, [entries, monthlyProfitEntries, sacrificePoolEntries])
 
   const undoLastAction = useCallback(() => {
     const snapshot = undoStackRef.current.pop()
     if (!snapshot) return
     setEntries(snapshot.entries)
     setMonthlyProfitEntries(snapshot.monthlyProfitEntries)
+    setSacrificePoolEntries(snapshot.sacrificePoolEntries ?? [])
     setUndoCount(undoStackRef.current.length)
     setTsMessage('Undid last action.')
   }, [])
@@ -218,6 +225,7 @@ export default function TradeJournalPage() {
           renumberEntries(loaded.entries.map((entry, index) => normalizeEntry(entry, index)))
         )
         setMonthlyProfitEntries(loaded.monthlyProfitEntries)
+        setSacrificePoolEntries(loaded.sacrificePoolEntries ?? [])
         undoStackRef.current = []
         setUndoCount(0)
         setIsLoaded(true)
@@ -254,13 +262,13 @@ export default function TradeJournalPage() {
 
     setIsSaving(true)
     const timer = window.setTimeout(async () => {
-      await saveTradeJournal({ entries, monthlyProfitEntries }, user?.userId)
+      await saveTradeJournal({ entries, monthlyProfitEntries, sacrificePoolEntries }, user?.userId)
       setLastSavedAt(new Date().toLocaleTimeString())
       setIsSaving(false)
     }, 600)
 
     return () => window.clearTimeout(timer)
-  }, [entries, monthlyProfitEntries, isLoaded, user?.userId])
+  }, [entries, monthlyProfitEntries, sacrificePoolEntries, isLoaded, user?.userId])
 
   const totalProfit = useMemo(() => {
     const tradeTotal = entries.reduce((sum, entry) => sum + (getEntryProfit(entry) ?? 0), 0)
@@ -285,6 +293,22 @@ export default function TradeJournalPage() {
   }, [entries, monthlyProfitEntries])
 
   const currentMonthKey = useMemo(() => getCurrentMonthKey(), [])
+
+  const sacrificePoolTotals = useMemo(
+    () => calcSacrificePoolTotals(sacrificePoolEntries),
+    [sacrificePoolEntries]
+  )
+
+  const sortedSacrificePoolEntries = useMemo(
+    () => [...sacrificePoolEntries].sort((a, b) => b.date.localeCompare(a.date)),
+    [sacrificePoolEntries]
+  )
+
+  const removeSacrificePoolEntry = (id: string) => {
+    pushUndoSnapshot()
+    setSacrificePoolEntries((prev) => prev.filter((line) => line.id !== id))
+    setTsMessage('Removed parked-pool lot.')
+  }
 
   const addMonthlyProfitEntry = () => {
     pushUndoSnapshot()
@@ -525,11 +549,151 @@ export default function TradeJournalPage() {
     [entries, updateEntry, pushUndoSnapshot]
   )
 
+  const instrumentShortLabel = useCallback((type: InstrumentType) => {
+    return INSTRUMENT_OPTIONS.find((o) => o.value === type)?.shortLabel ?? type
+  }, [])
+
+  /**
+   * Close an open position at the fill price and park its point P&L (a loss) in the
+   * per-instrument Sacrifice pool instead of booking it to monthly P&L.
+   */
+  const applySacrificeFill = useCallback(
+    async (sourceEntryId: string, fill: TradeStationRecentFill) => {
+      const source = entries.find((entry) => entry.id === sourceEntryId)
+      if (!source?.buyPrice) {
+        setTsMessage('Position has no Buy price to sacrifice.')
+        return
+      }
+
+      const exitPrice = exitPriceFromFill(fill)
+      const points = calcPointPnL(source.buyPrice, exitPrice)
+      if (points == null) {
+        setTsMessage('Cannot compute points for this close.')
+        return
+      }
+
+      const sourceNo = getTradeNumber(entries, sourceEntryId)
+      const label = instrumentShortLabel(fill.instrumentType)
+      const closeReasonBase = await fetchTradeJournalReason(fill.date)
+      const note = `Sacrifice ${points > 0 ? '+' : ''}${points}pts → ${label} pool`
+      const closeReason = closeReasonBase ? `${closeReasonBase} · ${note}` : note
+
+      pushUndoSnapshot()
+      setEntries((prev) =>
+        renumberEntries(
+          prev.map((entry) => {
+            if (entry.id !== sourceEntryId) return entry
+            return withRecalculatedProfit({
+              ...entry,
+              soldPrice: exitPrice,
+              closeDate: fill.date,
+              closeReason,
+              pointsSacrificed: points,
+              instrumentType: fill.instrumentType,
+              positionSize: fill.quantity,
+              tradestationSoldFillId: fill.id,
+              profit: 0,
+            })
+          })
+        )
+      )
+      setSacrificePoolEntries((prev) => [
+        ...prev,
+        createSacrificePoolEntry({
+          instrumentType: fill.instrumentType,
+          points,
+          date: fill.date,
+          note: `#${sourceNo ?? '—'} sacrificed @ ${exitPrice}`,
+          kind: 'sacrifice',
+          sourceEntryId,
+        }),
+      ])
+      setTsFillActionMenu(null)
+      setTsMessage(
+        `Sacrificed ${points > 0 ? '+' : ''}${points} pts from #${sourceNo ?? '—'} into the ${label} parked pool.`
+      )
+    },
+    [entries, instrumentShortLabel, pushUndoSnapshot]
+  )
+
+  /**
+   * Close an open position and route its point P&L (a profit) into the per-instrument
+   * Sacrifice pool — e.g. pool −1000 + 100 profit → −900.
+   */
+  const applyContributeToPool = useCallback(
+    async (fill: TradeStationRecentFill, sourceEntryId: string) => {
+      const source = entries.find((entry) => entry.id === sourceEntryId)
+      if (!source?.buyPrice) {
+        setTsMessage('Source position has no Buy price.')
+        return
+      }
+
+      const exitPrice = exitPriceFromFill(fill)
+      const points = calcPointPnL(source.buyPrice, exitPrice)
+      if (points == null || points === 0) {
+        setTsMessage('No point P&L to contribute from this close.')
+        return
+      }
+
+      const sourceNo = getTradeNumber(entries, sourceEntryId)
+      const label = instrumentShortLabel(fill.instrumentType)
+      const closeReasonBase = await fetchTradeJournalReason(fill.date)
+      const note = `Contrib ${points > 0 ? '+' : ''}${points}pts → ${label} pool`
+      const closeReason = closeReasonBase ? `${closeReasonBase} · ${note}` : note
+
+      pushUndoSnapshot()
+      setEntries((prev) =>
+        renumberEntries(
+          prev.map((entry) => {
+            if (entry.id !== sourceEntryId) return entry
+            const profitMonth = defaultProfitMonthOnClose({
+              profitMonth: entry.profitMonth,
+              closeDate: fill.date,
+            })
+            return withRecalculatedProfit({
+              ...entry,
+              soldPrice: exitPrice,
+              closeDate: fill.date,
+              closeReason,
+              ...(profitMonth ? { profitMonth } : {}),
+              pointsContributed: points,
+              contributedToEntryId: null,
+              instrumentType: fill.instrumentType,
+              positionSize: fill.quantity,
+              tradestationSoldFillId: fill.id,
+              profit: 0,
+            })
+          })
+        )
+      )
+      setSacrificePoolEntries((prev) => [
+        ...prev,
+        createSacrificePoolEntry({
+          instrumentType: fill.instrumentType,
+          points,
+          date: fill.date,
+          note: `#${sourceNo ?? '—'} contributed @ ${exitPrice}`,
+          kind: 'contribution',
+          sourceEntryId,
+        }),
+      ])
+      setTsFillActionMenu(null)
+      setTsMessage(
+        `Contributed ${points > 0 ? '+' : ''}${points} pts from #${sourceNo ?? '—'} to the ${label} parked pool.`
+      )
+    },
+    [entries, instrumentShortLabel, pushUndoSnapshot]
+  )
+
   const applyTsFillFromMenu = useCallback(
     (entryId: string, fill: TradeStationRecentFill, action: TsFillJournalAction) => {
       setTsFillActionMenu(null)
       if (action === 'buy') {
         void applyTsFillToEntry(entryId, 'buy', fill)
+        return
+      }
+      if (action === 'sacrifice') {
+        void applySacrificeFill(entryId, fill)
         return
       }
       if (action === 'sell') {
@@ -543,7 +707,7 @@ export default function TradeJournalPage() {
         { takeProfit: action === 'takeProfit' }
       )
     },
-    [applyTsFillToEntry]
+    [applyTsFillToEntry, applySacrificeFill]
   )
 
   const toggleTsFillActionMenu = useCallback(
@@ -973,9 +1137,34 @@ export default function TradeJournalPage() {
                                         'No points to contribute'
                                       )}
                                     </li>
+                                    {points != null && points !== 0 && (
+                                      <li>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            void applyContributeToPool(fill, sourceId)
+                                          }
+                                          className="flex w-full flex-col gap-0.5 border-b border-zinc-700/60 px-3 py-2 text-left hover:bg-zinc-800"
+                                        >
+                                          <span className="text-[10px] font-medium text-orange-200">
+                                            → {instrumentShortLabel(fill.instrumentType)} parked pool
+                                          </span>
+                                          <span className="text-[10px] tabular-nums text-orange-300">
+                                            {(() => {
+                                              const cur = getSacrificePoolPoints(
+                                                sacrificePoolEntries,
+                                                fill.instrumentType
+                                              )
+                                              const next = cur + points
+                                              return `${cur > 0 ? '+' : ''}${cur} → ${next > 0 ? '+' : ''}${next}`
+                                            })()}
+                                          </span>
+                                        </button>
+                                      </li>
+                                    )}
                                     {recipientTargets.length === 0 ? (
                                       <li className="px-3 py-2 text-[10px] text-gray-500">
-                                        No other open positions for this instrument.
+                                        No other open positions — contribute to the pool above.
                                       </li>
                                     ) : (
                                       recipientTargets.map(
@@ -1117,6 +1306,13 @@ export default function TradeJournalPage() {
                             renderFillActionMenu('buy', '→ Buy', 'bg-emerald-500/20 text-emerald-400')}
                           {isShortOpen &&
                             renderFillActionMenu('sell', '→ Sell', 'bg-red-500/20 text-red-400')}
+                          {(isLongOpen || isShortOpen) &&
+                            !inJournal &&
+                            renderFillActionMenu(
+                              'sacrifice',
+                              'Sacrifice',
+                              'border border-orange-500/40 bg-orange-500/10 text-orange-300'
+                            )}
                           {isShortOpen && !inJournal && renderContributeMenu()}
                           {isCloseFill &&
                             renderFillActionMenu('sold', '→ Sold', 'bg-amber-500/20 text-amber-300')}
@@ -1138,6 +1334,12 @@ export default function TradeJournalPage() {
                                   'takeProfit',
                                   'Take profit',
                                   'border border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                )}
+                              {isCloseFill &&
+                                renderFillActionMenu(
+                                  'sacrifice',
+                                  'Sacrifice',
+                                  'border border-orange-500/40 bg-orange-500/10 text-orange-300'
                                 )}
                               {isCloseFill && renderContributeMenu()}
                             </>
@@ -1433,6 +1635,96 @@ export default function TradeJournalPage() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          <div className="border-b border-zinc-800/80 px-4 py-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-medium text-gray-400">
+                  Parked Losses · Sacrifice pool
+                </h3>
+                <p className="text-[11px] text-gray-600">
+                  Sacrifice a losing position to park its points here instead of this
+                  month&apos;s P&amp;L. Later, Contribute a winning close to the pool to work
+                  it back toward zero (e.g. −1000 + 100 → −900).
+                </p>
+              </div>
+            </div>
+
+            {sacrificePoolTotals.length > 0 ? (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {sacrificePoolTotals.map((pool) => (
+                  <div
+                    key={pool.instrumentType}
+                    className="min-w-[8.5rem] rounded-lg border border-orange-500/40 bg-orange-950/20 px-3 py-2"
+                  >
+                    <div className="text-xs text-gray-500">{pool.label} parked</div>
+                    <div
+                      className={clsx(
+                        'text-sm font-semibold tabular-nums',
+                        pool.points > 0 && 'text-emerald-400',
+                        pool.points < 0 && 'text-red-400',
+                        pool.points === 0 && 'text-gray-300'
+                      )}
+                    >
+                      {pool.points > 0 ? '+' : ''}
+                      {pool.points} pts
+                    </div>
+                    <div className="text-[10px] text-gray-600">
+                      {pool.sacrificeCount} sacrificed · {pool.contributionCount} contributed
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mb-2 text-xs text-gray-500">
+                No parked losses. Use <span className="text-orange-300">Sacrifice</span> on a
+                TradeStation fill to move a loss here.
+              </p>
+            )}
+
+            {sortedSacrificePoolEntries.length > 0 && (
+              <ul className="space-y-1">
+                {sortedSacrificePoolEntries.map((line) => (
+                  <li
+                    key={line.id}
+                    className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-2 py-1.5 text-xs"
+                  >
+                    <span className="tabular-nums text-gray-500">{line.date}</span>
+                    <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-gray-400">
+                      {instrumentShortLabel(line.instrumentType)}
+                    </span>
+                    <span
+                      className={clsx(
+                        'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                        line.kind === 'contribution'
+                          ? 'bg-emerald-500/15 text-emerald-300'
+                          : 'bg-orange-500/15 text-orange-300'
+                      )}
+                    >
+                      {line.kind === 'contribution' ? 'Contribute' : 'Sacrifice'}
+                    </span>
+                    <span
+                      className={clsx(
+                        'tabular-nums font-semibold',
+                        line.points >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      )}
+                    >
+                      {line.points > 0 ? '+' : ''}
+                      {line.points} pts
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-gray-500">{line.note}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSacrificePoolEntry(line.id)}
+                      className="rounded-md px-2 py-1 text-[10px] text-red-400 hover:bg-red-500/10"
+                    >
+                      Delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 

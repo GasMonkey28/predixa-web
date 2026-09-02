@@ -252,10 +252,34 @@ export function getUsedTradeStationFillIds(
 
 export const TS_FILL_DRAG_TYPE = 'application/x-predixa-ts-fill'
 
-export type TsFillJournalAction = 'buy' | 'sell' | 'sold' | 'takeProfit' | 'contribute'
+export type TsFillJournalAction =
+  | 'buy'
+  | 'sell'
+  | 'sold'
+  | 'takeProfit'
+  | 'contribute'
+  | 'sacrifice'
 
 export function exitPriceFromFill(fill: TradeStationRecentFill): number {
   return fill.soldValue ?? fill.price
+}
+
+/** Which open side a fill can close: a buy closes shorts, a sell closes longs. */
+function fillClosesSide(fill: TradeStationRecentFill): 'long' | 'short' | null {
+  if (fill.buyOrSell === 'sell') return 'long'
+  if (fill.buyOrSell === 'buy') return 'short'
+  return null
+}
+
+/**
+ * Open positions a recent fill can "Sacrifice" — close at the fill price and park the
+ * (loss) points in the per-instrument pool instead of monthly P&L.
+ */
+export function getSacrificeTargets(
+  fill: TradeStationRecentFill,
+  entries: TradeJournalEntry[]
+): TsFillJournalTarget[] {
+  return getJournalTargetsForFillAction(fill, entries, 'sacrifice')
 }
 
 /** Open positions this fill can close for take profit / contribute (step 1). */
@@ -312,6 +336,28 @@ export function getJournalTargetsForFillAction(
       .filter((entry) => {
         if (!isOpenPosition(entry) || !matchesFillInstrument(entry, fill)) return false
         return isLongPosition(entry.buyPrice)
+      })
+      .map((entry) => ({
+        entry,
+        tradeNo: getTradeNumber(entries, entry.id),
+        projectedProfit: calcProfit(
+          entry.buyPrice,
+          exitPrice,
+          entry.instrumentType,
+          entry.positionSize
+        ),
+      }))
+  }
+
+  if (action === 'sacrifice') {
+    const closesSide = fillClosesSide(fill)
+    if (!closesSide) return []
+    return entries
+      .filter((entry) => {
+        if (!isOpenPosition(entry) || !matchesFillInstrument(entry, fill)) return false
+        return closesSide === 'long'
+          ? isLongPosition(entry.buyPrice)
+          : isShortPosition(entry.buyPrice)
       })
       .map((entry) => ({
         entry,
