@@ -551,14 +551,6 @@ export default function MoneyMoveChart() {
   const spotPath = data.spot_path ?? []
 
   const columns: { key: string; heading: string; sub: string; series: Series[] }[] = [
-    ...(data.overall?.series?.length
-      ? [{
-          key: 'overall',
-          heading: 'All expirations',
-          sub: 'top $ volume, every strike & expiry',
-          series: data.overall.series,
-        }]
-      : []),
     {
       key: 'today',
       heading: 'Expiring today',
@@ -571,6 +563,14 @@ export default function MoneyMoveChart() {
       sub: `3rd-Friday expiry${t.expiry ? ` · ${t.expiry}` : ''}`,
       series: t.series ?? [],
     })),
+    ...(data.overall?.series?.length
+      ? [{
+          key: 'overall',
+          heading: 'All expirations',
+          sub: 'top $ volume, every strike & expiry',
+          series: data.overall.series,
+        }]
+      : []),
   ]
 
   return (

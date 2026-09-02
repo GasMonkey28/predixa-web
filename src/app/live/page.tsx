@@ -30,9 +30,9 @@ export default function LivePage() {
         </h2>
         <p className="max-w-3xl text-sm text-gray-600 dark:text-gray-400">
           Where the dollars are going — cumulative traded value for the busiest
-          SPY contracts, minute by minute, in parallel columns:{' '}
-          <em>all expirations</em>, then contracts <em>expiring today</em>, then
-          the next two <em>third-Friday monthlies</em>.
+          SPY contracts, minute by minute, in parallel columns: contracts{' '}
+          <em>expiring today</em>, then the next two{' '}
+          <em>third-Friday monthlies</em>, then <em>all expirations</em>.
         </p>
         <MoneyMoveChart />
       </section>
