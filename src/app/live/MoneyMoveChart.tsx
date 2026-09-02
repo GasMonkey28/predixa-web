@@ -19,6 +19,7 @@ type Series = {
   total: number
   points: [number, number][] // [minute_bucket (unix s), cumulative dollars]
   be_points?: [number, number][] // [minute_bucket, target level = strike ± mid]
+  delta_points?: [number, number][] // [minute_bucket, signed Δmid × minute volume × 100]
 }
 type Payload = {
   status: string
@@ -152,6 +153,23 @@ export default function MoneyMoveChart() {
     const pad = Math.max((hi - lo) * 0.08, 0.25)
     return [lo - pad, hi + pad]
   }, [priceRows])
+
+  // third chart: signed "delta $" per minute — how much each contract repriced
+  // that minute times the minute's volume. Not cumulative: expect spikes.
+  const deltaRows = useMemo(() => {
+    const hasAny = series.some((s) => (s.delta_points?.length ?? 0) > 0)
+    if (!hasAny) return []
+    const byT = new Map<number, Record<string, number>>()
+    if (open != null) byT.set(open, { t: open })
+    for (const s of series) {
+      for (const [t, d] of s.delta_points ?? []) {
+        const row = byT.get(t) ?? { t }
+        row[s.label] = d
+        byT.set(t, row)
+      }
+    }
+    return [...byT.values()].sort((a, b) => a.t - b.t)
+  }, [series, open])
 
   if (!data || data.status !== 'ok' || !series.length) {
     return (
@@ -317,6 +335,53 @@ export default function MoneyMoveChart() {
         </div>
       )}
 
+      {deltaRows.length > 0 && (
+        <div className="h-72 w-full">
+          <ResponsiveContainer>
+            <LineChart data={deltaRows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis
+                dataKey="t"
+                type="number"
+                scale="time"
+                domain={[open ?? 'dataMin', close ?? 'dataMax']}
+                tickFormatter={fmtTime}
+                tick={{ fontSize: 11 }}
+                minTickGap={40}
+              />
+              <YAxis
+                yAxisId="delta"
+                tickFormatter={fmtM}
+                tick={{ fontSize: 11 }}
+                width={60}
+              />
+              {/* keeps the plot area aligned with the charts above */}
+              <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
+              <Tooltip
+                labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
+                formatter={(v: number, name) => [fmtM(v), name]}
+                contentStyle={{ fontSize: 12 }}
+                itemSorter={(i) => -Math.abs(i.value as number)}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <ReferenceLine yAxisId="delta" y={0} stroke="currentColor" strokeOpacity={0.3} />
+              {series.map((s) => (
+                <Line
+                  key={s.occ}
+                  yAxisId="delta"
+                  type="linear"
+                  dataKey={s.label}
+                  stroke={colorOf.get(s.occ)}
+                  strokeWidth={1.4}
+                  dot={false}
+                  connectNulls
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs tabular-nums">
           <thead>
@@ -351,13 +416,16 @@ export default function MoneyMoveChart() {
       </div>
 
       <p className="text-xs text-gray-400">
-        Contracts <em>expiring today</em> only. Top chart: cumulative traded
+        Contracts <em>expiring today</em> only. 1st chart: cumulative traded
         dollars per contract (each minute&apos;s new volume × mid × 100); the
         right-edge dots mark each one&apos;s <em>target</em> — strike ± the
-        option&apos;s price. Bottom chart: SPY&apos;s own 1-minute path (solid)
+        option&apos;s price. 2nd chart: SPY&apos;s own 1-minute path (solid)
         against each contract&apos;s target level (dashed), so you can see
-        whether price is heading toward where the money is. Green = calls,
-        red = puts. Top 10 by day total, refreshed every 5&nbsp;min.
+        whether price is heading toward where the money is. 3rd chart: signed
+        <em> delta&nbsp;$</em> per minute — the option&apos;s price change that
+        minute × that minute&apos;s volume × 100 (not cumulative; positive =
+        contract richened on volume). Green = calls, red = puts. Top 10 by day
+        total, refreshed every 5&nbsp;min.
       </p>
     </div>
   )
