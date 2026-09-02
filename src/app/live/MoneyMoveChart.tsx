@@ -21,6 +21,11 @@ type Series = {
   be_points?: [number, number][] // [minute_bucket, target level = strike ± mid]
   delta_points?: [number, number][] // [minute_bucket, signed Δmid × minute volume × 100]
 }
+type Track = {
+  expiry?: string
+  minutes?: number
+  series: Series[]
+}
 type Payload = {
   status: string
   as_of?: string
@@ -30,7 +35,8 @@ type Payload = {
   session_close?: number
   minutes?: number
   spot_path?: [number, number][] // [minute_bucket, SPY price]
-  series?: Series[]
+  series?: Series[] // contracts expiring today
+  monthly?: Track // next third-Friday monthly expiration
   hint?: string
 }
 
@@ -43,32 +49,31 @@ const fmtTime = (unixSec: number) =>
   new Date(unixSec * 1000).toLocaleTimeString('en-US', {
     hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York', hour12: false,
   })
+const monthlyLabel = (iso?: string) => {
+  if (!iso) return 'Monthly'
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', timeZone: 'UTC',
+  })
+}
 
-export default function MoneyMoveChart() {
-  const [data, setData] = useState<Payload | null>(null)
-  const [topN, setTopN] = useState(5)
-
-  useEffect(() => {
-    let cancelled = false
-    const load = () =>
-      fetch('/api/option-chain/money-move', { cache: 'no-store' })
-        .then((r) => r.json())
-        .then((d: Payload) => !cancelled && setData(d))
-        .catch(() => {})
-    load()
-    const id = setInterval(load, POLL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [])
-
-  const all = useMemo(() => data?.series ?? [], [data])
+function MoneyMoveTrack({
+  heading, sub, allSeries, spotPath, open, close, spot, topN,
+}: {
+  heading: string
+  sub: string
+  allSeries: Series[]
+  spotPath: [number, number][]
+  open: number | null
+  close: number | null
+  spot: number | null
+  topN: number
+}) {
+  const all = allSeries
   const series = useMemo(() => all.slice(0, topN), [all, topN])
-  const open = data?.session_open ?? null
-  const close = data?.session_close ?? null
-  const spot = data?.spot ?? null
-  const hasTargets = series.length > 0 && series.every((s) => typeof s.breakeven === 'number' && Number.isFinite(s.breakeven))
+  const hasTargets =
+    series.length > 0 &&
+    series.every((s) => typeof s.breakeven === 'number' && Number.isFinite(s.breakeven))
 
   // a stable colour per contract (keyed off the full list so it doesn't
   // shuffle when topN changes), by call/put family
@@ -103,9 +108,7 @@ export default function MoneyMoveChart() {
     return times.map((t) => byT.get(t)!)
   }, [series, open])
 
-  // right axis just fits the targets (and spot), with a little margin. No
-  // clamp, no minimum window — a contract far from spot has no volume so it
-  // never reaches the top-N anyway.
+  // chart 1 right axis: just fits the targets (and spot), with a little margin
   const priceDomain = useMemo<[number, number] | undefined>(() => {
     if (!hasTargets || spot == null) return undefined
     const vals = [spot, ...series.map((s) => s.breakeven)]
@@ -121,13 +124,11 @@ export default function MoneyMoveChart() {
     return series.map((s) => ({ ...s, y: Math.min(hi, Math.max(lo, s.breakeven)) }))
   }, [series, hasTargets, priceDomain])
 
-  // companion chart: SPY's 1-min path today + each top contract's target level,
-  // both on a $-price axis, sharing the time axis above
+  // chart 2: SPY's 1-min path against each top contract's target level
   const priceRows = useMemo(() => {
-    const sp = data?.spot_path ?? []
-    if (sp.length === 0) return []
+    if (spotPath.length === 0) return []
     const byT = new Map<number, Record<string, number>>()
-    for (const [t, p] of sp) byT.set(t, { t, __spot: p })
+    for (const [t, p] of spotPath) byT.set(t, { t, __spot: p })
     for (const s of series) {
       for (const [t, be] of s.be_points ?? []) {
         const row = byT.get(t) ?? { t }
@@ -136,7 +137,7 @@ export default function MoneyMoveChart() {
       }
     }
     return [...byT.values()].sort((a, b) => a.t - b.t)
-  }, [data, series])
+  }, [spotPath, series])
 
   const pricePathDomain = useMemo<[number, number] | undefined>(() => {
     if (priceRows.length === 0) return undefined
@@ -154,8 +155,7 @@ export default function MoneyMoveChart() {
     return [lo - pad, hi + pad]
   }, [priceRows])
 
-  // third chart: signed "delta $" per minute — how much each contract repriced
-  // that minute times the minute's volume. Not cumulative: expect spikes.
+  // chart 3: signed "delta $" per minute — not cumulative, expect spikes
   const deltaRows = useMemo(() => {
     const hasAny = series.some((s) => (s.delta_points?.length ?? 0) > 0)
     if (!hasAny) return []
@@ -171,10 +171,7 @@ export default function MoneyMoveChart() {
     return [...byT.values()].sort((a, b) => a.t - b.t)
   }, [series, open])
 
-  // fourth chart: how far apart the two biggest bets on each side sit —
-  // |target #1 − target #2| for the two busiest calls, and the same for the
-  // two busiest puts. Small = the big money agrees on a level; widening = it's
-  // splitting.
+  // chart 4: |target #1 − target #2| for the two busiest calls / puts
   const gap = useMemo(() => {
     if (!hasTargets) return null
     const calls = all.filter((s) => s.cp === 'C' && (s.be_points?.length ?? 0) > 0).slice(0, 2)
@@ -209,33 +206,24 @@ export default function MoneyMoveChart() {
     return { rows, labels, hasCalls: calls.length === 2, hasPuts: puts.length === 2 }
   }, [all, hasTargets])
 
-  if (!data || data.status !== 'ok' || !series.length) {
+  if (!series.length) {
     return (
-      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6 text-sm text-gray-500 dark:text-gray-400">
-        No money-move data yet — it&apos;s recomputed every 5 minutes during market hours.
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{heading}</h3>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          No {heading.toLowerCase()} flow yet — recomputed every 5&nbsp;minutes.
+        </p>
       </div>
     )
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <span className="uppercase tracking-wide">Show top</span>
-        {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-          <button
-            key={n}
-            onClick={() => setTopN(n)}
-            className={clsx(
-              'rounded px-1.5 py-0.5 font-medium tabular-nums',
-              n === topN
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-            )}
-          >
-            {n}
-          </button>
-        ))}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{heading}</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{sub}</p>
       </div>
+
       <div className="h-96 w-full">
         <ResponsiveContainer>
           <LineChart data={rows} margin={{ top: 8, right: 64, bottom: 4, left: 8 }}>
@@ -249,12 +237,7 @@ export default function MoneyMoveChart() {
               tick={{ fontSize: 11 }}
               minTickGap={40}
             />
-            <YAxis
-              yAxisId="dollars"
-              tickFormatter={fmtM}
-              tick={{ fontSize: 11 }}
-              width={60}
-            />
+            <YAxis yAxisId="dollars" tickFormatter={fmtM} tick={{ fontSize: 11 }} width={60} />
             {hasTargets && (
               <YAxis
                 yAxisId="price"
@@ -337,7 +320,6 @@ export default function MoneyMoveChart() {
                 tick={{ fontSize: 11 }}
                 width={60}
               />
-              {/* keeps the plot area aligned with the $-flow chart above */}
               <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
               <Tooltip
                 labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
@@ -387,13 +369,7 @@ export default function MoneyMoveChart() {
                 tick={{ fontSize: 11 }}
                 minTickGap={40}
               />
-              <YAxis
-                yAxisId="delta"
-                tickFormatter={fmtM}
-                tick={{ fontSize: 11 }}
-                width={60}
-              />
-              {/* keeps the plot area aligned with the charts above */}
+              <YAxis yAxisId="delta" tickFormatter={fmtM} tick={{ fontSize: 11 }} width={60} />
               <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
               <Tooltip
                 labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
@@ -441,7 +417,6 @@ export default function MoneyMoveChart() {
                 width={60}
                 label={{ value: 'top-2 target spread', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'currentColor' }}
               />
-              {/* keeps the plot area aligned with the charts above */}
               <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
               <Tooltip
                 labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
@@ -486,7 +461,7 @@ export default function MoneyMoveChart() {
               <th className="py-1.5 pr-4">Type</th>
               <th className="py-1.5 pr-4">Opt px</th>
               <th className="py-1.5 pr-4">Target</th>
-              <th className="py-1.5 pr-4">$ traded today</th>
+              <th className="py-1.5 pr-4">$ traded</th>
             </tr>
           </thead>
           <tbody>
@@ -510,21 +485,111 @@ export default function MoneyMoveChart() {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
 
-      <p className="text-xs text-gray-400">
-        Contracts <em>expiring today</em> only. 1st chart: cumulative traded
-        dollars per contract (each minute&apos;s new volume × mid × 100); the
-        right-edge dots mark each one&apos;s <em>target</em> — strike ± the
-        option&apos;s price. 2nd chart: SPY&apos;s own 1-minute path (solid)
-        against each contract&apos;s target level (dashed), so you can see
-        whether price is heading toward where the money is. 3rd chart: signed
-        <em> delta&nbsp;$</em> per minute — the option&apos;s price change that
-        minute × that minute&apos;s volume × 100 (not cumulative; positive =
-        contract richened on volume). 4th chart: <em>top-2 target spread</em> —
-        the gap between the target prices of the two biggest call bets (green)
-        and of the two biggest put bets (red); small = the big money agrees on a
-        level, widening = it&apos;s splitting. Top 10 by day total, refreshed
-        every 5&nbsp;min.
+export default function MoneyMoveChart() {
+  const [data, setData] = useState<Payload | null>(null)
+  const [topN, setTopN] = useState(5)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = () =>
+      fetch('/api/option-chain/money-move', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((d: Payload) => !cancelled && setData(d))
+        .catch(() => {})
+    load()
+    const id = setInterval(load, POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [])
+
+  if (!data || data.status !== 'ok' || !(data.series?.length || data.monthly?.series?.length)) {
+    return (
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6 text-sm text-gray-500 dark:text-gray-400">
+        No money-move data yet — it&apos;s recomputed every 5 minutes during market hours.
+      </div>
+    )
+  }
+
+  const open = data.session_open ?? null
+  const close = data.session_close ?? null
+  const spot = data.spot ?? null
+  const spotPath = data.spot_path ?? []
+  const monthly = data.monthly
+  const monthName = monthlyLabel(monthly?.expiry)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <span className="uppercase tracking-wide">Show top</span>
+        {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+          <button
+            key={n}
+            onClick={() => setTopN(n)}
+            className={clsx(
+              'rounded px-1.5 py-0.5 font-medium tabular-nums',
+              n === topN
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+            )}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-x-10 gap-y-8 lg:grid-cols-2">
+        <MoneyMoveTrack
+          heading="Expiring today"
+          sub={`0DTE${data.day ? ` · ${data.day}` : ''}`}
+          allSeries={data.series ?? []}
+          spotPath={spotPath}
+          open={open}
+          close={close}
+          spot={spot}
+          topN={topN}
+        />
+        {monthly?.series?.length ? (
+          <MoneyMoveTrack
+            heading={`${monthName} monthly`}
+            sub={`3rd-Friday expiry${monthly.expiry ? ` · ${monthly.expiry}` : ''}`}
+            allSeries={monthly.series}
+            spotPath={spotPath}
+            open={open}
+            close={close}
+            spot={spot}
+            topN={topN}
+          />
+        ) : (
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+              {monthName} monthly
+            </h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              No monthly-expiry flow captured yet.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <p className="max-w-4xl text-xs text-gray-400">
+        Each column: the busiest contracts for that expiration, computed from the
+        same 1-minute snapshots. 1st chart: cumulative traded dollars per contract
+        (each minute&apos;s new volume × mid × 100); right-edge dots mark each
+        one&apos;s <em>target</em> — strike ± the option&apos;s price. 2nd chart:
+        SPY&apos;s 1-minute path (solid) against each contract&apos;s target level
+        (dashed). 3rd chart: signed <em>delta&nbsp;$</em> per minute — the
+        option&apos;s price change that minute × that minute&apos;s volume × 100
+        (not cumulative; positive = contract richened on volume). 4th chart:
+        <em> top-2 target spread</em> — the gap between the target prices of the
+        two biggest call bets (green) and the two biggest put bets (red).
+        Green&nbsp;= calls, red&nbsp;= puts. Top 10 by day total, refreshed every
+        5&nbsp;min.
       </p>
     </div>
   )
