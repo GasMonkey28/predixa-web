@@ -38,6 +38,7 @@ type Payload = {
   series?: Series[] // contracts expiring today
   monthly?: Track // next third-Friday monthly expiration
   monthly2?: Track // the third-Friday monthly after that
+  overall?: Track // top $ volume across every strike & expiry
   hint?: string
 }
 
@@ -530,7 +531,12 @@ export default function MoneyMoveChart() {
   if (
     !data ||
     data.status !== 'ok' ||
-    !(data.series?.length || data.monthly?.series?.length || data.monthly2?.series?.length)
+    !(
+      data.series?.length ||
+      data.monthly?.series?.length ||
+      data.monthly2?.series?.length ||
+      data.overall?.series?.length
+    )
   ) {
     return (
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6 text-sm text-gray-500 dark:text-gray-400">
@@ -545,6 +551,14 @@ export default function MoneyMoveChart() {
   const spotPath = data.spot_path ?? []
 
   const columns: { key: string; heading: string; sub: string; series: Series[] }[] = [
+    ...(data.overall?.series?.length
+      ? [{
+          key: 'overall',
+          heading: 'All expirations',
+          sub: 'top $ volume, every strike & expiry',
+          series: data.overall.series,
+        }]
+      : []),
     {
       key: 'today',
       heading: 'Expiring today',
@@ -561,7 +575,7 @@ export default function MoneyMoveChart() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-x-8 gap-y-8 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-x-8 gap-y-8 [grid-template-columns:repeat(auto-fit,minmax(26rem,1fr))]">
         {columns.map((c) =>
           c.series.length ? (
             <MoneyMoveTrack

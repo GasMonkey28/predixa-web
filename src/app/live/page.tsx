@@ -12,7 +12,7 @@ export const metadata: Metadata = createMetadata({
 
 export default function LivePage() {
   return (
-    <main className="mx-auto max-w-[100rem] px-6 py-12 space-y-10 text-gray-700 dark:text-gray-300">
+    <main className="mx-auto max-w-[120rem] px-6 py-12 space-y-10 text-gray-700 dark:text-gray-300">
       <header className="max-w-5xl space-y-3">
         <h1 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white">
           Live SPY Option Chain
@@ -30,9 +30,9 @@ export default function LivePage() {
         </h2>
         <p className="max-w-3xl text-sm text-gray-600 dark:text-gray-400">
           Where the dollars are going — cumulative traded value for the busiest
-          SPY contracts, minute by minute, for three expirations side by side:
-          contracts <em>expiring today</em>, then the next two{' '}
-          <em>third-Friday monthlies</em>.
+          SPY contracts, minute by minute, in parallel columns:{' '}
+          <em>all expirations</em>, then contracts <em>expiring today</em>, then
+          the next two <em>third-Friday monthlies</em>.
         </p>
         <MoneyMoveChart />
       </section>
