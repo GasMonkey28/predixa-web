@@ -39,6 +39,7 @@ type Payload = {
   monthly?: Track // next third-Friday monthly expiration
   monthly2?: Track // the third-Friday monthly after that
   overall?: Track // top $ volume across every strike & expiry
+  overall_ex_today?: Track // same, but excluding contracts expiring today
   hint?: string
 }
 
@@ -60,7 +61,7 @@ const monthlyLabel = (iso?: string) => {
 }
 
 function MoneyMoveTrack({
-  heading, sub, allSeries, spotPath, open, close, spot,
+  heading, sub, allSeries, spotPath, open, close, spot, toggle,
 }: {
   heading: string
   sub: string
@@ -69,6 +70,7 @@ function MoneyMoveTrack({
   open: number | null
   close: number | null
   spot: number | null
+  toggle?: { label: string; value: boolean; onChange: (v: boolean) => void }
 }) {
   const all = allSeries
   const [topN, setTopN] = useState(5)
@@ -226,7 +228,21 @@ function MoneyMoveTrack({
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{heading}</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400">{sub}</p>
         </div>
-        <div className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+        <div className="flex flex-wrap items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+          {toggle && (
+            <button
+              onClick={() => toggle.onChange(!toggle.value)}
+              className={clsx(
+                'mr-1 rounded px-2 py-0.5 font-medium',
+                toggle.value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+              )}
+              title="exclude contracts expiring today"
+            >
+              {toggle.label}
+            </button>
+          )}
           <span className="uppercase tracking-wide">Top</span>
           {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
             <button
@@ -512,6 +528,7 @@ function MoneyMoveTrack({
 
 export default function MoneyMoveChart() {
   const [data, setData] = useState<Payload | null>(null)
+  const [excludeToday, setExcludeToday] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -535,7 +552,8 @@ export default function MoneyMoveChart() {
       data.series?.length ||
       data.monthly?.series?.length ||
       data.monthly2?.series?.length ||
-      data.overall?.series?.length
+      data.overall?.series?.length ||
+      data.overall_ex_today?.series?.length
     )
   ) {
     return (
@@ -550,7 +568,17 @@ export default function MoneyMoveChart() {
   const spot = data.spot ?? null
   const spotPath = data.spot_path ?? []
 
-  const columns: { key: string; heading: string; sub: string; series: Series[] }[] = [
+  const overallEx = data.overall_ex_today?.series?.length ? data.overall_ex_today : null
+  const overallActive = excludeToday && overallEx ? overallEx : data.overall
+
+  type Col = {
+    key: string
+    heading: string
+    sub: string
+    series: Series[]
+    toggle?: { label: string; value: boolean; onChange: (v: boolean) => void }
+  }
+  const columns: Col[] = [
     {
       key: 'today',
       heading: 'Expiring today',
@@ -563,12 +591,18 @@ export default function MoneyMoveChart() {
       sub: `3rd-Friday expiry${t.expiry ? ` · ${t.expiry}` : ''}`,
       series: t.series ?? [],
     })),
-    ...(data.overall?.series?.length
+    ...(overallActive?.series?.length
       ? [{
           key: 'overall',
           heading: 'All expirations',
-          sub: 'top $ volume, every strike & expiry',
-          series: data.overall.series,
+          sub:
+            excludeToday && overallEx
+              ? 'top $ volume · excl. today'
+              : 'top $ volume · every strike & expiry',
+          series: overallActive.series,
+          ...(overallEx
+            ? { toggle: { label: 'excl. 0DTE', value: excludeToday, onChange: setExcludeToday } }
+            : {}),
         }]
       : []),
   ]
@@ -587,6 +621,7 @@ export default function MoneyMoveChart() {
               open={open}
               close={close}
               spot={spot}
+              toggle={c.toggle}
             />
           ) : (
             <div key={c.key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
