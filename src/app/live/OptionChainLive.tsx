@@ -91,7 +91,8 @@ export default function OptionChainLive() {
   const [full, setFull] = useState<FullPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [exp, setExp] = useState<string | null>(null)
-  const [tick, setTick] = useState(0) // re-render for the "Xs ago" label
+  const [, setTick] = useState(0) // re-render for the "Xs ago" label
+  const [showFull, setShowFull] = useState(false) // the 13k-row ladder is opt-in
 
   useEffect(() => {
     let cancelled = false
@@ -108,6 +109,23 @@ export default function OptionChainLive() {
           if (!cancelled) setLoading(false)
         })
     }
+    load()
+    const poll = setInterval(load, POLL_MS)
+    const clock = setInterval(() => setTick((t) => t + 1), 5_000)
+    return () => {
+      cancelled = true
+      clearInterval(poll)
+      clearInterval(clock)
+    }
+  }, [])
+
+  // the full strike ladder (~13k rows, ~220 KB gz) only loads while it's open
+  useEffect(() => {
+    if (!showFull) {
+      setFull(null)
+      return
+    }
+    let cancelled = false
     const loadFull = () => {
       fetch('/api/option-chain/full', { cache: 'no-store' })
         .then((r) => r.json())
@@ -116,18 +134,13 @@ export default function OptionChainLive() {
         })
         .catch(() => {})
     }
-    load()
     loadFull()
-    const poll = setInterval(load, POLL_MS)
     const pollFull = setInterval(loadFull, FULL_POLL_MS)
-    const clock = setInterval(() => setTick((t) => t + 1), 5_000)
     return () => {
       cancelled = true
-      clearInterval(poll)
       clearInterval(pollFull)
-      clearInterval(clock)
     }
-  }, [])
+  }, [showFull])
 
   const term = useMemo(() => data?.term_structure ?? [], [data])
   const spot = data?.spot ?? null
@@ -294,29 +307,45 @@ export default function OptionChainLive() {
           <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Chain
           </h3>
-          <span className="text-xs text-gray-400">
-            {full?.rows?.length
-              ? `full ladder · ${rows.length} strikes`
-              : 'loading full ladder…'}
-          </span>
-          <div className="flex flex-wrap gap-1">
-            {term.map((t) => (
-              <button
-                key={t.expiration}
-                onClick={() => setExp(t.expiration)}
-                className={clsx(
-                  'rounded px-2 py-1 text-xs font-medium',
-                  t.expiration === exp
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-                )}
-              >
-                {t.expiration.slice(5)} · {t.dte}d
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setShowFull((v) => !v)}
+            className={clsx(
+              'rounded px-2 py-1 text-xs font-medium',
+              showFull
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+            )}
+          >
+            {showFull ? 'Hide full chain' : 'Show full chain'}
+          </button>
+          {showFull && (
+            <span className="text-xs text-gray-400">
+              {full?.rows?.length
+                ? `full ladder · ${rows.length} strikes`
+                : 'loading full ladder…'}
+            </span>
+          )}
+          {showFull && (
+            <div className="flex flex-wrap gap-1">
+              {term.map((t) => (
+                <button
+                  key={t.expiration}
+                  onClick={() => setExp(t.expiration)}
+                  className={clsx(
+                    'rounded px-2 py-1 text-xs font-medium',
+                    t.expiration === exp
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                  )}
+                >
+                  {t.expiration.slice(5)} · {t.dte}d
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
+        {showFull && (
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs tabular-nums">
             <thead>
@@ -380,10 +409,13 @@ export default function OptionChainLive() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-400">
-          Greeks and IV are computed from the quote mid with a forward-based
-          Black-76 model (forward &amp; discount implied from put-call parity). Updates every minute.
-        </p>
+        )}
+        {showFull && (
+          <p className="text-xs text-gray-400">
+            Greeks and IV are computed from the quote mid with a forward-based
+            Black-76 model (forward &amp; discount implied from put-call parity). Updates every minute.
+          </p>
+        )}
       </section>
     </div>
   )
