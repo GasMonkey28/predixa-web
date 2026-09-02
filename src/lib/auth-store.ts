@@ -102,6 +102,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   },
 
   signUp: async (email: string, password: string, givenName?: string, familyName?: string) => {
+    if (process.env.NEXT_PUBLIC_DISABLE_SIGNUP === 'true') {
+      const message = 'Registration is currently disabled.'
+      set({ error: message, isLoading: false })
+      throw new Error(message)
+    }
     set({ isLoading: true, error: null })
     try {
       const result = await signUp({
