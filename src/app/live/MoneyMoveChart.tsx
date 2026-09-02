@@ -37,6 +37,7 @@ type Payload = {
   spot_path?: [number, number][] // [minute_bucket, SPY price]
   series?: Series[] // contracts expiring today
   monthly?: Track // next third-Friday monthly expiration
+  monthly2?: Track // the third-Friday monthly after that
   hint?: string
 }
 
@@ -508,7 +509,11 @@ export default function MoneyMoveChart() {
     }
   }, [])
 
-  if (!data || data.status !== 'ok' || !(data.series?.length || data.monthly?.series?.length)) {
+  if (
+    !data ||
+    data.status !== 'ok' ||
+    !(data.series?.length || data.monthly?.series?.length || data.monthly2?.series?.length)
+  ) {
     return (
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6 text-sm text-gray-500 dark:text-gray-400">
         No money-move data yet — it&apos;s recomputed every 5 minutes during market hours.
@@ -520,8 +525,21 @@ export default function MoneyMoveChart() {
   const close = data.session_close ?? null
   const spot = data.spot ?? null
   const spotPath = data.spot_path ?? []
-  const monthly = data.monthly
-  const monthName = monthlyLabel(monthly?.expiry)
+
+  const columns: { key: string; heading: string; sub: string; series: Series[] }[] = [
+    {
+      key: 'today',
+      heading: 'Expiring today',
+      sub: `0DTE${data.day ? ` · ${data.day}` : ''}`,
+      series: data.series ?? [],
+    },
+    ...([data.monthly, data.monthly2].filter(Boolean) as Track[]).map((t, i) => ({
+      key: `monthly${i}`,
+      heading: `${monthlyLabel(t.expiry)} monthly`,
+      sub: `3rd-Friday expiry${t.expiry ? ` · ${t.expiry}` : ''}`,
+      series: t.series ?? [],
+    })),
+  ]
 
   return (
     <div className="space-y-4">
@@ -543,37 +561,28 @@ export default function MoneyMoveChart() {
         ))}
       </div>
 
-      <div className="grid gap-x-10 gap-y-8 lg:grid-cols-2">
-        <MoneyMoveTrack
-          heading="Expiring today"
-          sub={`0DTE${data.day ? ` · ${data.day}` : ''}`}
-          allSeries={data.series ?? []}
-          spotPath={spotPath}
-          open={open}
-          close={close}
-          spot={spot}
-          topN={topN}
-        />
-        {monthly?.series?.length ? (
-          <MoneyMoveTrack
-            heading={`${monthName} monthly`}
-            sub={`3rd-Friday expiry${monthly.expiry ? ` · ${monthly.expiry}` : ''}`}
-            allSeries={monthly.series}
-            spotPath={spotPath}
-            open={open}
-            close={close}
-            spot={spot}
-            topN={topN}
-          />
-        ) : (
-          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-              {monthName} monthly
-            </h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              No monthly-expiry flow captured yet.
-            </p>
-          </div>
+      <div className="grid gap-x-8 gap-y-8 md:grid-cols-2 xl:grid-cols-3">
+        {columns.map((c) =>
+          c.series.length ? (
+            <MoneyMoveTrack
+              key={c.key}
+              heading={c.heading}
+              sub={c.sub}
+              allSeries={c.series}
+              spotPath={spotPath}
+              open={open}
+              close={close}
+              spot={spot}
+              topN={topN}
+            />
+          ) : (
+            <div key={c.key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{c.heading}</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                No flow captured for this expiry yet.
+              </p>
+            </div>
+          )
         )}
       </div>
 
