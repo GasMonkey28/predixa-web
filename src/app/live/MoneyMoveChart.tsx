@@ -18,6 +18,7 @@ type Series = {
   breakeven: number
   total: number
   points: [number, number][] // [minute_bucket (unix s), cumulative dollars]
+  be_points?: [number, number][] // [minute_bucket, target level = strike ± mid]
 }
 type Payload = {
   status: string
@@ -27,6 +28,7 @@ type Payload = {
   session_open?: number
   session_close?: number
   minutes?: number
+  spot_path?: [number, number][] // [minute_bucket, SPY price]
   series?: Series[]
   hint?: string
 }
@@ -117,6 +119,39 @@ export default function MoneyMoveChart() {
     const [lo, hi] = priceDomain
     return series.map((s) => ({ ...s, y: Math.min(hi, Math.max(lo, s.breakeven)) }))
   }, [series, hasTargets, priceDomain])
+
+  // companion chart: SPY's 1-min path today + each top contract's target level,
+  // both on a $-price axis, sharing the time axis above
+  const priceRows = useMemo(() => {
+    const sp = data?.spot_path ?? []
+    if (sp.length === 0) return []
+    const byT = new Map<number, Record<string, number>>()
+    for (const [t, p] of sp) byT.set(t, { t, __spot: p })
+    for (const s of series) {
+      for (const [t, be] of s.be_points ?? []) {
+        const row = byT.get(t) ?? { t }
+        row[s.label] = be
+        byT.set(t, row)
+      }
+    }
+    return [...byT.values()].sort((a, b) => a.t - b.t)
+  }, [data, series])
+
+  const pricePathDomain = useMemo<[number, number] | undefined>(() => {
+    if (priceRows.length === 0) return undefined
+    let lo = Infinity
+    let hi = -Infinity
+    for (const r of priceRows) {
+      for (const k in r) {
+        if (k === 't') continue
+        lo = Math.min(lo, r[k])
+        hi = Math.max(hi, r[k])
+      }
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return undefined
+    const pad = Math.max((hi - lo) * 0.08, 0.25)
+    return [lo - pad, hi + pad]
+  }, [priceRows])
 
   if (!data || data.status !== 'ok' || !series.length) {
     return (
@@ -225,6 +260,63 @@ export default function MoneyMoveChart() {
         </ResponsiveContainer>
       </div>
 
+      {priceRows.length > 0 && (
+        <div className="h-72 w-full text-gray-900 dark:text-white">
+          <ResponsiveContainer>
+            <LineChart data={priceRows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis
+                dataKey="t"
+                type="number"
+                scale="time"
+                domain={[open ?? 'dataMin', close ?? 'dataMax']}
+                tickFormatter={fmtTime}
+                tick={{ fontSize: 11 }}
+                minTickGap={40}
+              />
+              <YAxis
+                yAxisId="lvl"
+                domain={pricePathDomain ?? ['auto', 'auto']}
+                tickFormatter={(v: number) => v.toFixed(0)}
+                tick={{ fontSize: 11 }}
+                width={60}
+              />
+              {/* keeps the plot area aligned with the $-flow chart above */}
+              <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
+              <Tooltip
+                labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
+                formatter={(v: number, name) => [v.toFixed(2), name === '__spot' ? 'SPY' : name]}
+                contentStyle={{ fontSize: 12 }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {series.map((s) => (
+                <Line
+                  key={s.occ}
+                  yAxisId="lvl"
+                  type="monotone"
+                  dataKey={s.label}
+                  name={`${s.label} target`}
+                  stroke={colorOf.get(s.occ)}
+                  strokeWidth={1.4}
+                  strokeDasharray="4 3"
+                  dot={false}
+                  connectNulls
+                />
+              ))}
+              <Line
+                yAxisId="lvl"
+                type="monotone"
+                dataKey="__spot"
+                name="SPY"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs tabular-nums">
           <thead>
@@ -259,11 +351,13 @@ export default function MoneyMoveChart() {
       </div>
 
       <p className="text-xs text-gray-400">
-        Contracts <em>expiring today</em> only. Left axis: cumulative traded
-        dollars per contract (each minute&apos;s new volume × mid × 100). Right
-        axis dots: the underlying <em>target</em> — strike ± the option&apos;s
-        price — where each contract breaks even by the close (exact values in
-        the table). Green = calls, red = puts. Top 10 by day total, every 5&nbsp;min.
+        Contracts <em>expiring today</em> only. Top chart: cumulative traded
+        dollars per contract (each minute&apos;s new volume × mid × 100); the
+        right-edge dots mark each one&apos;s <em>target</em> — strike ± the
+        option&apos;s price. Bottom chart: SPY&apos;s own 1-minute path (solid)
+        against each contract&apos;s target level (dashed), so you can see
+        whether price is heading toward where the money is. Green = calls,
+        red = puts. Top 10 by day total, refreshed every 5&nbsp;min.
       </p>
     </div>
   )
