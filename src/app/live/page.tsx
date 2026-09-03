@@ -3,9 +3,9 @@ import { createMetadata } from '@/lib/seo'
 import LiveDashboard from './LiveDashboard'
 
 export const metadata: Metadata = createMetadata({
-  title: 'Live SPY & QQQ Option Chain | 1-Minute Snapshots | Predixa',
+  title: 'Live Option Chain — SPY QQQ NVDA TSLA | 1-Minute Snapshots | Predixa',
   description:
-    'Live SPY and QQQ option chains updated every minute during market hours — bid/ask, volume, open interest, and IV/greeks computed from the quote mid with a forward-based model.',
+    'Live SPY, QQQ, NVDA and TSLA option chains updated every minute during market hours — bid/ask, volume, open interest, and IV/greeks computed from the quote mid with a forward-based model.',
   path: '/live',
 })
 

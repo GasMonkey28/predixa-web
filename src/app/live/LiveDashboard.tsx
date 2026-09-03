@@ -6,7 +6,7 @@ import { clsx } from 'clsx'
 import OptionChainLive from './OptionChainLive'
 import MoneyMoveChart from './MoneyMoveChart'
 
-const TICKERS = ['SPY', 'QQQ'] as const
+const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA'] as const
 
 export default function LiveDashboard() {
   const [symbol, setSymbol] = useState<(typeof TICKERS)[number]>('SPY')
