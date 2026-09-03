@@ -3,7 +3,7 @@ import axios from 'axios'
 import { config } from '@/lib/server/config'
 
 // Tickers with their own optionchain-1min recorder + money-move Lambdas.
-export const OPTIONCHAIN_TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA'] as const
+export const OPTIONCHAIN_TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO'] as const
 export type OptionChainTicker = (typeof OPTIONCHAIN_TICKERS)[number]
 
 export function normalizeOptionChainSymbol(raw: string | null | undefined): OptionChainTicker {

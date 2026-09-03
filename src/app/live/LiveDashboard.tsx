@@ -6,21 +6,21 @@ import { clsx } from 'clsx'
 import OptionChainLive from './OptionChainLive'
 import MoneyMoveChart from './MoneyMoveChart'
 
-const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA'] as const
+const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO'] as const
 
 export default function LiveDashboard() {
   const [symbol, setSymbol] = useState<(typeof TICKERS)[number]>('SPY')
 
   return (
     <div className="space-y-10">
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-xs uppercase tracking-wide text-gray-400">Ticker</span>
+      <div className="flex flex-wrap items-center gap-1.5 text-sm">
+        <span className="mr-1 text-xs uppercase tracking-wide text-gray-400">Ticker</span>
         {TICKERS.map((t) => (
           <button
             key={t}
             onClick={() => setSymbol(t)}
             className={clsx(
-              'rounded px-3 py-1 font-semibold tabular-nums',
+              'rounded px-2.5 py-1 font-semibold tabular-nums',
               t === symbol
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
