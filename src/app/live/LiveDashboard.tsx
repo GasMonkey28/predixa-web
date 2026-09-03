@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { clsx } from 'clsx'
 
-import OptionChainLive from './OptionChainLive'
 import MoneyMoveChart from './MoneyMoveChart'
 
 const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO', 'COIN', 'MARA', 'MSTR', 'PLTR', 'HOOD', 'SOFI', 'WULF'] as const
@@ -96,10 +95,6 @@ export default function LiveDashboard() {
         </div>
         <MoneyMoveChart symbol={symbol} />
       </section>
-
-      <div className="max-w-5xl">
-        <OptionChainLive symbol={symbol} />
-      </div>
     </div>
   )
 }
