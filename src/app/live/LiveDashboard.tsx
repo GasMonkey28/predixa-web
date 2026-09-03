@@ -98,23 +98,17 @@ export default function LiveDashboard() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <section ref={moveRef} className="min-w-0 flex-1 scroll-mt-4 space-y-2">
-          <div className="flex items-baseline gap-2">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {symbol} money move
-            </h2>
-            <span className="text-xs text-gray-400">
-              expiring today · next two monthlies · all expirations
-            </span>
-          </div>
-          <MoneyMoveChart symbol={symbol} />
-        </section>
-
-        <aside className="shrink-0 lg:sticky lg:top-4 lg:w-72">
-          <TickerStats symbol={symbol} />
-        </aside>
-      </div>
+      <section ref={moveRef} className="scroll-mt-4 space-y-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {symbol} money move
+          </h2>
+          <span className="text-xs text-gray-400">
+            expiring today · next two monthlies · all expirations
+          </span>
+        </div>
+        <MoneyMoveChart symbol={symbol} rightPanel={<TickerStats symbol={symbol} />} />
+      </section>
 
       {showChain && (
         <div className="max-w-5xl border-t border-gray-200 pt-6 dark:border-gray-800">

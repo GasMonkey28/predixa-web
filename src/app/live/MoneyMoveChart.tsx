@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { clsx } from 'clsx'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -529,7 +529,13 @@ function MoneyMoveTrack({
   )
 }
 
-export default function MoneyMoveChart({ symbol = 'SPY' }: { symbol?: string }) {
+export default function MoneyMoveChart({
+  symbol = 'SPY',
+  rightPanel,
+}: {
+  symbol?: string
+  rightPanel?: ReactNode
+}) {
   const [data, setData] = useState<Payload | null>(null)
   const [excludeToday, setExcludeToday] = useState(true)
 
@@ -625,7 +631,7 @@ export default function MoneyMoveChart({ symbol = 'SPY' }: { symbol?: string }) 
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-x-6 gap-y-6 [grid-template-columns:repeat(auto-fit,minmax(24rem,1fr))]">
+      <div className="grid gap-x-5 gap-y-6 [grid-template-columns:repeat(auto-fit,minmax(20rem,1fr))]">
         {columns.map((c) =>
           c.series.length ? (
             <MoneyMoveTrack
@@ -649,6 +655,7 @@ export default function MoneyMoveChart({ symbol = 'SPY' }: { symbol?: string }) 
             </div>
           )
         )}
+        {rightPanel && <div className="min-w-0">{rightPanel}</div>}
       </div>
 
       <details className="max-w-4xl text-xs text-gray-400">
