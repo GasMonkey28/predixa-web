@@ -223,7 +223,7 @@ function MoneyMoveTrack({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
         <div>
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{heading}</h3>
@@ -262,7 +262,7 @@ function MoneyMoveTrack({
         </div>
       </div>
 
-      <div className="h-96 w-full">
+      <div className="h-64 w-full">
         <ResponsiveContainer>
           <LineChart data={rows} margin={{ top: 8, right: 64, bottom: 4, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
@@ -338,7 +338,7 @@ function MoneyMoveTrack({
       </div>
 
       {priceRows.length > 0 && (
-        <div className="h-72 w-full text-gray-900 dark:text-white">
+        <div className="h-52 w-full text-gray-900 dark:text-white">
           <ResponsiveContainer>
             <LineChart data={priceRows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
@@ -394,7 +394,7 @@ function MoneyMoveTrack({
       )}
 
       {deltaRows.length > 0 && (
-        <div className="h-72 w-full">
+        <div className="h-52 w-full">
           <ResponsiveContainer>
             <LineChart data={deltaRows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
@@ -435,7 +435,7 @@ function MoneyMoveTrack({
       )}
 
       {gap && (
-        <div className="h-72 w-full text-gray-900 dark:text-white">
+        <div className="h-52 w-full text-gray-900 dark:text-white">
           <ResponsiveContainer>
             <LineChart data={gap.rows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
@@ -611,7 +611,7 @@ export default function MoneyMoveChart({ symbol = 'SPY' }: { symbol?: string }) 
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-x-8 gap-y-8 [grid-template-columns:repeat(auto-fit,minmax(26rem,1fr))]">
+      <div className="grid gap-x-6 gap-y-6 [grid-template-columns:repeat(auto-fit,minmax(24rem,1fr))]">
         {columns.map((c) =>
           c.series.length ? (
             <MoneyMoveTrack
@@ -637,20 +637,23 @@ export default function MoneyMoveChart({ symbol = 'SPY' }: { symbol?: string }) 
         )}
       </div>
 
-      <p className="max-w-4xl text-xs text-gray-400">
-        Each column: the busiest contracts for that expiration, computed from the
-        same 1-minute snapshots. 1st chart: cumulative traded dollars per contract
-        (each minute&apos;s new volume × mid × 100); right-edge dots mark each
-        one&apos;s <em>target</em> — strike ± the option&apos;s price. 2nd chart:
-        SPY&apos;s 1-minute path (solid) against each contract&apos;s target level
-        (dashed). 3rd chart: signed <em>delta&nbsp;$</em> per minute — the
-        option&apos;s price change that minute × that minute&apos;s volume × 100
-        (not cumulative; positive = contract richened on volume). 4th chart:
-        <em> top-2 target spread</em> — the gap between the target prices of the
-        two biggest call bets (green) and the two biggest put bets (red).
-        Green&nbsp;= calls, red&nbsp;= puts. Top 10 by day total, refreshed every
-        5&nbsp;min.
-      </p>
+      <details className="max-w-4xl text-xs text-gray-400">
+        <summary className="cursor-pointer select-none">How to read these charts</summary>
+        <p className="mt-1">
+          Each column: the busiest contracts for that expiration, computed from
+          the same 1-minute snapshots. 1st chart: cumulative traded dollars per
+          contract (each minute&apos;s new volume × mid × 100); right-edge dots
+          mark each one&apos;s <em>target</em> — strike ± the option&apos;s price.
+          2nd chart: the underlying&apos;s 1-minute path (solid) against each
+          contract&apos;s target level (dashed). 3rd chart: signed{' '}
+          <em>delta&nbsp;$</em> per minute — the option&apos;s price change that
+          minute × that minute&apos;s volume × 100 (not cumulative; positive =
+          contract richened on volume). 4th chart: <em>top-2 target spread</em> —
+          the gap between the target prices of the two biggest call bets (green)
+          and the two biggest put bets (red). Green&nbsp;= calls, red&nbsp;= puts.
+          Top 10 by day total, refreshed every 5&nbsp;min.
+        </p>
+      </details>
     </div>
   )
 }

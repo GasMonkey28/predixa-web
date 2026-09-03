@@ -18,6 +18,7 @@ export default function LiveDashboard() {
   // re-arming the timer every tick
   const symbolRef = useRef(symbol)
   symbolRef.current = symbol
+  const moveRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (!rotate) return
@@ -28,8 +29,13 @@ export default function LiveDashboard() {
     return () => clearInterval(id)
   }, [rotate, rotateSec])
 
+  // while rotating, snap back to the top of the money-move block on each hop
+  useEffect(() => {
+    if (rotate) moveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [symbol, rotate])
+
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-1.5 text-sm">
           <span className="mr-1 text-xs uppercase tracking-wide text-gray-400">Ticker</span>
@@ -79,16 +85,15 @@ export default function LiveDashboard() {
         </div>
       </div>
 
-      <section className="space-y-3">
-        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-          Today&apos;s money move
-        </h2>
-        <p className="max-w-3xl text-sm text-gray-600 dark:text-gray-400">
-          Where the dollars are going — cumulative traded value for the busiest{' '}
-          {symbol} contracts, minute by minute, in parallel columns: contracts{' '}
-          <em>expiring today</em>, then the next two <em>third-Friday monthlies</em>,
-          then <em>all expirations</em>.
-        </p>
+      <section ref={moveRef} className="scroll-mt-4 space-y-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {symbol} money move
+          </h2>
+          <span className="text-xs text-gray-400">
+            expiring today · next two monthlies · all expirations
+          </span>
+        </div>
         <MoneyMoveChart symbol={symbol} />
       </section>
 
