@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { clsx } from 'clsx'
 
 import MoneyMoveChart from './MoneyMoveChart'
+import OptionChainLive from './OptionChainLive'
 
 const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO', 'COIN', 'MARA', 'MSTR', 'PLTR', 'HOOD', 'SOFI', 'WULF'] as const
 const ROTATE_OPTIONS = [15, 30] as const
@@ -12,6 +13,7 @@ export default function LiveDashboard() {
   const [symbol, setSymbol] = useState<(typeof TICKERS)[number]>('SPY')
   const [rotate, setRotate] = useState(false)
   const [rotateSec, setRotateSec] = useState<(typeof ROTATE_OPTIONS)[number]>(30)
+  const [showChain, setShowChain] = useState(false)
 
   // keep the interval callback pointed at the latest symbol without
   // re-arming the timer every tick
@@ -81,6 +83,17 @@ export default function LiveDashboard() {
               {s}s
             </button>
           ))}
+          <button
+            onClick={() => setShowChain((v) => !v)}
+            className={clsx(
+              'ml-2 rounded px-2.5 py-1 font-medium',
+              showChain
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+            )}
+          >
+            {showChain ? 'Hide option chain' : 'Show option chain'}
+          </button>
         </div>
       </div>
 
@@ -95,6 +108,12 @@ export default function LiveDashboard() {
         </div>
         <MoneyMoveChart symbol={symbol} />
       </section>
+
+      {showChain && (
+        <div className="max-w-5xl border-t border-gray-200 pt-6 dark:border-gray-800">
+          <OptionChainLive symbol={symbol} />
+        </div>
+      )}
     </div>
   )
 }
