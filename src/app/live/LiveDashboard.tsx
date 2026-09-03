@@ -1,34 +1,82 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { clsx } from 'clsx'
 
 import OptionChainLive from './OptionChainLive'
 import MoneyMoveChart from './MoneyMoveChart'
 
 const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO', 'COIN', 'MARA', 'MSTR', 'PLTR', 'HOOD', 'SOFI', 'WULF'] as const
+const ROTATE_OPTIONS = [15, 30] as const
 
 export default function LiveDashboard() {
   const [symbol, setSymbol] = useState<(typeof TICKERS)[number]>('SPY')
+  const [rotate, setRotate] = useState(false)
+  const [rotateSec, setRotateSec] = useState<(typeof ROTATE_OPTIONS)[number]>(30)
+
+  // keep the interval callback pointed at the latest symbol without
+  // re-arming the timer every tick
+  const symbolRef = useRef(symbol)
+  symbolRef.current = symbol
+
+  useEffect(() => {
+    if (!rotate) return
+    const id = setInterval(() => {
+      const i = TICKERS.indexOf(symbolRef.current)
+      setSymbol(TICKERS[(i + 1) % TICKERS.length])
+    }, rotateSec * 1000)
+    return () => clearInterval(id)
+  }, [rotate, rotateSec])
 
   return (
     <div className="space-y-10">
-      <div className="flex flex-wrap items-center gap-1.5 text-sm">
-        <span className="mr-1 text-xs uppercase tracking-wide text-gray-400">Ticker</span>
-        {TICKERS.map((t) => (
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+          <span className="mr-1 text-xs uppercase tracking-wide text-gray-400">Ticker</span>
+          {TICKERS.map((t) => (
+            <button
+              key={t}
+              onClick={() => setSymbol(t)}
+              className={clsx(
+                'rounded px-2.5 py-1 font-semibold tabular-nums',
+                t === symbol
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
           <button
-            key={t}
-            onClick={() => setSymbol(t)}
+            onClick={() => setRotate((v) => !v)}
             className={clsx(
-              'rounded px-2.5 py-1 font-semibold tabular-nums',
-              t === symbol
+              'rounded px-2.5 py-1 font-medium',
+              rotate
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             )}
           >
-            {t}
+            {rotate ? '⏸ Auto-rotate on' : '▶ Auto-rotate'}
           </button>
-        ))}
+          <span className="uppercase tracking-wide">every</span>
+          {ROTATE_OPTIONS.map((s) => (
+            <button
+              key={s}
+              onClick={() => setRotateSec(s)}
+              className={clsx(
+                'rounded px-1.5 py-0.5 font-medium tabular-nums',
+                s === rotateSec
+                  ? 'bg-gray-700 text-white dark:bg-gray-600'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+              )}
+            >
+              {s}s
+            </button>
+          ))}
+        </div>
       </div>
 
       <section className="space-y-3">
