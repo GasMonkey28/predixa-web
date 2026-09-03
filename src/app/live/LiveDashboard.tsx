@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 
 import MoneyMoveChart from './MoneyMoveChart'
 import OptionChainLive from './OptionChainLive'
+import TickerStats from './TickerStats'
 
 const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO', 'COIN', 'MARA', 'MSTR', 'PLTR', 'HOOD', 'SOFI', 'WULF'] as const
 const ROTATE_OPTIONS = [15, 30] as const
@@ -97,17 +98,23 @@ export default function LiveDashboard() {
         </div>
       </div>
 
-      <section ref={moveRef} className="scroll-mt-4 space-y-2">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {symbol} money move
-          </h2>
-          <span className="text-xs text-gray-400">
-            expiring today · next two monthlies · all expirations
-          </span>
-        </div>
-        <MoneyMoveChart symbol={symbol} />
-      </section>
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <section ref={moveRef} className="min-w-0 flex-1 scroll-mt-4 space-y-2">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {symbol} money move
+            </h2>
+            <span className="text-xs text-gray-400">
+              expiring today · next two monthlies · all expirations
+            </span>
+          </div>
+          <MoneyMoveChart symbol={symbol} />
+        </section>
+
+        <aside className="shrink-0 lg:sticky lg:top-4 lg:w-72">
+          <TickerStats symbol={symbol} />
+        </aside>
+      </div>
 
       {showChain && (
         <div className="max-w-5xl border-t border-gray-200 pt-6 dark:border-gray-800">
