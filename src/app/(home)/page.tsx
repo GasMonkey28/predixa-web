@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth-store'
-import { POST_LOGIN_PATH } from '@/lib/constants'
+import { POST_LOGIN_PATH, SIGNUP_DISABLED } from '@/lib/constants'
 import LoginForm from '@/components/auth/LoginForm'
 import SignupForm from '@/components/auth/SignupForm'
 
@@ -91,15 +91,17 @@ export default function HomePage() {
           {showLogin ? (
             <div>
               <LoginForm />
-              <p className="text-center mt-4 text-gray-600 dark:text-gray-300">
-                Don&apos;t have an account?{' '}
-                <button
-                  onClick={handleShowSignup}
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  Sign up
-                </button>
-              </p>
+              {!SIGNUP_DISABLED && (
+                <p className="text-center mt-4 text-gray-600 dark:text-gray-300">
+                  Don&apos;t have an account?{' '}
+                  <button
+                    onClick={handleShowSignup}
+                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    Sign up
+                  </button>
+                </p>
+              )}
             </div>
           ) : showSignup ? (
             <div>
@@ -116,26 +118,33 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <button
-                onClick={handleShowSignup}
-                className="w-full relative py-4 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] font-semibold text-lg"
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <span>Start Your Free Trial</span>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </div>
+              {!SIGNUP_DISABLED && (
+                <button
+                  onClick={handleShowSignup}
+                  className="w-full relative py-4 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] font-semibold text-lg"
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <span>Start Your Free Trial</span>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </div>
                   <div className="absolute -top-2 -right-2 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full shadow-md">
-                  7 Days Free
-                </div>
-              </button>
+                    7 Days Free
+                  </div>
+                </button>
+              )}
               <button
                 onClick={handleShowLogin}
                 className="w-full py-3 px-4 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"
               >
                 Sign In
               </button>
+              {SIGNUP_DISABLED && (
+                <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+                  New account registration is temporarily closed for testing.
+                </p>
+              )}
             </div>
           )}
         </div>

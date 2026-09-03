@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
 import { subscriptionService } from '@/lib/subscription-service'
-import { POST_LOGIN_PATH } from '@/lib/constants'
+import { POST_LOGIN_PATH, SIGNUP_DISABLED } from '@/lib/constants'
 import { toast } from 'react-hot-toast'
 
 export default function SignupForm() {
@@ -67,6 +67,11 @@ export default function SignupForm() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
     clearError()
+
+    if (SIGNUP_DISABLED) {
+      toast.error('Registration is currently disabled.')
+      return
+    }
 
     if (!acceptedPolicies) {
       toast.error('Please agree to the Terms of Service and Privacy Policy before creating an account.')
@@ -266,6 +271,10 @@ export default function SignupForm() {
   }
 
   const handleGoogleSignIn = async () => {
+    if (SIGNUP_DISABLED) {
+      toast.error('Registration is currently disabled.')
+      return
+    }
     if (!acceptedPolicies) {
       toast.error('Please agree to the Terms of Service and Privacy Policy before continuing.')
       return
@@ -278,6 +287,10 @@ export default function SignupForm() {
   }
 
   const handleAppleSignIn = async () => {
+    if (SIGNUP_DISABLED) {
+      toast.error('Registration is currently disabled.')
+      return
+    }
     if (!acceptedPolicies) {
       toast.error('Please agree to the Terms of Service and Privacy Policy before continuing.')
       return
@@ -302,6 +315,20 @@ export default function SignupForm() {
     if (!email && displayEmail) {
       setEmail(displayEmail)
     }
+  }
+
+  if (SIGNUP_DISABLED) {
+    return (
+      <div className="max-w-md mx-auto mt-8 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md text-center">
+        <h2 className="text-2xl font-bold mb-3 text-gray-900 dark:text-white">
+          Registration Closed
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          New account sign-ups are temporarily disabled while Predixa is in testing.
+          Please check back later. Existing users can still sign in.
+        </p>
+      </div>
+    )
   }
 
   if (shouldShowConfirmation) {

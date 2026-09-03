@@ -3,6 +3,8 @@ import {
   MonthlyProfitEntry,
   normalizeEntry,
   normalizeMonthlyProfitEntry,
+  normalizeSacrificePoolEntry,
+  SacrificePoolEntry,
   TradeJournalData,
   TradeJournalEntry,
 } from '@/lib/trade-journal-types'
@@ -13,21 +15,31 @@ function localKey(userId?: string | null) {
   return userId ? `${LOCAL_STORAGE_KEY}:${userId}` : LOCAL_STORAGE_KEY
 }
 
+function normalizeSacrificePool(raw: unknown): SacrificePoolEntry[] {
+  return Array.isArray(raw)
+    ? raw.map((entry, index) =>
+        normalizeSacrificePoolEntry(entry as Partial<SacrificePoolEntry>, index)
+      )
+    : []
+}
+
 function normalizeData(raw: unknown): TradeJournalData {
   if (Array.isArray(raw)) {
     return {
       entries: raw.map((entry, index) => normalizeEntry(entry as Partial<TradeJournalEntry>, index)),
       monthlyProfitEntries: [],
+      sacrificePoolEntries: [],
     }
   }
 
   if (!raw || typeof raw !== 'object') {
-    return { entries: [], monthlyProfitEntries: [] }
+    return { entries: [], monthlyProfitEntries: [], sacrificePoolEntries: [] }
   }
 
   const data = raw as {
     entries?: unknown
     monthlyProfitEntries?: unknown
+    sacrificePoolEntries?: unknown
   }
 
   const entries = Array.isArray(data.entries)
@@ -40,12 +52,16 @@ function normalizeData(raw: unknown): TradeJournalData {
       )
     : []
 
-  return { entries, monthlyProfitEntries }
+  return {
+    entries,
+    monthlyProfitEntries,
+    sacrificePoolEntries: normalizeSacrificePool(data.sacrificePoolEntries),
+  }
 }
 
 export async function loadTradeJournal(userId?: string | null): Promise<TradeJournalData> {
   if (typeof window === 'undefined') {
-    return { entries: [], monthlyProfitEntries: [] }
+    return { entries: [], monthlyProfitEntries: [], sacrificePoolEntries: [] }
   }
 
   try {
@@ -81,7 +97,7 @@ export async function loadTradeJournal(userId?: string | null): Promise<TradeJou
     console.error('Failed to load trade journal from localStorage:', error)
   }
 
-  return { entries: [], monthlyProfitEntries: [] }
+  return { entries: [], monthlyProfitEntries: [], sacrificePoolEntries: [] }
 }
 
 /** @deprecated Use loadTradeJournal */
@@ -121,5 +137,5 @@ export async function saveTradeJournalEntries(
   entries: TradeJournalEntry[],
   userId?: string | null
 ): Promise<void> {
-  await saveTradeJournal({ entries, monthlyProfitEntries: [] }, userId)
+  await saveTradeJournal({ entries, monthlyProfitEntries: [], sacrificePoolEntries: [] }, userId)
 }

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createMetadata } from '@/lib/seo'
 import LiveForecastTable from './LiveForecastTable'
 import HorizonLinesChart from './HorizonLinesChart'
+import GexRegimeBadge from '@/components/trading/GexRegimeBadge'
 
 export const metadata: Metadata = createMetadata({
   title: 'SPY Money-Flow Horizon Forecast | 5/10/15/20-Day Range Prediction | Predixa',
@@ -29,6 +30,7 @@ export default function MoneyFlowHorizonPage() {
         <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
           Today&apos;s forecast
         </h2>
+        <GexRegimeBadge />
         <LiveForecastTable />
       </section>
 

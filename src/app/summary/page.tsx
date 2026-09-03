@@ -8,6 +8,7 @@ import WeeklyPriceChartSection from '@/components/trading/WeeklyPriceChartSectio
 import TradeJournalSummaryPanel from '@/components/trading/TradeJournalSummaryPanel'
 import SpyBriefingPanel from '@/components/trading/SpyBriefingPanel'
 import TodaysPlaybookPanel from '@/components/trading/TodaysPlaybookPanel'
+import GexRegimeBadge from '@/components/trading/GexRegimeBadge'
 import HorizonLinesChart from '@/app/moneyflow-horizon/HorizonLinesChart'
 
 export const dynamic = 'force-dynamic'
@@ -69,6 +70,7 @@ function SummaryPageContent() {
                   Full forecast &amp; history →
                 </Link>
               </div>
+              <GexRegimeBadge className="mb-3" />
               <HorizonLinesChart />
             </div>
             <WeeklyPriceChartSection chartHeight={544} />
