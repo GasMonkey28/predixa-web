@@ -35,7 +35,9 @@ type Payload = {
   session_close?: number
   minutes?: number
   spot_path?: [number, number][] // [minute_bucket, SPY price]
-  series?: Series[] // contracts expiring today
+  series?: Series[] // first column — 0DTE, or the nearest expiry if none
+  today_expiry?: string // ISO date the first column actually represents
+  today_is_0dte?: boolean
   monthly?: Track // next third-Friday monthly expiration
   monthly2?: Track // the third-Friday monthly after that
   overall?: Track // top $ volume across every strike & expiry
@@ -580,11 +582,17 @@ export default function MoneyMoveChart({ symbol = 'SPY' }: { symbol?: string }) 
     series: Series[]
     toggle?: { label: string; value: boolean; onChange: (v: boolean) => void }
   }
+  // old feed (no today_expiry) → assume 0DTE, the prior behaviour
+  const is0dte =
+    data.today_is_0dte ?? (data.today_expiry ? data.today_expiry === data.day : true)
+  const todayExp = data.today_expiry ?? data.day
   const columns: Col[] = [
     {
       key: 'today',
-      heading: 'Expiring today',
-      sub: `0DTE${data.day ? ` · ${data.day}` : ''}`,
+      heading: is0dte ? 'Expiring today' : monthlyLabel(todayExp),
+      sub: is0dte
+        ? `0DTE${data.day ? ` · ${data.day}` : ''}`
+        : `nearest expiry${todayExp ? ` · ${todayExp}` : ''}`,
       series: data.series ?? [],
     },
     ...([data.monthly, data.monthly2].filter(Boolean) as Track[]).map((t, i) => ({
@@ -599,11 +607,17 @@ export default function MoneyMoveChart({ symbol = 'SPY' }: { symbol?: string }) 
           heading: 'All expirations',
           sub:
             excludeToday && overallEx
-              ? 'top $ volume · excl. today'
+              ? `top $ volume · excl. ${is0dte ? 'today' : 'front'}`
               : 'top $ volume · every strike & expiry',
           series: overallActive.series,
           ...(overallEx
-            ? { toggle: { label: 'excl. 0DTE', value: excludeToday, onChange: setExcludeToday } }
+            ? {
+                toggle: {
+                  label: is0dte ? 'excl. 0DTE' : 'excl. front',
+                  value: excludeToday,
+                  onChange: setExcludeToday,
+                },
+              }
             : {}),
         }]
       : []),
