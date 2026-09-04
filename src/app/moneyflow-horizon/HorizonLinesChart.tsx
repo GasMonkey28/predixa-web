@@ -406,14 +406,18 @@ export default function HorizonLinesChart({
       const startYZoom = yZoom
 
       const onWinMove = (ev: PointerEvent) => {
+        // Sensitive on purpose -- a normal drag should swing the scale a lot,
+        // like TradingView. It's fine if some history ends up outside the
+        // visible range once zoomed in hard; the axis isn't trying to keep
+        // every bar in frame.
         if (axis === 'y') {
           const delta = startPos - ev.clientY
-          const next = startYZoom * Math.exp(-delta / 200)
-          setYZoom(Math.min(4, Math.max(0.15, next)))
+          const next = startYZoom * Math.exp(-delta / 90)
+          setYZoom(Math.min(10, Math.max(0.02, next)))
         } else {
           const delta = ev.clientX - startPos
-          const next = startBarW * Math.exp(delta / 200)
-          setBarW(Math.min(30, Math.max(1.5, next)))
+          const next = startBarW * Math.exp(delta / 90)
+          setBarW(Math.min(80, Math.max(0.4, next)))
         }
       }
       const onWinUp = () => {
@@ -438,14 +442,49 @@ export default function HorizonLinesChart({
       return { r, down, reset }
     })
 
+    // Click-and-drag to pan the plot area itself, like TradingView -- grabs
+    // the chart and scrolls it under the cursor. Skips clicks that started on
+    // an axis hit-rect (those zoom instead) since pointerdown there already
+    // handles its own drag and this would otherwise double-fire via bubbling.
+    let panCleanup: (() => void) | null = null
+    const onPlotPointerDown = (e: PointerEvent) => {
+      if ((e.target as Element).closest('.mfh-axis-hit')) return
+      const scrollEl = scrollRef.current
+      if (!scrollEl) return
+      e.preventDefault()
+      isDraggingAxisRef.current = true
+      tooltip.style.opacity = '0'
+      crosshair.style.opacity = '0'
+      svg.style.cursor = 'grabbing'
+      const startX = e.clientX
+      const startScrollLeft = scrollEl.scrollLeft
+
+      const onWinMove = (ev: PointerEvent) => {
+        scrollEl.scrollLeft = startScrollLeft - (ev.clientX - startX)
+      }
+      const onWinUp = () => {
+        isDraggingAxisRef.current = false
+        svg.style.cursor = 'grab'
+        window.removeEventListener('pointermove', onWinMove)
+        window.removeEventListener('pointerup', onWinUp)
+        panCleanup = null
+      }
+      window.addEventListener('pointermove', onWinMove)
+      window.addEventListener('pointerup', onWinUp)
+      panCleanup = onWinUp
+    }
+    svg.addEventListener('pointerdown', onPlotPointerDown)
+
     return () => {
       svg.removeEventListener('pointermove', onMove)
       svg.removeEventListener('pointerleave', onLeave)
+      svg.removeEventListener('pointerdown', onPlotPointerDown)
       downHandlers.forEach(({ r, down, reset }) => {
         r.removeEventListener('pointerdown', down)
         r.removeEventListener('dblclick', reset)
       })
       activeCleanup?.()
+      panCleanup?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, y2y3Days, barW, yZoom])
@@ -521,7 +560,8 @@ export default function HorizonLinesChart({
         .mfh-stats { display: flex; gap: 18px; margin-bottom: 12px; flex-wrap: wrap; font-size: 12px; color: var(--mfh-text-secondary); }
         .mfh-stats b { color: var(--mfh-ink); }
         .mfh-scroll { overflow-x: auto; overflow-y: hidden; border-radius: 8px; }
-        .mfh-root svg { display: block; height: ${HH}px; }
+        .mfh-root svg { display: block; height: ${HH}px; cursor: grab; touch-action: none; }
+        .mfh-root svg:active { cursor: grabbing; }
         .mfh-grid { stroke: var(--mfh-grid); stroke-width: 1; }
         .mfh-axis-label { fill: var(--mfh-text-muted); font-size: 10px; }
         .mfh-crosshair { stroke: var(--mfh-text-muted); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; opacity: 0; }
