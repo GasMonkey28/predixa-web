@@ -636,7 +636,7 @@ export default function MoneyMoveChart({
             squeezing) -- keeps "All expirations" always adjacent to the last
             monthly column and right before the side panel, regardless of
             how much room the (fixed-width) panel leaves. */}
-        <div className="min-w-0 flex-1 overflow-x-auto">
+        <div className="min-w-0 flex-1 overflow-x-auto xl:max-w-[1360px]">
           <div className="flex gap-5 pb-1">
             {columns.map((c) => (
               <div key={c.key} className="w-80 shrink-0">

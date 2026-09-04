@@ -11,7 +11,7 @@ export const metadata: Metadata = createMetadata({
 
 export default function LivePage() {
   return (
-    <main className="mx-auto max-w-[120rem] px-6 py-6 space-y-4 text-gray-700 dark:text-gray-300">
+    <main className="mx-auto max-w-[160rem] px-6 py-6 space-y-4 text-gray-700 dark:text-gray-300">
       <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
         Live options money move
       </h1>
