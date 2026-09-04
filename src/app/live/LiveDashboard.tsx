@@ -39,14 +39,12 @@ export default function LiveDashboard() {
     const id = setInterval(() => {
       const i = TICKERS.indexOf(symbolRef.current)
       setSymbol(TICKERS[(i + 1) % TICKERS.length])
+      // snap back to the top of the money-move block on each hop -- only here,
+      // not on the initial toggle-on, so clicking Auto-rotate doesn't itself scroll
+      moveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, rotateSec * 1000)
     return () => clearInterval(id)
   }, [rotate, rotateSec])
-
-  // while rotating, snap back to the top of the money-move block on each hop
-  useEffect(() => {
-    if (rotate) moveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [symbol, rotate])
 
   return (
     <div className="space-y-6">
