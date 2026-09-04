@@ -19,7 +19,7 @@ const SERIES = [
   { key: '20d', label: '20-day', color: 'var(--mfh-series-5)' },
 ] as const
 
-const M = { top: 16, right: 18, bottom: 30, left: 58 }
+const M = { top: 16, right: 58, bottom: 30, left: 58 }
 
 export default function HorizonLinesChart({
   symbol = 'SPY',
@@ -129,6 +129,7 @@ export default function HorizonLinesChart({
       const y = yScale(v)
       gridSvg += `<line class="mfh-grid" x1="${M.left}" x2="${W - M.right}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`
       yLabelsSvg += `<text class="mfh-axis-label" x="${M.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">$${Math.round(v)}</text>`
+      yLabelsSvg += `<text class="mfh-axis-label" x="${W - M.right + 8}" y="${(y + 4).toFixed(1)}" text-anchor="start">$${Math.round(v)}</text>`
     }
 
     const allDates = bars.map((b) => b.date).concat(extraDates)
