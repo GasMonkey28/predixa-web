@@ -234,7 +234,7 @@ export default function HorizonLinesChart({
     // at any zoom level: up to half a screen of empty space max, and a small
     // comfortable gap by default (not the full empty area right away).
     const futurePadPx = Math.max(BAR_W * 8, clientW * 0.5)
-    const defaultRightMarginPx = Math.min(futurePadPx, Math.max(BAR_W * 2, clientW * 0.06))
+    const defaultRightMarginPx = Math.min(futurePadPx, BAR_W * 10)
     const W = M.left + M.right + totalSlots * BAR_W + futurePadPx
     const xCenter = (i: number) => M.left + (i + 0.5) * BAR_W
     const lastCandleEdgePx = M.left + totalSlots * BAR_W
@@ -288,14 +288,27 @@ export default function HorizonLinesChart({
     const xLeft = (i: number) => M.left + i * BAR_W
     const yScale = (v: number) => M.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH
 
+    // Price labels float at the CURRENT viewport's edges (not the data's
+    // absolute left/right) so they track along as you scroll/drag and stay
+    // visible no matter how far into the empty future margin you go --
+    // pinning them to the data's edges meant they were only ever on screen
+    // at one specific scroll extreme. A background pill keeps them readable
+    // over candles/gridlines now that they float over the plot instead of
+    // sitting in a dedicated margin.
     let gridSvg = ''
     let yLabelsSvg = ''
     for (let i = 0; i <= 5; i++) {
       const v = yMin + (yMax - yMin) * (i / 5)
       const y = yScale(v)
       gridSvg += `<line class="mfh-grid" x1="${M.left}" x2="${W - M.right}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`
-      yLabelsSvg += `<text class="mfh-axis-label" x="${M.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">$${Math.round(v)}</text>`
-      yLabelsSvg += `<text class="mfh-axis-label" x="${W - M.right + 8}" y="${(y + 4).toFixed(1)}" text-anchor="start">$${Math.round(v)}</text>`
+      const label = `$${Math.round(v)}`
+      const pillW = label.length * 6.2 + 8
+      const leftPillX = viewStartPx + 4
+      const rightPillX = viewEndPx - 4 - pillW
+      yLabelsSvg += `<rect class="mfh-axis-label-bg" x="${leftPillX.toFixed(1)}" y="${(y - 7).toFixed(1)}" width="${pillW.toFixed(1)}" height="14" rx="2"/>`
+      yLabelsSvg += `<text class="mfh-axis-label" x="${(leftPillX + 4).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="start">${label}</text>`
+      yLabelsSvg += `<rect class="mfh-axis-label-bg" x="${rightPillX.toFixed(1)}" y="${(y - 7).toFixed(1)}" width="${pillW.toFixed(1)}" height="14" rx="2"/>`
+      yLabelsSvg += `<text class="mfh-axis-label" x="${(rightPillX + pillW - 4).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end">${label}</text>`
     }
 
     const allDates = bars.map((b) => b.date).concat(extraDates)
@@ -396,12 +409,14 @@ export default function HorizonLinesChart({
       linesSvg += `</g>`
     })
 
-    // Invisible drag zones over the axis margins -- TradingView-style: drag
-    // the y-axis (either side) up/down to rescale price, drag the x-axis
-    // (bottom) left/right to widen/narrow candles.
+    // Invisible drag zones -- TradingView-style: drag the y-axis (either
+    // side) up/down to rescale price, drag the x-axis (bottom) left/right to
+    // widen/narrow candles. Positioned at the current VIEWPORT edges (like
+    // the floating price labels above), not the data's absolute edges, so
+    // they're always reachable regardless of scroll position.
     const axisHitSvg =
-      `<rect class="mfh-axis-hit" data-axis="y" x="0" y="0" width="${M.left}" height="${HH}" fill="transparent" style="cursor:ns-resize"/>` +
-      `<rect class="mfh-axis-hit" data-axis="y" x="${(W - M.right).toFixed(1)}" y="0" width="${M.right}" height="${HH}" fill="transparent" style="cursor:ns-resize"/>` +
+      `<rect class="mfh-axis-hit" data-axis="y" x="${viewStartPx.toFixed(1)}" y="0" width="${M.left}" height="${HH}" fill="transparent" style="cursor:ns-resize"/>` +
+      `<rect class="mfh-axis-hit" data-axis="y" x="${(viewEndPx - M.right).toFixed(1)}" y="0" width="${M.right}" height="${HH}" fill="transparent" style="cursor:ns-resize"/>` +
       `<rect class="mfh-axis-hit" data-axis="x" x="0" y="${(HH - M.bottom).toFixed(1)}" width="${W}" height="${M.bottom}" fill="transparent" style="cursor:ew-resize"/>`
 
     svg.setAttribute('viewBox', `0 0 ${W} ${HH}`)
@@ -672,6 +687,7 @@ export default function HorizonLinesChart({
         .mfh-root svg:active { cursor: grabbing; }
         .mfh-grid { stroke: var(--mfh-grid); stroke-width: 1; }
         .mfh-axis-label { fill: var(--mfh-text-muted); font-size: 10px; }
+        .mfh-axis-label-bg { fill: var(--mfh-surface); opacity: 0.88; }
         .mfh-crosshair { stroke: var(--mfh-text-muted); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; opacity: 0; }
         .mfh-chart-wrap { position: relative; }
         .mfh-tooltip {
