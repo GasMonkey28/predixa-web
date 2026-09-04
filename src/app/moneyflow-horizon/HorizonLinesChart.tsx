@@ -237,15 +237,20 @@ export default function HorizonLinesChart({
           const recovered = findOpenPriceTouchIndex(y2y3Days, j, day.open_price!) != null
           y2y3Svg += starSvg(xCenter(i), yScale(bar.high) - 10, recovered, `${symbol}-${i}`)
 
-          // Dash all the way to the right price axis (rather than stopping at
-          // the revisit day, or labeling inline) -- with this many stars packed
-          // into a narrow chart, inline price labels crowded into an unreadable
-          // pile. Reading the level off the shared right-side axis instead.
-          const startX = xCenter(i)
-          const openY = yScale(day.open_price!)
-          const endX = W - M.right
-          if (endX > startX) {
-            y2y3Svg += `<line x1="${startX.toFixed(1)}" y1="${openY.toFixed(1)}" x2="${endX.toFixed(1)}" y2="${openY.toFixed(1)}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.6"/>`
+          // Only still-relevant (unrecovered / full-star) levels get a line --
+          // a half star already touched its open price again, so the level is
+          // no longer worth watching. Dash all the way to the right price axis
+          // (rather than stopping at the revisit day) and label that specific
+          // price right on the axis, since with many stars packed into a
+          // narrow chart, inline labels mid-chart piled up unreadably.
+          if (!recovered) {
+            const startX = xCenter(i)
+            const openY = yScale(day.open_price!)
+            const endX = W - M.right
+            if (endX > startX) {
+              y2y3Svg += `<line x1="${startX.toFixed(1)}" y1="${openY.toFixed(1)}" x2="${endX.toFixed(1)}" y2="${openY.toFixed(1)}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.6"/>`
+              y2y3Svg += `<text x="${(endX + 8).toFixed(1)}" y="${(openY + 3).toFixed(1)}" text-anchor="start" font-size="9" font-weight="bold" fill="#fbbf24">$${day.open_price!.toFixed(2)}</text>`
+            }
           }
         }
 
