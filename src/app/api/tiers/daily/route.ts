@@ -87,14 +87,22 @@ export async function GET(request: Request) {
     }
 
     const today = etDateString(0)
+    const requestedDate = searchParams.get('date')
+    if (requestedDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+      return NextResponse.json(
+        { error: `Invalid date: ${requestedDate}` },
+        { status: 400, headers: getRateLimitHeaders(clientIp) }
+      )
+    }
+    const startDate = requestedDate || today
 
     try {
-      const { date: actualDate, data: s3Data } = await fetchLatestSummary(BUCKET, today, ticker)
+      const { date: actualDate, data: s3Data } = await fetchLatestSummary(BUCKET, startDate, ticker)
 
-      if (actualDate !== today) {
-        logger.warn({ today, actualDate, ticker }, 'Using most recent summary_json (today missing)')
+      if (actualDate !== startDate) {
+        logger.warn({ startDate, actualDate, ticker }, 'Using most recent summary_json (requested date missing)')
       } else {
-        logger.debug({ sourceDate: today, ticker }, 'Fetched tiers data for today')
+        logger.debug({ sourceDate: startDate, ticker }, 'Fetched tiers data')
       }
 
       const prev = await fetchPreviousSummary(BUCKET, actualDate, ticker)

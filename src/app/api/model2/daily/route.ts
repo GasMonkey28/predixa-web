@@ -189,12 +189,39 @@ export async function GET(request: Request) {
       }
     }
 
+    // Historical lookup: model2_y2y3/chart/latest.json only ever carries the
+    // last ~40 trading days embedded in trading_days -- no separate per-date
+    // archive exists (unlike tiers/money-move). If a date outside that window
+    // is requested, `today` just falls back to the live snapshot with
+    // requested_date_found:false so the UI can say so rather than silently
+    // showing the wrong day.
+    const requestedDate = new URL(request.url).searchParams.get('date')
+    let requestedDateFound = true
+    if (requestedDate) {
+      const days: Array<Record<string, unknown>> = s3Data.trading_days || []
+      const match = days.find((d) => d.as_of_date === requestedDate)
+      if (match) {
+        todayData = {
+          date: match.as_of_date,
+          final_signal: match.final_signal || 'no_trade',
+          position_size: match.position_size || 0,
+          y1_signal: match.y1_signal || 'no_trade',
+          y2y3_signal: match.y2y3_signal || 'no_trade',
+          pred_y1: match.pred_y1 || 0,
+          pred_y2_plus_y3: match.pred_y2_plus_y3 || 0,
+        }
+      } else {
+        requestedDateFound = false
+      }
+    }
+
     const transformedData = {
       ticker,
       metadata: s3Data.metadata || {},
       today: todayData || {},
       settings: s3Data.settings || {},
       trading_days: s3Data.trading_days || [],
+      ...(requestedDate ? { requested_date: requestedDate, requested_date_found: requestedDateFound } : {}),
     }
 
     logger.debug(

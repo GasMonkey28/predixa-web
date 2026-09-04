@@ -529,12 +529,24 @@ function MoneyMoveTrack({
   )
 }
 
+// Tickers whose moneymove Lambda has been redeployed to write dated
+// archives. The rest (mostly newer/meme names) don't have a standalone
+// moneymove function provisioned yet.
+export const MONEYMOVE_HISTORY_TICKERS = [
+  'SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO',
+]
+
 export default function MoneyMoveChart({
   symbol = 'SPY',
   rightPanel,
+  date,
 }: {
   symbol?: string
   rightPanel?: ReactNode
+  /** ISO date (YYYY-MM-DD) to show a frozen historical snapshot instead of
+   *  today's live feed. Only as far back as the moneymove Lambda has
+   *  archived, and only for MONEYMOVE_HISTORY_TICKERS. */
+  date?: string | null
 }) {
   const [data, setData] = useState<Payload | null>(null)
   const [excludeToday, setExcludeToday] = useState(true)
@@ -542,18 +554,21 @@ export default function MoneyMoveChart({
   useEffect(() => {
     let cancelled = false
     setData(null)
+    const q = `?symbol=${encodeURIComponent(symbol)}${date ? `&date=${encodeURIComponent(date)}` : ''}`
     const load = () =>
-      fetch(`/api/option-chain/money-move?symbol=${encodeURIComponent(symbol)}`, { cache: 'no-store' })
+      fetch(`/api/option-chain/money-move${q}`, { cache: 'no-store' })
         .then((r) => r.json())
         .then((d: Payload) => !cancelled && setData(d))
         .catch(() => {})
     load()
+    // a historical snapshot is frozen -- no need to keep re-polling it
+    if (date) return () => { cancelled = true }
     const id = setInterval(load, POLL_MS)
     return () => {
       cancelled = true
       clearInterval(id)
     }
-  }, [symbol])
+  }, [symbol, date])
 
   if (
     !data ||
@@ -566,9 +581,17 @@ export default function MoneyMoveChart({
       data.overall_ex_today?.series?.length
     )
   ) {
+    // Money-move having nothing (missing archive for this date, or just not
+    // computed yet today) shouldn't hide tiers/y2y3 in the side panel --
+    // those are independent data sources and may well have this date.
     return (
-      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6 text-sm text-gray-500 dark:text-gray-400">
-        No money-move data yet — it&apos;s recomputed every 5 minutes during market hours.
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
+        <div className="min-w-0 flex-1 rounded-lg border border-gray-200 p-6 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+          {date
+            ? `No archived money-move data for ${symbol} on ${date} — history is only kept for the last few trading days${!MONEYMOVE_HISTORY_TICKERS.includes(symbol) ? ' (and not backfilled for this ticker yet)' : ''}.`
+            : "No money-move data yet — it's recomputed every 5 minutes during market hours."}
+        </div>
+        {rightPanel && <div className="min-w-0 xl:w-[68.4rem] xl:shrink-0">{rightPanel}</div>}
       </div>
     )
   }

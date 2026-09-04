@@ -23,10 +23,22 @@ export async function fetchOptionChainJson(
   symbol: OptionChainTicker,
   timeoutMs = 10_000
 ) {
-  const bucket = config.marketData.bucket
-  const keys = [`charts/optionchain/${symbol}/${file}`]
-  if (symbol === 'SPY') keys.push(`charts/optionchain/${file}`) // legacy alias
+  return fetchOptionChainKeys([`charts/optionchain/${symbol}/${file}`, ...(symbol === 'SPY' ? [`charts/optionchain/${file}`] : [])], timeoutMs)
+}
 
+/**
+ * Fetch a historical (dated) money-move snapshot -- written alongside the
+ * live money_move.json by the moneymove Lambda's day param, archived at
+ * charts/optionchain/<symbol>/by-date/<date>.json. Only as far back as the
+ * moneymove Lambda has been (re)run for -- currently just SPY, backfilled a
+ * handful of days (bounded by the 7-day raw parquet retention).
+ */
+export async function fetchOptionChainDatedJson(symbol: OptionChainTicker, date: string, timeoutMs = 10_000) {
+  return fetchOptionChainKeys([`charts/optionchain/${symbol}/by-date/${date}.json`], timeoutMs)
+}
+
+async function fetchOptionChainKeys(keys: string[], timeoutMs: number) {
+  const bucket = config.marketData.bucket
   let lastErr: unknown = null
   for (const key of keys) {
     for (const url of [

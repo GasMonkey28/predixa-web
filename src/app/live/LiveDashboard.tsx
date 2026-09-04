@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { clsx } from 'clsx'
 
-import MoneyMoveChart from './MoneyMoveChart'
+import MoneyMoveChart, { MONEYMOVE_HISTORY_TICKERS } from './MoneyMoveChart'
 import OptionChainLive from './OptionChainLive'
 import TickerStats from './TickerStats'
 import HorizonLinesChart from '../moneyflow-horizon/HorizonLinesChart'
@@ -25,6 +25,14 @@ export default function LiveDashboard() {
   const [rotate, setRotate] = useState(false)
   const [rotateSec, setRotateSec] = useState<(typeof ROTATE_OPTIONS)[number]>(30)
   const [showChain, setShowChain] = useState(false)
+  // Frozen historical snapshot instead of the live feed. Tiers has full
+  // history for every ticker; y2y3 only the model's own rolling ~40 trading
+  // days; money-move only as far back as the moneymove Lambda's dated
+  // archive goes -- currently just SPY, backfilled a handful of days
+  // (bounded by 7-day raw parquet retention). Not reset on ticker switch so
+  // you can browse the same date across tickers.
+  const [historyDate, setHistoryDate] = useState<string | null>(null)
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 
   const hasMFH = MFH_TICKERS.includes(symbol)
 
@@ -102,26 +110,54 @@ export default function LiveDashboard() {
             {showChain ? 'Hide option chain' : 'Show option chain'}
           </button>
         </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+          <span className="uppercase tracking-wide">History</span>
+          <input
+            type="date"
+            value={historyDate ?? ''}
+            max={todayStr}
+            onChange={(e) => setHistoryDate(e.target.value || null)}
+            className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+          />
+          {historyDate && (
+            <button
+              onClick={() => setHistoryDate(null)}
+              className="rounded bg-gray-100 px-2 py-0.5 font-medium hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700"
+            >
+              Back to live
+            </button>
+          )}
+          {historyDate && (
+            <span className="text-amber-500">
+              viewing {historyDate} · tiers &amp; y2y3 work for any ticker
+              {!MONEYMOVE_HISTORY_TICKERS.includes(symbol) &&
+                ' · money-move history not backfilled for this ticker yet'}
+            </span>
+          )}
+        </div>
       </div>
 
       <section className="scroll-mt-4 space-y-2">
         <div className="flex items-baseline gap-2">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {symbol} money move
+            {symbol} money move{historyDate ? ` — ${historyDate}` : ''}
           </h2>
           <span className="text-xs text-gray-400">
-            expiring today · next two monthlies · all expirations
+            {historyDate ? 'frozen historical snapshot' : 'expiring today · next two monthlies · all expirations'}
           </span>
         </div>
         <MoneyMoveChart
           symbol={symbol}
+          date={historyDate}
           rightPanel={
             <div className="space-y-4">
-              <TickerStats symbol={symbol} showOhlc={!hasMFH} />
+              <TickerStats symbol={symbol} showOhlc={!hasMFH && !historyDate} date={historyDate} />
               {hasMFH && (
                 <div className="space-y-2">
                   <div className="text-xs uppercase tracking-wide text-gray-400">
                     money-flow horizon · 5 / 10 / 15 / 20-day range
+                    {historyDate && ' · always current, not affected by History'}
                   </div>
                   <HorizonLinesChart symbol={symbol} height={572} barWidth={8.4} />
                 </div>

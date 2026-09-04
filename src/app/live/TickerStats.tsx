@@ -28,7 +28,12 @@ type Y2y3Today = {
   pred_y1?: number
   pred_y2_plus_y3?: number
 }
-type Y2y3 = { today?: Y2y3Today; trading_days?: { pred_y2_plus_y3?: number }[] }
+type Y2y3 = {
+  today?: Y2y3Today
+  trading_days?: { pred_y2_plus_y3?: number }[]
+  requested_date?: string
+  requested_date_found?: boolean
+}
 type Bar_ = { date: string; o: number; h: number; l: number; c: number }
 
 const gradeColor = (g?: string) => {
@@ -49,9 +54,16 @@ const sigStyle = (s?: string) =>
 export default function TickerStats({
   symbol,
   showOhlc = true,
+  date,
 }: {
   symbol: string
   showOhlc?: boolean
+  /** ISO date (YYYY-MM-DD) to show tier/y2y3 as of that day instead of live.
+   *  Tiers has full history; y2y3 only as far back as its rolling 40-day
+   *  window. The 40-day OHLC chart isn't date-aware (always "most recent
+   *  40 days") since it's just chart context, not itself the thing being
+   *  looked up historically. */
+  date?: string | null
 }) {
   const [tiers, setTiers] = useState<Tiers | null>(null)
   const [y2y3, setY2y3] = useState<Y2y3 | null>(null)
@@ -63,12 +75,13 @@ export default function TickerStats({
     setY2y3(null)
     setOhlc(null)
     const q = `?ticker=${encodeURIComponent(symbol)}`
+    const dq = `${q}${date ? `&date=${encodeURIComponent(date)}` : ''}`
     const load = () => {
-      fetch(`/api/tiers/daily${q}`, { cache: 'no-store' })
+      fetch(`/api/tiers/daily${dq}`, { cache: 'no-store' })
         .then((r) => r.json())
         .then((d) => !dead && setTiers(d))
         .catch(() => {})
-      fetch(`/api/model2/daily${q}`, { cache: 'no-store' })
+      fetch(`/api/model2/daily${dq}`, { cache: 'no-store' })
         .then((r) => r.json())
         .then((d) => !dead && setY2y3(d))
         .catch(() => {})
@@ -79,12 +92,13 @@ export default function TickerStats({
           .catch(() => {})
     }
     load()
+    if (date) return () => { dead = true }
     const id = setInterval(load, POLL_MS)
     return () => {
       dead = true
       clearInterval(id)
     }
-  }, [symbol, showOhlc])
+  }, [symbol, showOhlc, date])
 
   const candles = useMemo(
     () =>
@@ -170,6 +184,11 @@ export default function TickerStats({
           <div className="mt-0.5 text-xs text-gray-400 tabular-nums">
             y1 {t.pred_y1 >= 0 ? '+' : ''}
             {t.pred_y1.toFixed(2)}
+          </div>
+        )}
+        {y2y3?.requested_date_found === false && (
+          <div className="mt-0.5 text-xs text-amber-500">
+            no y2y3 data for {y2y3.requested_date} (only ~40 trading days kept) — showing live instead
           </div>
         )}
       </div>
