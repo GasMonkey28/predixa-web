@@ -75,15 +75,27 @@ export default function HorizonLinesChart({
   barWidth?: number
 }) {
   const HH = height
-  const BAR_W = barWidth
   const [data, setData] = useState<HistoryPayload | null>(null)
   const [error, setError] = useState(false)
   const [y2y3Days, setY2y3Days] = useState<Y2Y3Day[] | null>(null)
+  // TradingView-style axis zoom: drag the x-axis left/right to widen/narrow
+  // candles, drag the y-axis up/down to rescale price. Reset whenever the
+  // ticker changes so switching symbols doesn't carry over a weird zoom.
+  const [barW, setBarW] = useState(barWidth)
+  const [yZoom, setYZoom] = useState(1)
+  useEffect(() => {
+    setBarW(barWidth)
+    setYZoom(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol])
+  const BAR_W = barW
   const svgRef = useRef<SVGSVGElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const visibleRef = useRef<Record<string, boolean>>({ '1d': false, '5d': false, '10d': true, '15d': false, '20d': true })
+  const isDraggingAxisRef = useRef(false)
+  const lastDataRef = useRef<HistoryPayload | null>(null)
   const [, forceRerender] = useState(0)
 
   useEffect(() => {
@@ -128,6 +140,16 @@ export default function HorizonLinesChart({
     const svg = svgRef.current
     const tooltip = tooltipRef.current!
     const wrap = wrapRef.current!
+
+    // This effect also reruns on every zoom drag tick (barW/yZoom changed).
+    // On a genuinely new dataset, snap to the most recent candles like
+    // before; on a zoom tick, preserve the current scroll position (as a
+    // fraction of scrollable width) instead of yanking the view back right.
+    const isNewData = lastDataRef.current !== data
+    lastDataRef.current = data
+    const scrollEl = scrollRef.current
+    const prevMaxScroll = scrollEl ? scrollEl.scrollWidth - scrollEl.clientWidth : 0
+    const prevScrollRatio = scrollEl && prevMaxScroll > 0 ? scrollEl.scrollLeft / prevMaxScroll : 1
 
     const seriesData = SERIES.map((s) => ({ ...s, data: data[s.key] })).filter((s) => s.data)
     if (!seriesData.length) return
@@ -178,8 +200,12 @@ export default function HorizonLinesChart({
       if (b.low != null) allPrices.push(b.low)
     })
     byDate.forEach((s) => Object.values(s.byDate).forEach((v) => allPrices.push(v.predClose)))
-    const yMin = Math.min(...allPrices) * 0.99
-    const yMax = Math.max(...allPrices) * 1.01
+    const yMinBase = Math.min(...allPrices) * 0.99
+    const yMaxBase = Math.max(...allPrices) * 1.01
+    const yCenter = (yMinBase + yMaxBase) / 2
+    const yHalfSpan = ((yMaxBase - yMinBase) / 2) * yZoom
+    const yMin = yCenter - yHalfSpan
+    const yMax = yCenter + yHalfSpan
 
     const xLeft = (i: number) => M.left + i * BAR_W
     const xCenter = (i: number) => M.left + (i + 0.5) * BAR_W
@@ -293,18 +319,33 @@ export default function HorizonLinesChart({
       linesSvg += `</g>`
     })
 
+    // Invisible drag zones over the axis margins -- TradingView-style: drag
+    // the y-axis (either side) up/down to rescale price, drag the x-axis
+    // (bottom) left/right to widen/narrow candles.
+    const axisHitSvg =
+      `<rect class="mfh-axis-hit" data-axis="y" x="0" y="0" width="${M.left}" height="${HH}" fill="transparent" style="cursor:ns-resize"/>` +
+      `<rect class="mfh-axis-hit" data-axis="y" x="${(W - M.right).toFixed(1)}" y="0" width="${M.right}" height="${HH}" fill="transparent" style="cursor:ns-resize"/>` +
+      `<rect class="mfh-axis-hit" data-axis="x" x="0" y="${(HH - M.bottom).toFixed(1)}" width="${W}" height="${M.bottom}" fill="transparent" style="cursor:ew-resize"/>`
+
     svg.setAttribute('viewBox', `0 0 ${W} ${HH}`)
     svg.style.width = `${W}px`
-    svg.innerHTML = `${gridSvg}${linesSvg}${candlesSvg}${y2y3Svg}${yLabelsSvg}${xLabelsSvg}${signalLabelSvg}<line class="mfh-crosshair" id="mfh-crosshair" y1="${M.top}" y2="${HH - M.bottom}"/>`
+    svg.innerHTML = `${gridSvg}${linesSvg}${candlesSvg}${y2y3Svg}${yLabelsSvg}${xLabelsSvg}${signalLabelSvg}<line class="mfh-crosshair" id="mfh-crosshair" y1="${M.top}" y2="${HH - M.bottom}"/>${axisHitSvg}`
 
-    // default view to the most recent data, not the oldest
-    if (scrollRef.current) {
-      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth
+    if (scrollEl) {
+      if (isNewData) {
+        // fresh dataset (symbol switch / initial load) -- default to the most recent candles
+        scrollEl.scrollLeft = scrollEl.scrollWidth
+      } else {
+        // zoom tick -- keep the same relative scroll position instead of jumping
+        const newMaxScroll = scrollEl.scrollWidth - scrollEl.clientWidth
+        scrollEl.scrollLeft = newMaxScroll > 0 ? prevScrollRatio * newMaxScroll : 0
+      }
     }
 
     const crosshair = svg.querySelector('#mfh-crosshair') as SVGLineElement
 
     const onMove = (e: PointerEvent) => {
+      if (isDraggingAxisRef.current) return
       const rect = svg.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const i = Math.floor((mx - M.left) / BAR_W)
@@ -350,12 +391,64 @@ export default function HorizonLinesChart({
     }
     svg.addEventListener('pointermove', onMove)
     svg.addEventListener('pointerleave', onLeave)
+
+    // Axis drag-to-zoom, TradingView style. Only pointerdown is bound to the
+    // (re-created-every-render) hit rects; pointermove/up go on window so the
+    // drag survives this effect rerunning mid-drag when barW/yZoom change.
+    let activeCleanup: (() => void) | null = null
+    const onAxisPointerDown = (axis: 'x' | 'y') => (e: PointerEvent) => {
+      e.preventDefault()
+      isDraggingAxisRef.current = true
+      tooltip.style.opacity = '0'
+      crosshair.style.opacity = '0'
+      const startPos = axis === 'y' ? e.clientY : e.clientX
+      const startBarW = BAR_W
+      const startYZoom = yZoom
+
+      const onWinMove = (ev: PointerEvent) => {
+        if (axis === 'y') {
+          const delta = startPos - ev.clientY
+          const next = startYZoom * Math.exp(-delta / 200)
+          setYZoom(Math.min(4, Math.max(0.15, next)))
+        } else {
+          const delta = ev.clientX - startPos
+          const next = startBarW * Math.exp(delta / 200)
+          setBarW(Math.min(30, Math.max(1.5, next)))
+        }
+      }
+      const onWinUp = () => {
+        isDraggingAxisRef.current = false
+        window.removeEventListener('pointermove', onWinMove)
+        window.removeEventListener('pointerup', onWinUp)
+        activeCleanup = null
+      }
+      window.addEventListener('pointermove', onWinMove)
+      window.addEventListener('pointerup', onWinUp)
+      activeCleanup = onWinUp
+    }
+    const resetY = () => setYZoom(1)
+    const resetX = () => setBarW(barWidth)
+    const hitRects = Array.from(svg.querySelectorAll<SVGRectElement>('.mfh-axis-hit'))
+    const downHandlers = hitRects.map((r) => {
+      const axis = r.dataset.axis as 'x' | 'y'
+      const down = onAxisPointerDown(axis)
+      const reset = axis === 'y' ? resetY : resetX
+      r.addEventListener('pointerdown', down)
+      r.addEventListener('dblclick', reset)
+      return { r, down, reset }
+    })
+
     return () => {
       svg.removeEventListener('pointermove', onMove)
       svg.removeEventListener('pointerleave', onLeave)
+      downHandlers.forEach(({ r, down, reset }) => {
+        r.removeEventListener('pointerdown', down)
+        r.removeEventListener('dblclick', reset)
+      })
+      activeCleanup?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, y2y3Days])
+  }, [data, y2y3Days, barW, yZoom])
 
   function toggleSeries(key: string) {
     visibleRef.current[key] = !visibleRef.current[key]
