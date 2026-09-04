@@ -226,19 +226,30 @@ export default function HorizonLinesChart({
     })
 
     const plotH = HH - M.top - M.bottom
-    const W = M.left + M.right + totalSlots * BAR_W
+    const clientW = scrollEl?.clientWidth ?? 0
+    // Extra blank space past the last candle -- TradingView-style "room for
+    // the future" -- so the chart isn't hard-stuck with the latest candle
+    // glued to the right edge; dragging left can pull it away from the edge
+    // into that empty margin. Sized off the viewport so it scales sensibly
+    // at any zoom level: up to half a screen of empty space max, and a small
+    // comfortable gap by default (not the full empty area right away).
+    const futurePadPx = Math.max(BAR_W * 8, clientW * 0.5)
+    const defaultRightMarginPx = Math.min(futurePadPx, Math.max(BAR_W * 2, clientW * 0.06))
+    const W = M.left + M.right + totalSlots * BAR_W + futurePadPx
     const xCenter = (i: number) => M.left + (i + 0.5) * BAR_W
+    const lastCandleEdgePx = M.left + totalSlots * BAR_W
+    const defaultScrollLeft = Math.max(0, lastCandleEdgePx - clientW + defaultRightMarginPx)
 
     // Auto-fit the price axis to whichever candles are actually scrolled
-    // into view (not the entire multi-year history) -- otherwise the price
-    // scale, and what a zoom drag centers on, has no relationship to the
-    // bars on screen. Figure out the visible index range from where the
-    // scroll position is about to land (see the ratio-preserving restore
-    // below) rather than the stale pre-render scrollLeft.
-    const clientW = scrollEl?.clientWidth ?? 0
+    // into view (not the entire multi-year history, and not the empty
+    // future margin) -- otherwise the price scale, and what a zoom drag
+    // centers on, has no relationship to the bars on screen. Figure out the
+    // visible index range from where the scroll position is about to land
+    // (see the ratio-preserving restore below) rather than the stale
+    // pre-render scrollLeft.
     let viewStartPx: number
     if (isNewData || !scrollEl || prevMaxScroll <= 0) {
-      viewStartPx = Math.max(0, W - clientW)
+      viewStartPx = defaultScrollLeft
     } else {
       const newMaxScroll = Math.max(0, W - clientW)
       viewStartPx = prevScrollRatio * newMaxScroll
@@ -399,8 +410,10 @@ export default function HorizonLinesChart({
 
     if (scrollEl) {
       if (isNewData) {
-        // fresh dataset (symbol switch / initial load) -- default to the most recent candles
-        scrollEl.scrollLeft = scrollEl.scrollWidth
+        // fresh dataset (symbol switch / initial load) -- default to the most
+        // recent candles with a small right margin, not all the way into the
+        // empty future space (that's for dragging into, not the default view)
+        scrollEl.scrollLeft = defaultScrollLeft
       } else {
         // zoom tick -- keep the same relative scroll position instead of jumping
         const newMaxScroll = scrollEl.scrollWidth - scrollEl.clientWidth
