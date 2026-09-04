@@ -32,16 +32,12 @@ export default function LiveDashboard() {
   // re-arming the timer every tick
   const symbolRef = useRef(symbol)
   symbolRef.current = symbol
-  const moveRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (!rotate) return
     const id = setInterval(() => {
       const i = TICKERS.indexOf(symbolRef.current)
       setSymbol(TICKERS[(i + 1) % TICKERS.length])
-      // snap back to the top of the money-move block on each hop -- only here,
-      // not on the initial toggle-on, so clicking Auto-rotate doesn't itself scroll
-      moveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, rotateSec * 1000)
     return () => clearInterval(id)
   }, [rotate, rotateSec])
@@ -108,7 +104,7 @@ export default function LiveDashboard() {
         </div>
       </div>
 
-      <section ref={moveRef} className="scroll-mt-4 space-y-2">
+      <section className="scroll-mt-4 space-y-2">
         <div className="flex items-baseline gap-2">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             {symbol} money move
