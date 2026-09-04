@@ -1,5 +1,5 @@
 {
-  "Comment": "DIS daily orchestrator: Data \u2192 Premarket \u2192 model_3mix \u2192 model_y2y3 \u2192 Range Reclaim. Range Reclaim fades Model1 y4/y5 band breakouts; writes range_reclaim/{T}/*.json only (see tradespark/range_reclaim/README.md). Backup: infrastructure/step-functions/_backups/pre-range-reclaim_*",
+  "Comment": "DIS daily orchestrator: Data → Premarket → model_3mix → model_y2y3 → Range Reclaim. Range Reclaim fades Model1 y4/y5 band breakouts; writes range_reclaim/{T}/*.json only (see tradespark/range_reclaim/README.md). Backup: infrastructure/step-functions/_backups/pre-range-reclaim_*",
   "StartAt": "Data",
   "States": {
     "Data": {
@@ -136,7 +136,7 @@
       "Type": "Succeed"
     },
     "RangeReclaim": {
-      "Comment": "Model Range Reclaim \u2014 AFTER y2y3 so tier+hands available for size bonuses. Logic: pred_high=prev_close+y4, pred_low=prev_close+y5; OS>=0.3% prev_close; short if close>pred_high (1% stop); long if close<pred_low (no stop); size 1.0 +0.5 tier(+0.5 y2y3 agree on longs). Private code in tradespark/range_reclaim.",
+      "Comment": "Model Range Reclaim — AFTER y2y3 so tier+hands available for size bonuses. Logic: pred_high=prev_close+y4, pred_low=prev_close+y5; OS>=0.3% prev_close; short if close>pred_high (1% stop); long if close<pred_low (no stop); size 1.0 +0.5 tier(+0.5 y2y3 agree on longs). Private code in tradespark/range_reclaim.",
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
@@ -161,10 +161,42 @@
             "States.ALL"
           ],
           "ResultPath": "$.range_reclaim_error",
-          "Next": "Succeed"
+          "Next": "MoneyFlowHorizon"
         }
       ],
       "ResultPath": "$.range_reclaim",
+      "Next": "MoneyFlowHorizon"
+    },
+    "MoneyFlowHorizon": {
+      "Comment": "5/10/15/20-day DIS range forecast from options money-flow features. Runs LAST, after everything else has written. Shared Lambda ml-moneyflow-horizon with {\"ticker\":\"DIS\"} -- reads db/tickers/DIS/predixa.db read-only (never re-uploads) and writes only charts/moneyflow_horizon/DIS/ (a key no other Lambda touches), so it cannot race or collide with any other step. Soft-fails so an issue here can never break the rest of the morning pipeline.",
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:ml-moneyflow-horizon",
+        "Payload": {
+          "ticker": "DIS"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 20,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.moneyflow_horizon_error",
+          "Next": "Succeed"
+        }
+      ],
+      "ResultPath": "$.moneyflow_horizon",
       "Next": "Succeed"
     }
   }

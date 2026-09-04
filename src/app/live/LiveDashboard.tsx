@@ -10,8 +10,15 @@ import HorizonLinesChart from '../moneyflow-horizon/HorizonLinesChart'
 
 const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO', 'COIN', 'MARA', 'MSTR', 'PLTR', 'HOOD', 'SOFI', 'WULF'] as const
 const ROTATE_OPTIONS = [15, 30] as const
-// Money-Flow Horizon runs only for these tickers so far.
-const MFH_TICKERS: string[] = ['SPY', 'QQQ', 'NVDA', 'TSLA']
+// Money-Flow Horizon Lambda now runs for the full 47-ticker y2y3 universe
+// (SPY + these 46). Every ticker in TICKERS above is covered.
+const MFH_TICKERS: string[] = [
+  'SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'AMZN', 'AMD', 'AVGO', 'BA', 'BABA', 'BAC',
+  'BITO', 'COIN', 'DIS', 'EFA', 'F', 'FXI', 'GLD', 'GOOG', 'HOOD', 'HYG', 'IBIT',
+  'INTC', 'IWM', 'JD', 'JPM', 'MARA', 'META', 'MRNA', 'MSFT', 'MSTR', 'MU', 'NFLX',
+  'ORCL', 'PLTR', 'SHOP', 'SLV', 'SMCI', 'SOFI', 'SOXL', 'SOXS', 'TLT', 'TQQQ',
+  'TSLL', 'UBER', 'WMT', 'WULF', 'XOM',
+]
 
 export default function LiveDashboard() {
   const [symbol, setSymbol] = useState<(typeof TICKERS)[number]>('SPY')
