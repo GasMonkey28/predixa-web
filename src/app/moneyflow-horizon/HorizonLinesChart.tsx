@@ -442,10 +442,18 @@ export default function HorizonLinesChart({
       return { r, down, reset }
     })
 
-    // Click-and-drag to pan the plot area itself, like TradingView -- grabs
-    // the chart and scrolls it under the cursor. Skips clicks that started on
-    // an axis hit-rect (those zoom instead) since pointerdown there already
-    // handles its own drag and this would otherwise double-fire via bubbling.
+    // Click-and-drag anywhere on the plot, like TradingView -- but a plain
+    // pointerdown there is ambiguous (pan vs. zoom) until the user actually
+    // moves. Decide from the FIRST few pixels of movement: mostly sideways
+    // -> pan (scroll through time); mostly vertical -> zoom Y, same formula
+    // as dragging the dedicated y-axis strip. Without this, a drag that
+    // starts a couple pixels inside the plot instead of exactly on the
+    // narrow axis margin fell through to pan-only, which ignores vertical
+    // movement entirely -- from the user's side that reads as "zoom barely
+    // does anything" (and the chart quietly panned sideways under their
+    // cursor instead, so the candle/price they thought they were on shifted).
+    // Skips clicks that started on an axis hit-rect (those have their own
+    // dedicated drag) so this doesn't double-fire via event bubbling.
     let panCleanup: (() => void) | null = null
     const onPlotPointerDown = (e: PointerEvent) => {
       if ((e.target as Element).closest('.mfh-axis-hit')) return
@@ -455,12 +463,27 @@ export default function HorizonLinesChart({
       isDraggingAxisRef.current = true
       tooltip.style.opacity = '0'
       crosshair.style.opacity = '0'
-      svg.style.cursor = 'grabbing'
       const startX = e.clientX
+      const startY = e.clientY
       const startScrollLeft = scrollEl.scrollLeft
+      const startYZoom = yZoom
+      let mode: 'undecided' | 'pan' | 'yzoom' = 'undecided'
 
       const onWinMove = (ev: PointerEvent) => {
-        scrollEl.scrollLeft = startScrollLeft - (ev.clientX - startX)
+        const dx = ev.clientX - startX
+        const dy = ev.clientY - startY
+        if (mode === 'undecided') {
+          if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return
+          mode = Math.abs(dy) > Math.abs(dx) ? 'yzoom' : 'pan'
+          svg.style.cursor = mode === 'yzoom' ? 'ns-resize' : 'grabbing'
+        }
+        if (mode === 'pan') {
+          scrollEl.scrollLeft = startScrollLeft - dx
+        } else {
+          const delta = startY - ev.clientY
+          const next = startYZoom * Math.exp(-delta / 90)
+          setYZoom(Math.min(10, Math.max(0.02, next)))
+        }
       }
       const onWinUp = () => {
         isDraggingAxisRef.current = false
