@@ -355,17 +355,23 @@ export default function HorizonLinesChart({
 
           // Only still-relevant (unrecovered / full-star) levels get a line --
           // a half star already touched its open price again, so the level is
-          // no longer worth watching. Dash all the way to the right price axis
-          // (rather than stopping at the revisit day) and label that specific
-          // price right on the axis, since with many stars packed into a
-          // narrow chart, inline labels mid-chart piled up unreadably.
+          // no longer worth watching. Dash to the current VIEWPORT's right
+          // edge (not the data's fixed edge, which sits off past the future
+          // margin now and was invisible unless dragged all the way out) and
+          // label the price as a pill matching the main axis labels, right at
+          // that same edge, so it reads as part of the axis rather than a
+          // separate floating number.
           if (!recovered) {
             const startX = xCenter(i)
             const openY = yScale(day.open_price!)
-            const endX = W - M.right
+            const endX = viewEndPx - 4
             if (endX > startX) {
               y2y3Svg += `<line x1="${startX.toFixed(1)}" y1="${openY.toFixed(1)}" x2="${endX.toFixed(1)}" y2="${openY.toFixed(1)}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.6"/>`
-              y2y3Svg += `<text x="${(endX + 8).toFixed(1)}" y="${(openY + 3).toFixed(1)}" text-anchor="start" font-size="9" font-weight="bold" fill="#fbbf24">$${day.open_price!.toFixed(2)}</text>`
+              const label = `$${day.open_price!.toFixed(2)}`
+              const pillW = label.length * 6.2 + 8
+              const pillX = endX - pillW
+              y2y3Svg += `<rect x="${pillX.toFixed(1)}" y="${(openY - 7).toFixed(1)}" width="${pillW.toFixed(1)}" height="14" rx="2" fill="#78350f" opacity="0.92"/>`
+              y2y3Svg += `<text x="${(endX - 4).toFixed(1)}" y="${(openY + 3).toFixed(1)}" text-anchor="end" font-size="9" font-weight="bold" fill="#fde68a">${label}</text>`
             }
           }
         }
