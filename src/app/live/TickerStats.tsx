@@ -46,7 +46,13 @@ const sigStyle = (s?: string) =>
       ? 'bg-rose-600 text-white'
       : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
 
-export default function TickerStats({ symbol }: { symbol: string }) {
+export default function TickerStats({
+  symbol,
+  showOhlc = true,
+}: {
+  symbol: string
+  showOhlc?: boolean
+}) {
   const [tiers, setTiers] = useState<Tiers | null>(null)
   const [y2y3, setY2y3] = useState<Y2y3 | null>(null)
   const [ohlc, setOhlc] = useState<Bar_[] | null>(null)
@@ -66,10 +72,11 @@ export default function TickerStats({ symbol }: { symbol: string }) {
         .then((r) => r.json())
         .then((d) => !dead && setY2y3(d))
         .catch(() => {})
-      fetch(`/api/ohlc-40${q}`, { cache: 'no-store' })
-        .then((r) => r.json())
-        .then((d) => !dead && setOhlc(d?.bars ?? []))
-        .catch(() => {})
+      if (showOhlc)
+        fetch(`/api/ohlc-40${q}`, { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((d) => !dead && setOhlc(d?.bars ?? []))
+          .catch(() => {})
     }
     load()
     const id = setInterval(load, POLL_MS)
@@ -77,7 +84,7 @@ export default function TickerStats({ symbol }: { symbol: string }) {
       dead = true
       clearInterval(id)
     }
-  }, [symbol])
+  }, [symbol, showOhlc])
 
   const candles = useMemo(
     () =>
@@ -167,6 +174,7 @@ export default function TickerStats({ symbol }: { symbol: string }) {
         )}
       </div>
 
+      {showOhlc && (
       <div>
         <div className="flex items-baseline justify-between">
           <div className="text-xs uppercase tracking-wide text-gray-400">40-day OHLC</div>
@@ -219,6 +227,7 @@ export default function TickerStats({ symbol }: { symbol: string }) {
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }

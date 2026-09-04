@@ -4,13 +4,13 @@ import axios from 'axios'
 import { config } from '@/lib/server/config'
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/server/rate-limit'
 import { logger } from '@/lib/server/logger'
+import { isSupportedTicker, moneyflowHorizonHistoryKey, normalizeTicker } from '@/lib/tickers'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const maxDuration = 30
 
 const BUCKET = config.marketData.bucket
-const KEY = 'charts/moneyflow_horizon/history.json'
 
 async function fetchKey(bucket: string, key: string) {
   const urls = [
@@ -45,15 +45,23 @@ export async function GET(request: NextRequest) {
     })
   }
 
+  const ticker = normalizeTicker(request.nextUrl.searchParams.get('ticker') || 'SPY')
+  if (!isSupportedTicker(ticker)) {
+    return NextResponse.json(
+      { status: 'error', error: `Unsupported ticker: ${ticker}` },
+      { status: 400, headers: getRateLimitHeaders(clientIp) }
+    )
+  }
+
   try {
-    const data = await fetchKey(BUCKET, KEY)
+    const data = await fetchKey(BUCKET, moneyflowHorizonHistoryKey(ticker))
     return NextResponse.json(data, {
       // this is a backtest snapshot, not a live-updating feed -- safe to cache briefly
       headers: { 'Cache-Control': 'public, max-age=300', ...getRateLimitHeaders(clientIp) },
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
-    logger.warn({ error: message }, 'moneyflow-horizon history fetch failed')
+    logger.warn({ error: message, ticker }, 'moneyflow-horizon history fetch failed')
     return NextResponse.json(
       { status: 'missing', error: message },
       { status: 200, headers: { 'Cache-Control': 'no-store', ...getRateLimitHeaders(clientIp) } }

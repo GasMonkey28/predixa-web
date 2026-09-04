@@ -40,6 +40,20 @@ export function model2ChartKey(ticker: string): string {
   return `model_y2y3/${ticker}/chart/latest.json`
 }
 
+/** Money-Flow Horizon (5/10/15/20-day range forecast) feeder JSON key. */
+export function moneyflowHorizonKey(ticker: string): string {
+  const t = normalizeTicker(ticker)
+  if (t === 'SPY') return 'charts/moneyflow_horizon/latest.json'
+  return `charts/moneyflow_horizon/${t}/latest.json`
+}
+
+/** Money-Flow Horizon backtest history JSON key. */
+export function moneyflowHorizonHistoryKey(ticker: string): string {
+  const t = normalizeTicker(ticker)
+  if (t === 'SPY') return 'charts/moneyflow_horizon/history.json'
+  return `charts/moneyflow_horizon/${t}/history.json`
+}
+
 /** Range Reclaim (Model Reclaim) feeder JSON key. */
 export function rangeReclaimLatestKey(ticker: string): string {
   return `range_reclaim/${normalizeTicker(ticker)}/latest.json`

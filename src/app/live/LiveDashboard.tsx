@@ -6,15 +6,20 @@ import { clsx } from 'clsx'
 import MoneyMoveChart from './MoneyMoveChart'
 import OptionChainLive from './OptionChainLive'
 import TickerStats from './TickerStats'
+import HorizonLinesChart from '../moneyflow-horizon/HorizonLinesChart'
 
 const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO', 'COIN', 'MARA', 'MSTR', 'PLTR', 'HOOD', 'SOFI', 'WULF'] as const
 const ROTATE_OPTIONS = [15, 30] as const
+// Money-Flow Horizon runs only for these tickers so far.
+const MFH_TICKERS: string[] = ['SPY', 'QQQ', 'NVDA', 'TSLA']
 
 export default function LiveDashboard() {
   const [symbol, setSymbol] = useState<(typeof TICKERS)[number]>('SPY')
   const [rotate, setRotate] = useState(false)
   const [rotateSec, setRotateSec] = useState<(typeof ROTATE_OPTIONS)[number]>(30)
   const [showChain, setShowChain] = useState(false)
+
+  const hasMFH = MFH_TICKERS.includes(symbol)
 
   // keep the interval callback pointed at the latest symbol without
   // re-arming the timer every tick
@@ -107,7 +112,22 @@ export default function LiveDashboard() {
             expiring today · next two monthlies · all expirations
           </span>
         </div>
-        <MoneyMoveChart symbol={symbol} rightPanel={<TickerStats symbol={symbol} />} />
+        <MoneyMoveChart
+          symbol={symbol}
+          rightPanel={
+            <div className="space-y-4">
+              <TickerStats symbol={symbol} showOhlc={!hasMFH} />
+              {hasMFH && (
+                <div className="space-y-2">
+                  <div className="text-xs uppercase tracking-wide text-gray-400">
+                    money-flow horizon · 5 / 10 / 15 / 20-day range
+                  </div>
+                  <HorizonLinesChart symbol={symbol} height={440} barWidth={7} />
+                </div>
+              )}
+            </div>
+          }
+        />
       </section>
 
       {showChain && (

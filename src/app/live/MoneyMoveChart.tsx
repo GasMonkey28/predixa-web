@@ -631,31 +631,35 @@ export default function MoneyMoveChart({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-x-5 gap-y-6 [grid-template-columns:repeat(auto-fit,minmax(20rem,1fr))]">
-        {columns.map((c) =>
-          c.series.length ? (
-            <MoneyMoveTrack
-              key={c.key}
-              heading={c.heading}
-              sub={c.sub}
-              allSeries={c.series}
-              spotPath={spotPath}
-              open={open}
-              close={close}
-              spot={spot}
-              toggle={c.toggle}
-              ul={symbol}
-            />
-          ) : (
-            <div key={c.key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{c.heading}</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                No flow captured for this expiry yet.
-              </p>
-            </div>
-          )
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
+        <div className="min-w-0 flex-1 grid gap-x-5 gap-y-6 [grid-template-columns:repeat(auto-fit,minmax(17rem,1fr))]">
+          {columns.map((c) =>
+            c.series.length ? (
+              <MoneyMoveTrack
+                key={c.key}
+                heading={c.heading}
+                sub={c.sub}
+                allSeries={c.series}
+                spotPath={spotPath}
+                open={open}
+                close={close}
+                spot={spot}
+                toggle={c.toggle}
+                ul={symbol}
+              />
+            ) : (
+              <div key={c.key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{c.heading}</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  No flow captured for this expiry yet.
+                </p>
+              </div>
+            )
+          )}
+        </div>
+        {rightPanel && (
+          <div className="min-w-0 xl:w-[38rem] xl:shrink-0">{rightPanel}</div>
         )}
-        {rightPanel && <div className="min-w-0">{rightPanel}</div>}
       </div>
 
       <details className="max-w-4xl text-xs text-gray-400">

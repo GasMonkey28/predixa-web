@@ -19,11 +19,19 @@ const SERIES = [
   { key: '20d', label: '20-day', color: 'var(--mfh-series-5)' },
 ] as const
 
-const HH = 420
 const M = { top: 16, right: 18, bottom: 30, left: 58 }
-const BAR_W = 5.5
 
-export default function HorizonLinesChart() {
+export default function HorizonLinesChart({
+  symbol = 'SPY',
+  height = 420,
+  barWidth = 5.5,
+}: {
+  symbol?: string
+  height?: number
+  barWidth?: number
+}) {
+  const HH = height
+  const BAR_W = barWidth
   const [data, setData] = useState<HistoryPayload | null>(null)
   const [error, setError] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -35,11 +43,13 @@ export default function HorizonLinesChart() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/moneyflow-horizon/history')
+    setData(null)
+    setError(false)
+    fetch(`/api/moneyflow-horizon/history?ticker=${encodeURIComponent(symbol)}`)
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return
-        if (d?.status === 'missing') setError(true)
+        if (d?.status === 'missing' || d?.status === 'error') setError(true)
         else setData(d)
       })
       .catch(() => {
@@ -48,7 +58,7 @@ export default function HorizonLinesChart() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [symbol])
 
   useEffect(() => {
     if (!data || !svgRef.current) return

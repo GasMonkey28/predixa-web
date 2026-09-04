@@ -161,10 +161,42 @@
             "States.ALL"
           ],
           "ResultPath": "$.range_reclaim_error",
-          "Next": "Succeed"
+          "Next": "MoneyFlowHorizon"
         }
       ],
       "ResultPath": "$.range_reclaim",
+      "Next": "MoneyFlowHorizon"
+    },
+    "MoneyFlowHorizon": {
+      "Comment": "5/10/15/20-day TSLA range forecast from options money-flow features. Runs LAST, after everything else has written. Shared Lambda ml-moneyflow-horizon with {\"ticker\":\"TSLA\"} -- reads db/tickers/TSLA/predixa.db read-only (never re-uploads) and writes only charts/moneyflow_horizon/TSLA/ (a key no other Lambda touches), so it cannot race or collide with any other step. Soft-fails so an issue here can never break the rest of the morning pipeline.",
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:822233328169:function:ml-moneyflow-horizon",
+        "Payload": {
+          "ticker": "TSLA"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 20,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.moneyflow_horizon_error",
+          "Next": "Succeed"
+        }
+      ],
+      "ResultPath": "$.moneyflow_horizon",
       "Next": "Succeed"
     }
   }
