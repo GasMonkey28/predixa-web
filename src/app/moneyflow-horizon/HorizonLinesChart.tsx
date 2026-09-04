@@ -83,6 +83,10 @@ export default function HorizonLinesChart({
   // ticker changes so switching symbols doesn't carry over a weird zoom.
   const [barW, setBarW] = useState(barWidth)
   const [yZoom, setYZoom] = useState(1)
+  // Dollar offset applied on top of the auto-fit price window -- lets you
+  // pan vertically (drag inside the plot) to look above/below what's
+  // currently auto-fit without changing how zoomed in you are.
+  const [yPanOffset, setYPanOffset] = useState(0)
   // An in-progress drag's rAF loop + window listeners live in here so they
   // survive the redraw effect rerunning mid-drag (every zoom tick changes
   // barW/yZoom, which reruns that effect) -- only real teardown (unmount or
@@ -92,6 +96,7 @@ export default function HorizonLinesChart({
     activeDragRef.current?.()
     setBarW(barWidth)
     setYZoom(1)
+    setYPanOffset(0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol])
   useEffect(() => () => activeDragRef.current?.(), [])
@@ -104,6 +109,28 @@ export default function HorizonLinesChart({
   const isDraggingAxisRef = useRef(false)
   const lastDataRef = useRef<HistoryPayload | null>(null)
   const [, forceRerender] = useState(0)
+  // The price axis auto-fits whatever's currently scrolled into view, so a
+  // plain scroll (trackpad, scrollbar, or the plot-drag pan) needs to trigger
+  // a re-fit too -- not just zoom ticks, which are the only thing the main
+  // draw effect otherwise reacts to.
+  const [scrollTick, setScrollTick] = useState(0)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    let raf = 0
+    const onScroll = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        setScrollTick((t) => t + 1)
+      })
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [data])
 
   useEffect(() => {
     let cancelled = false
@@ -200,22 +227,54 @@ export default function HorizonLinesChart({
 
     const plotH = HH - M.top - M.bottom
     const W = M.left + M.right + totalSlots * BAR_W
+    const xCenter = (i: number) => M.left + (i + 0.5) * BAR_W
+
+    // Auto-fit the price axis to whichever candles are actually scrolled
+    // into view (not the entire multi-year history) -- otherwise the price
+    // scale, and what a zoom drag centers on, has no relationship to the
+    // bars on screen. Figure out the visible index range from where the
+    // scroll position is about to land (see the ratio-preserving restore
+    // below) rather than the stale pre-render scrollLeft.
+    const clientW = scrollEl?.clientWidth ?? 0
+    let viewStartPx: number
+    if (isNewData || !scrollEl || prevMaxScroll <= 0) {
+      viewStartPx = Math.max(0, W - clientW)
+    } else {
+      const newMaxScroll = Math.max(0, W - clientW)
+      viewStartPx = prevScrollRatio * newMaxScroll
+    }
+    const viewEndPx = viewStartPx + clientW
+    const firstVisibleIdx = Math.max(0, Math.floor((viewStartPx - M.left) / BAR_W))
+    const lastVisibleIdx = Math.min(totalSlots - 1, Math.ceil((viewEndPx - M.left) / BAR_W))
 
     const allPrices: number[] = []
-    bars.forEach((b) => {
+    bars.forEach((b, i) => {
+      if (i < firstVisibleIdx || i > lastVisibleIdx) return
       if (b.high != null) allPrices.push(b.high)
       if (b.low != null) allPrices.push(b.low)
     })
-    byDate.forEach((s) => Object.values(s.byDate).forEach((v) => allPrices.push(v.predClose)))
+    byDate.forEach((s) =>
+      Object.entries(s.byDate).forEach(([date, v]) => {
+        const i = dateIdx[date]
+        if (i !== undefined && i >= firstVisibleIdx && i <= lastVisibleIdx) allPrices.push(v.predClose)
+      })
+    )
+    // Nothing landed in view (e.g. viewport wider than data) -- fall back to
+    // the full range rather than an empty/NaN scale.
+    if (!allPrices.length) {
+      bars.forEach((b) => {
+        if (b.high != null) allPrices.push(b.high)
+        if (b.low != null) allPrices.push(b.low)
+      })
+    }
     const yMinBase = Math.min(...allPrices) * 0.99
     const yMaxBase = Math.max(...allPrices) * 1.01
-    const yCenter = (yMinBase + yMaxBase) / 2
+    const yCenter = (yMinBase + yMaxBase) / 2 + yPanOffset
     const yHalfSpan = ((yMaxBase - yMinBase) / 2) * yZoom
     const yMin = yCenter - yHalfSpan
     const yMax = yCenter + yHalfSpan
 
     const xLeft = (i: number) => M.left + i * BAR_W
-    const xCenter = (i: number) => M.left + (i + 0.5) * BAR_W
     const yScale = (v: number) => M.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH
 
     let gridSvg = ''
@@ -455,7 +514,10 @@ export default function HorizonLinesChart({
       window.addEventListener('pointerup', onWinUp)
       activeDragRef.current = onWinUp
     }
-    const resetY = () => setYZoom(1)
+    const resetY = () => {
+      setYZoom(1)
+      setYPanOffset(0)
+    }
     const resetX = () => setBarW(barWidth)
     const hitRects = Array.from(svg.querySelectorAll<SVGRectElement>('.mfh-axis-hit'))
     const downHandlers = hitRects.map((r) => {
@@ -467,18 +529,13 @@ export default function HorizonLinesChart({
       return { r, down, reset }
     })
 
-    // Click-and-drag anywhere on the plot, like TradingView -- but a plain
-    // pointerdown there is ambiguous (pan vs. zoom) until the user actually
-    // moves. Decide from the FIRST few pixels of movement: mostly sideways
-    // -> pan (scroll through time); mostly vertical -> zoom Y, same formula
-    // as dragging the dedicated y-axis strip. Without this, a drag that
-    // starts a couple pixels inside the plot instead of exactly on the
-    // narrow axis margin fell through to pan-only, which ignores vertical
-    // movement entirely -- from the user's side that reads as "zoom barely
-    // does anything" (and the chart quietly panned sideways under their
-    // cursor instead, so the candle/price they thought they were on shifted).
+    // Click-and-drag anywhere on the plot pans in both directions -- sideways
+    // scrolls through time, up/down shifts the (auto-fit) price window by an
+    // offset without changing how zoomed in it is. Zooming only ever comes
+    // from dragging the dedicated axis margins, never from the plot itself.
     // Skips clicks that started on an axis hit-rect (those have their own
     // dedicated drag) so this doesn't double-fire via event bubbling.
+    const pricePerPixel = (yMax - yMin) / plotH
     const onPlotPointerDown = (e: PointerEvent) => {
       if ((e.target as Element).closest('.mfh-axis-hit')) return
       const scrollEl = scrollRef.current
@@ -488,35 +545,19 @@ export default function HorizonLinesChart({
       isDraggingAxisRef.current = true
       tooltip.style.opacity = '0'
       crosshair.style.opacity = '0'
+      svg.style.cursor = 'grabbing'
       const startX = e.clientX
       const startY = e.clientY
       const startScrollLeft = scrollEl.scrollLeft
-      let mode: 'undecided' | 'pan' | 'yzoom' = 'undecided'
-      let loop: ReturnType<typeof startContinuousZoom> | null = null
+      const startYPanOffset = yPanOffset
 
       const onWinMove = (ev: PointerEvent) => {
-        const dx = ev.clientX - startX
-        const dy = ev.clientY - startY
-        if (mode === 'undecided') {
-          if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return
-          mode = Math.abs(dy) > Math.abs(dx) ? 'yzoom' : 'pan'
-          svg.style.cursor = mode === 'yzoom' ? 'ns-resize' : 'grabbing'
-          // Seed with the ORIGINAL pointerdown position, not ev.clientY (the
-          // position where the gesture was just decided, already however far
-          // from the start) -- otherwise distance-from-start begins at zero
-          // and holding still after this point zooms nothing.
-          if (mode === 'yzoom') loop = startContinuousZoom('y', startY)
-        }
-        if (mode === 'pan') {
-          scrollEl.scrollLeft = startScrollLeft - dx
-        } else {
-          loop?.updatePos(ev.clientY)
-        }
+        scrollEl.scrollLeft = startScrollLeft - (ev.clientX - startX)
+        setYPanOffset(startYPanOffset + (ev.clientY - startY) * pricePerPixel)
       }
       const onWinUp = () => {
         isDraggingAxisRef.current = false
         svg.style.cursor = 'grab'
-        loop?.stop()
         window.removeEventListener('pointermove', onWinMove)
         window.removeEventListener('pointerup', onWinUp)
         activeDragRef.current = null
@@ -541,7 +582,7 @@ export default function HorizonLinesChart({
       // (ticker switch, unmount) stops it explicitly elsewhere.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, y2y3Days, barW, yZoom])
+  }, [data, y2y3Days, barW, yZoom, yPanOffset, scrollTick])
 
   function toggleSeries(key: string) {
     visibleRef.current[key] = !visibleRef.current[key]
