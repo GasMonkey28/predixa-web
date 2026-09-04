@@ -83,11 +83,18 @@ export default function HorizonLinesChart({
   // ticker changes so switching symbols doesn't carry over a weird zoom.
   const [barW, setBarW] = useState(barWidth)
   const [yZoom, setYZoom] = useState(1)
+  // An in-progress drag's rAF loop + window listeners live in here so they
+  // survive the redraw effect rerunning mid-drag (every zoom tick changes
+  // barW/yZoom, which reruns that effect) -- only real teardown (unmount or
+  // ticker switch) should stop a drag, not the chart simply redrawing itself.
+  const activeDragRef = useRef<(() => void) | null>(null)
   useEffect(() => {
+    activeDragRef.current?.()
     setBarW(barWidth)
     setYZoom(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol])
+  useEffect(() => () => activeDragRef.current?.(), [])
   const BAR_W = barW
   const svgRef = useRef<SVGSVGElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -392,43 +399,61 @@ export default function HorizonLinesChart({
     svg.addEventListener('pointermove', onMove)
     svg.addEventListener('pointerleave', onLeave)
 
-    // Axis drag-to-zoom, TradingView style. Only pointerdown is bound to the
-    // (re-created-every-render) hit rects; pointermove/up go on window so the
-    // drag survives this effect rerunning mid-drag when barW/yZoom change.
-    let activeCleanup: (() => void) | null = null
+    // Axis drag-to-zoom, TradingView style -- and continuous: holding the
+    // mouse away from the start point keeps zooming every frame for as long
+    // as the button is down, the way TradingView's axis drag does, rather
+    // than mapping total drag distance to a single one-shot zoom amount.
+    // Only pointerdown is bound to the (re-created-every-render) hit rects;
+    // pointermove/up go on window, and the rAF loop + those listeners are
+    // tracked in activeDragRef (not a local variable) so a zoom tick's own
+    // redraw -- which reruns this whole effect -- doesn't kill the drag
+    // that's still being held.
+    const startContinuousZoom = (axis: 'x' | 'y', clientPos: number) => {
+      let currentPos = clientPos
+      const startPos = clientPos
+      let lastTime = performance.now()
+      let rafId = 0
+      const tick = (now: number) => {
+        const dt = Math.min(0.05, (now - lastTime) / 1000)
+        lastTime = now
+        // Distance from the start point is a RATE, not a one-time amount --
+        // the farther you hold from where you started, the faster it zooms,
+        // continuing every frame even if you stop moving. It's fine if some
+        // history ends up outside the visible range once zoomed in hard;
+        // the axis isn't trying to keep every bar in frame.
+        const distance = axis === 'y' ? startPos - currentPos : currentPos - startPos
+        if (Math.abs(distance) > 3) {
+          const rate = distance / 70
+          if (axis === 'y') {
+            setYZoom((z) => Math.min(10, Math.max(0.02, z * Math.exp(-rate * dt))))
+          } else {
+            setBarW((w) => Math.min(80, Math.max(0.4, w * Math.exp(rate * dt))))
+          }
+        }
+        rafId = requestAnimationFrame(tick)
+      }
+      rafId = requestAnimationFrame(tick)
+      return { updatePos: (p: number) => { currentPos = p }, stop: () => cancelAnimationFrame(rafId) }
+    }
     const onAxisPointerDown = (axis: 'x' | 'y') => (e: PointerEvent) => {
       e.preventDefault()
+      activeDragRef.current?.()
       isDraggingAxisRef.current = true
       tooltip.style.opacity = '0'
       crosshair.style.opacity = '0'
-      const startPos = axis === 'y' ? e.clientY : e.clientX
-      const startBarW = BAR_W
-      const startYZoom = yZoom
+      const loop = startContinuousZoom(axis, axis === 'y' ? e.clientY : e.clientX)
 
-      const onWinMove = (ev: PointerEvent) => {
-        // Sensitive on purpose -- a normal drag should swing the scale a lot,
-        // like TradingView. It's fine if some history ends up outside the
-        // visible range once zoomed in hard; the axis isn't trying to keep
-        // every bar in frame.
-        if (axis === 'y') {
-          const delta = startPos - ev.clientY
-          const next = startYZoom * Math.exp(-delta / 90)
-          setYZoom(Math.min(10, Math.max(0.02, next)))
-        } else {
-          const delta = ev.clientX - startPos
-          const next = startBarW * Math.exp(delta / 90)
-          setBarW(Math.min(80, Math.max(0.4, next)))
-        }
-      }
+      const onWinMove = (ev: PointerEvent) => loop.updatePos(axis === 'y' ? ev.clientY : ev.clientX)
       const onWinUp = () => {
         isDraggingAxisRef.current = false
+        loop.stop()
         window.removeEventListener('pointermove', onWinMove)
         window.removeEventListener('pointerup', onWinUp)
-        activeCleanup = null
+        activeDragRef.current = null
       }
       window.addEventListener('pointermove', onWinMove)
       window.addEventListener('pointerup', onWinUp)
-      activeCleanup = onWinUp
+      activeDragRef.current = onWinUp
     }
     const resetY = () => setYZoom(1)
     const resetX = () => setBarW(barWidth)
@@ -454,20 +479,20 @@ export default function HorizonLinesChart({
     // cursor instead, so the candle/price they thought they were on shifted).
     // Skips clicks that started on an axis hit-rect (those have their own
     // dedicated drag) so this doesn't double-fire via event bubbling.
-    let panCleanup: (() => void) | null = null
     const onPlotPointerDown = (e: PointerEvent) => {
       if ((e.target as Element).closest('.mfh-axis-hit')) return
       const scrollEl = scrollRef.current
       if (!scrollEl) return
       e.preventDefault()
+      activeDragRef.current?.()
       isDraggingAxisRef.current = true
       tooltip.style.opacity = '0'
       crosshair.style.opacity = '0'
       const startX = e.clientX
       const startY = e.clientY
       const startScrollLeft = scrollEl.scrollLeft
-      const startYZoom = yZoom
       let mode: 'undecided' | 'pan' | 'yzoom' = 'undecided'
+      let loop: ReturnType<typeof startContinuousZoom> | null = null
 
       const onWinMove = (ev: PointerEvent) => {
         const dx = ev.clientX - startX
@@ -476,25 +501,29 @@ export default function HorizonLinesChart({
           if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return
           mode = Math.abs(dy) > Math.abs(dx) ? 'yzoom' : 'pan'
           svg.style.cursor = mode === 'yzoom' ? 'ns-resize' : 'grabbing'
+          // Seed with the ORIGINAL pointerdown position, not ev.clientY (the
+          // position where the gesture was just decided, already however far
+          // from the start) -- otherwise distance-from-start begins at zero
+          // and holding still after this point zooms nothing.
+          if (mode === 'yzoom') loop = startContinuousZoom('y', startY)
         }
         if (mode === 'pan') {
           scrollEl.scrollLeft = startScrollLeft - dx
         } else {
-          const delta = startY - ev.clientY
-          const next = startYZoom * Math.exp(-delta / 90)
-          setYZoom(Math.min(10, Math.max(0.02, next)))
+          loop?.updatePos(ev.clientY)
         }
       }
       const onWinUp = () => {
         isDraggingAxisRef.current = false
         svg.style.cursor = 'grab'
+        loop?.stop()
         window.removeEventListener('pointermove', onWinMove)
         window.removeEventListener('pointerup', onWinUp)
-        panCleanup = null
+        activeDragRef.current = null
       }
       window.addEventListener('pointermove', onWinMove)
       window.addEventListener('pointerup', onWinUp)
-      panCleanup = onWinUp
+      activeDragRef.current = onWinUp
     }
     svg.addEventListener('pointerdown', onPlotPointerDown)
 
@@ -506,8 +535,10 @@ export default function HorizonLinesChart({
         r.removeEventListener('pointerdown', down)
         r.removeEventListener('dblclick', reset)
       })
-      activeCleanup?.()
-      panCleanup?.()
+      // Deliberately NOT stopping activeDragRef here -- this cleanup also
+      // runs on every zoom-driven redraw (barW/yZoom changed), and killing
+      // the drag there would cut it off after a single frame. Real teardown
+      // (ticker switch, unmount) stops it explicitly elsewhere.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, y2y3Days, barW, yZoom])
