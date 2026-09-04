@@ -665,7 +665,7 @@ export default function MoneyMoveChart({
           </div>
         </div>
         {rightPanel && (
-          <div className="min-w-0 xl:w-[57rem] xl:shrink-0">{rightPanel}</div>
+          <div className="min-w-0 xl:w-[68.4rem] xl:shrink-0">{rightPanel}</div>
         )}
       </div>
 

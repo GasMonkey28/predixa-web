@@ -123,7 +123,7 @@ export default function LiveDashboard() {
                   <div className="text-xs uppercase tracking-wide text-gray-400">
                     money-flow horizon · 5 / 10 / 15 / 20-day range
                   </div>
-                  <HorizonLinesChart symbol={symbol} height={440} barWidth={7} />
+                  <HorizonLinesChart symbol={symbol} height={572} barWidth={8.4} />
                 </div>
               )}
             </div>
