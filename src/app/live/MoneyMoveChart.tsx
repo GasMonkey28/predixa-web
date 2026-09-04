@@ -632,30 +632,37 @@ export default function MoneyMoveChart({
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
-        <div className="min-w-0 flex-1 grid gap-x-5 gap-y-6 [grid-template-columns:repeat(auto-fit,minmax(17rem,1fr))]">
-          {columns.map((c) =>
-            c.series.length ? (
-              <MoneyMoveTrack
-                key={c.key}
-                heading={c.heading}
-                sub={c.sub}
-                allSeries={c.series}
-                spotPath={spotPath}
-                open={open}
-                close={close}
-                spot={spot}
-                toggle={c.toggle}
-                ul={symbol}
-              />
-            ) : (
-              <div key={c.key} className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{c.heading}</h3>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  No flow captured for this expiry yet.
-                </p>
+        {/* Fixed-width tracks in a single non-wrapping row (scrolls instead of
+            squeezing) -- keeps "All expirations" always adjacent to the last
+            monthly column and right before the side panel, regardless of
+            how much room the (fixed-width) panel leaves. */}
+        <div className="min-w-0 flex-1 overflow-x-auto">
+          <div className="flex gap-5 pb-1">
+            {columns.map((c) => (
+              <div key={c.key} className="w-80 shrink-0">
+                {c.series.length ? (
+                  <MoneyMoveTrack
+                    heading={c.heading}
+                    sub={c.sub}
+                    allSeries={c.series}
+                    spotPath={spotPath}
+                    open={open}
+                    close={close}
+                    spot={spot}
+                    toggle={c.toggle}
+                    ul={symbol}
+                  />
+                ) : (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{c.heading}</h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      No flow captured for this expiry yet.
+                    </p>
+                  </div>
+                )}
               </div>
-            )
-          )}
+            ))}
+          </div>
         </div>
         {rightPanel && (
           <div className="min-w-0 xl:w-[57rem] xl:shrink-0">{rightPanel}</div>
