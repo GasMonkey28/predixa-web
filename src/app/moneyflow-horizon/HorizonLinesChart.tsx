@@ -11,6 +11,49 @@ type Prediction = {
 type HorizonDataset = { predictions: Prediction[]; ohlc: OhlcBar[] }
 type HistoryPayload = Record<string, HorizonDataset>
 
+// From the y2y3 model chart (/api/model2/daily) -- reused here for the same
+// no-signal-down-day star / open-price recovery line / long-short signal
+// marker overlay that Model2Chart.tsx draws, so the two charts read the same
+// way at a glance.
+type Y2Y3Day = {
+  as_of_date: string
+  open_price: number | null
+  high_price: number | null
+  low_price: number | null
+  close_price: number | null
+  final_signal?: string | null
+}
+
+function isNoSignalDownDay(d: Y2Y3Day): boolean {
+  const signal = d.final_signal
+  if (signal && signal !== 'no_trade') return false
+  if (d.open_price == null || d.close_price == null) return false
+  return d.close_price < d.open_price
+}
+
+function findOpenPriceTouchIndex(days: Y2Y3Day[], startIndex: number, openPrice: number): number | null {
+  for (let j = startIndex + 1; j < days.length; j++) {
+    const day = days[j]
+    if (day.low_price != null && day.high_price != null && day.low_price <= openPrice && openPrice <= day.high_price) {
+      return j
+    }
+  }
+  return null
+}
+
+function starSvg(x: number, y: number, recovered: boolean, id: string): string {
+  const base = `x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="13"`
+  if (!recovered) {
+    return `<text ${base} fill="#fbbf24" stroke="#92400e" stroke-width="0.4">★</text>`
+  }
+  const clipId = `mfh-half-star-${id}`
+  return (
+    `<g><defs><clipPath id="${clipId}"><rect x="${(x - 7).toFixed(1)}" y="${(y - 7).toFixed(1)}" width="7" height="14"/></clipPath></defs>` +
+    `<text ${base} fill="none" stroke="#fbbf24" stroke-width="1">★</text>` +
+    `<text ${base} fill="#fbbf24" stroke="#92400e" stroke-width="0.4" clip-path="url(#${clipId})">★</text></g>`
+  )
+}
+
 const SERIES = [
   { key: '1d', label: '1-day', color: 'var(--mfh-series-1)' },
   { key: '5d', label: '5-day', color: 'var(--mfh-series-2)' },
@@ -34,6 +77,7 @@ export default function HorizonLinesChart({
   const BAR_W = barWidth
   const [data, setData] = useState<HistoryPayload | null>(null)
   const [error, setError] = useState(false)
+  const [y2y3Days, setY2y3Days] = useState<Y2Y3Day[] | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -54,6 +98,24 @@ export default function HorizonLinesChart({
       })
       .catch(() => {
         if (!cancelled) setError(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [symbol])
+
+  // y2y3 model overlay: no-signal-down-day stars, open-price recovery lines,
+  // long/short signal markers -- same read as Model2Chart.tsx's Price Chart.
+  useEffect(() => {
+    let cancelled = false
+    setY2y3Days(null)
+    fetch(`/api/model2/daily?ticker=${encodeURIComponent(symbol)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setY2y3Days(Array.isArray(d?.trading_days) ? d.trading_days : [])
+      })
+      .catch(() => {
+        if (!cancelled) setY2y3Days([])
       })
     return () => {
       cancelled = true
@@ -156,6 +218,49 @@ export default function HorizonLinesChart({
       candlesSvg += `<rect x="${(x - bodyW / 2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bodyW.toFixed(1)}" height="${Math.max(1, bodyBot - bodyTop).toFixed(1)}" fill="${up ? 'var(--mfh-surface)' : 'var(--mfh-ink)'}" stroke="var(--mfh-ink)" stroke-width="1"/>`
     })
 
+    // y2y3 model overlay -- only covers whatever recent days the y2y3 chart
+    // (40 trading days) shares with this chart's date range; older candles
+    // just have no marker, same as Model2Chart.tsx's own chart.
+    let y2y3Svg = ''
+    if (y2y3Days && y2y3Days.length) {
+      y2y3Days.forEach((day, j) => {
+        const i = dateIdx[day.as_of_date]
+        if (i === undefined || i >= bars.length) return
+        const bar = bars[i]
+        if (bar.high == null || bar.low == null) return
+
+        if (isNoSignalDownDay(day)) {
+          const recovered = findOpenPriceTouchIndex(y2y3Days, j, day.open_price!) != null
+          y2y3Svg += starSvg(xCenter(i), yScale(bar.high) - 10, recovered, `${symbol}-${i}`)
+
+          const touchIdx = findOpenPriceTouchIndex(y2y3Days, j, day.open_price!)
+          const startX = xCenter(i)
+          const openY = yScale(day.open_price!)
+          let endX = W - M.right
+          let showLabel = true
+          if (touchIdx != null) {
+            const touchI = dateIdx[y2y3Days[touchIdx].as_of_date]
+            if (touchI !== undefined) {
+              endX = xCenter(touchI)
+              showLabel = false
+            }
+          }
+          if (endX > startX) {
+            y2y3Svg += `<line x1="${startX.toFixed(1)}" y1="${openY.toFixed(1)}" x2="${endX.toFixed(1)}" y2="${openY.toFixed(1)}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.75"/>`
+            if (showLabel) {
+              y2y3Svg += `<text x="${(endX - 4).toFixed(1)}" y="${(openY - 4).toFixed(1)}" text-anchor="end" font-size="10" fill="#fbbf24" font-weight="bold">$${day.open_price!.toFixed(2)}</text>`
+            }
+          }
+        }
+
+        if (day.final_signal && day.final_signal !== 'no_trade') {
+          const isLong = day.final_signal === 'long'
+          const cy = isLong ? yScale(bar.high) - 8 : yScale(bar.low) + 8
+          y2y3Svg += `<circle cx="${xCenter(i).toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5" fill="${isLong ? '#10b981' : '#ef4444'}" stroke="white" stroke-width="1"/>`
+        }
+      })
+    }
+
     let linesSvg = ''
     byDate.forEach((s) => {
       const pts = allDates
@@ -181,7 +286,7 @@ export default function HorizonLinesChart({
 
     svg.setAttribute('viewBox', `0 0 ${W} ${HH}`)
     svg.style.width = `${W}px`
-    svg.innerHTML = `${gridSvg}${linesSvg}${candlesSvg}${yLabelsSvg}${xLabelsSvg}<line class="mfh-crosshair" id="mfh-crosshair" y1="${M.top}" y2="${HH - M.bottom}"/>`
+    svg.innerHTML = `${gridSvg}${linesSvg}${candlesSvg}${y2y3Svg}${yLabelsSvg}${xLabelsSvg}<line class="mfh-crosshair" id="mfh-crosshair" y1="${M.top}" y2="${HH - M.bottom}"/>`
 
     // default view to the most recent data, not the oldest
     if (scrollRef.current) {
@@ -241,7 +346,7 @@ export default function HorizonLinesChart({
       svg.removeEventListener('pointerleave', onLeave)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data])
+  }, [data, y2y3Days])
 
   function toggleSeries(key: string) {
     visibleRef.current[key] = !visibleRef.current[key]
@@ -350,6 +455,20 @@ export default function HorizonLinesChart({
             {s.label}
           </button>
         ))}
+        {y2y3Days && y2y3Days.length > 0 && (
+          <>
+            <span className="mfh-legend-item" title="No trade signal on a down day">
+              <span style={{ color: '#fbbf24' }}>★</span> no-trade down day
+            </span>
+            <span className="mfh-legend-item" title="Open price on a starred day, until price revisits it">
+              <span style={{ display: 'inline-block', width: 14, height: 0, borderTop: '1.5px dashed #fbbf24' }} /> open to revisit
+            </span>
+            <span className="mfh-legend-item" title="y2y3 model long/short signal">
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />/
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} /> long/short
+            </span>
+          </>
+        )}
       </div>
 
       <div className="mfh-scroll" ref={scrollRef}>
