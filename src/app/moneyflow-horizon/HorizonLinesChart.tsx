@@ -71,12 +71,30 @@ const SERIES = [
 
 const HORIZON_DAYS: Record<string, number> = { '1d': 1, '5d': 5, '10d': 10, '15d': 15, '20d': 20 }
 
-// The shift/band toggles are saved to localStorage under these keys so that
-// clicking one sets the new default for every MFH chart -- every ticker,
+// The shift/band controls are saved to localStorage under these keys so that
+// changing one sets the new default for every MFH chart -- every ticker,
 // both the /live dashboard and the standalone /moneyflow-horizon page -- not
 // just the currently open chart.
 const LS_KEY_SHIFT_TO_TARGET = 'mfh_shiftToTarget'
 const LS_KEY_SHOW_BAND = 'mfh_showBand'
+
+// 'off' = every line at its origin day; 'all' = every line shifted forward to
+// the day it's forecasting; a series key = only that one horizon shifted.
+type ShiftMode = 'off' | 'all' | '1d' | '5d' | '10d' | '15d' | '20d'
+const SHIFT_MODES: ShiftMode[] = ['off', 'all', '1d', '5d', '10d', '15d', '20d']
+
+function readShiftMode(): ShiftMode {
+  if (typeof window === 'undefined') return 'all'
+  try {
+    const v = window.localStorage.getItem(LS_KEY_SHIFT_TO_TARGET)
+    if (v && (SHIFT_MODES as string[]).includes(v)) return v as ShiftMode
+    if (v === '1') return 'all' // migrate the old boolean pref
+    if (v === '0') return 'off'
+    return 'all'
+  } catch {
+    return 'all'
+  }
+}
 
 function readBoolPref(key: string, fallback: boolean): boolean {
   if (typeof window === 'undefined') return fallback
@@ -88,11 +106,11 @@ function readBoolPref(key: string, fallback: boolean): boolean {
   }
 }
 
-function writeBoolPref(key: string, value: boolean) {
+function writeStrPref(key: string, value: string) {
   try {
-    window.localStorage.setItem(key, value ? '1' : '0')
+    window.localStorage.setItem(key, value)
   } catch {
-    // localStorage unavailable (private mode, disabled) -- toggle still
+    // localStorage unavailable (private mode, disabled) -- the control still
     // works for this session, it just won't stick as the new default.
   }
 }
@@ -155,21 +173,19 @@ export default function HorizonLinesChart({
   const wrapRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const visibleRef = useRef<Record<string, boolean>>({ '1d': false, '5d': false, '10d': true, '15d': false, '20d': true })
-  // Off (default): each line is plotted at the day the forecast was MADE
-  // (origin_date). On: shifted forward by its own horizon so it's plotted at
-  // the day it's actually forecasting (target_date) -- lets you read a
-  // prediction's line directly against the candle it was trying to call.
-  // Deliberately not reset on ticker switch, like the series toggles above.
-  // Persisted to localStorage so toggling it sets the default for every MFH
-  // chart, not just this one.
-  const [shiftToTarget, setShiftToTarget] = useState(() => readBoolPref(LS_KEY_SHIFT_TO_TARGET, false))
+  // Which horizon lines are plotted at the day they're FORECASTING
+  // (target_date) instead of the day the forecast was made (origin_date):
+  // 'all' (default) shifts every line, a series key shifts just that one,
+  // 'off' shifts none. Not reset on ticker switch, like the series toggles
+  // above; persisted to localStorage so it's the default for every MFH chart.
+  const [shiftMode, setShiftMode] = useState<ShiftMode>(() => readShiftMode())
   // Off (default): only the pred_close center line is drawn. On: a shaded
   // band between pred_low_price/pred_high_price is drawn behind each
   // currently-visible series' line too. Not reset on ticker switch; also
   // persisted as the new default for every MFH chart.
   const [showBand, setShowBand] = useState(() => readBoolPref(LS_KEY_SHOW_BAND, false))
-  const toggleShiftToTarget = () => setShiftToTarget((v) => { writeBoolPref(LS_KEY_SHIFT_TO_TARGET, !v); return !v })
-  const toggleShowBand = () => setShowBand((v) => { writeBoolPref(LS_KEY_SHOW_BAND, !v); return !v })
+  const changeShiftMode = (m: ShiftMode) => { writeStrPref(LS_KEY_SHIFT_TO_TARGET, m); setShiftMode(m) }
+  const toggleShowBand = () => setShowBand((v) => { writeStrPref(LS_KEY_SHOW_BAND, !v ? '1' : '0'); return !v })
   const isDraggingAxisRef = useRef(false)
   const lastDataRef = useRef<HistoryPayload | null>(null)
   const [, forceRerender] = useState(0)
@@ -266,7 +282,8 @@ export default function HorizonLinesChart({
     // rather than the day it was made: the resolved target_date if known,
     // else an approximated one for still-pending forecasts.
     const displayDateFor = (seriesKey: string, p: Prediction): string => {
-      if (!shiftToTarget) return p.origin_date
+      const shifted = shiftMode === 'all' || shiftMode === seriesKey
+      if (!shifted) return p.origin_date
       return p.target_date || addTradingDays(p.origin_date, HORIZON_DAYS[seriesKey] ?? 0)
     }
 
@@ -714,7 +731,7 @@ export default function HorizonLinesChart({
       // (ticker switch, unmount) stops it explicitly elsewhere.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, y2y3Days, barW, yZoom, yPanOffset, scrollTick, shiftToTarget, showBand])
+  }, [data, y2y3Days, barW, yZoom, yPanOffset, scrollTick, shiftMode, showBand])
 
   function toggleSeries(key: string) {
     visibleRef.current[key] = !visibleRef.current[key]
@@ -784,6 +801,17 @@ export default function HorizonLinesChart({
         }
         .mfh-toggle.off { opacity: 0.4; }
         .mfh-toggle-line { width: 16px; height: 2.5px; border-radius: 2px; display: inline-block; }
+        .mfh-select {
+          display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--mfh-ink);
+          background: transparent; border: 1px solid var(--mfh-border); border-radius: 999px;
+          padding: 4px 8px 4px 10px; font-family: inherit; transition: opacity 0.12s;
+        }
+        .mfh-select.off { opacity: 0.4; }
+        .mfh-select select {
+          font-family: inherit; font-size: 12px; color: var(--mfh-ink); background: transparent;
+          border: 1px solid var(--mfh-border); border-radius: 6px; padding: 2px 4px; cursor: pointer;
+        }
+        .mfh-select select option { color: initial; }
         .mfh-stats { display: flex; gap: 18px; margin-bottom: 12px; flex-wrap: wrap; font-size: 12px; color: var(--mfh-text-secondary); }
         .mfh-stats b { color: var(--mfh-ink); }
         .mfh-scroll { overflow-x: auto; overflow-y: hidden; border-radius: 8px; }
@@ -825,14 +853,22 @@ export default function HorizonLinesChart({
             {s.label}
           </button>
         ))}
-        <button
-          className={`mfh-toggle${shiftToTarget ? '' : ' off'}`}
-          onClick={toggleShiftToTarget}
-          title="Plot each line at the day it's forecasting (origin + N days) instead of the day the forecast was made -- sets the default for every MFH chart"
+        <label
+          className={`mfh-select${shiftMode === 'off' ? ' off' : ''}`}
+          title="Plot forecast lines at the day they're forecasting (origin + N days) instead of the day the forecast was made -- sets the default for every MFH chart"
         >
-          <span className="mfh-toggle-line" style={{ background: shiftToTarget ? 'var(--mfh-ink)' : 'var(--mfh-text-muted)' }} />
+          <span className="mfh-toggle-line" style={{ background: shiftMode === 'off' ? 'var(--mfh-text-muted)' : 'var(--mfh-ink)' }} />
           shift to target day
-        </button>
+          <select value={shiftMode} onChange={(e) => changeShiftMode(e.target.value as ShiftMode)}>
+            <option value="off">off</option>
+            <option value="all">all horizons</option>
+            {(data ? SERIES.filter((s) => data[s.key]) : []).map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label} only
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className={`mfh-toggle${showBand ? '' : ' off'}`}
           onClick={toggleShowBand}

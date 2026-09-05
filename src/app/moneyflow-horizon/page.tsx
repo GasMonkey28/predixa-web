@@ -40,9 +40,12 @@ export default function MoneyFlowHorizonPage() {
         </h2>
         <p>
           Daily SPY candles with each horizon&apos;s rolling forecast line overlaid
-          &mdash; every colored line traces that horizon&apos;s predicted close, plotted
-          on the day the forecast was made. Toggle any horizon on or off, and hover
-          a day for the full readout.
+          &mdash; every colored line traces that horizon&apos;s predicted close. By
+          default each line is plotted on the day it&apos;s forecasting, so it sits
+          right against the candle it was trying to call; the &ldquo;shift to target
+          day&rdquo; menu can switch any or all lines back to the day the forecast
+          was made. Toggle any horizon on or off, and hover a day for the full
+          readout.
         </p>
         <HorizonLinesChart />
       </section>
