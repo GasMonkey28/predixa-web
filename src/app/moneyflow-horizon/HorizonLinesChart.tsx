@@ -71,6 +71,32 @@ const SERIES = [
 
 const HORIZON_DAYS: Record<string, number> = { '1d': 1, '5d': 5, '10d': 10, '15d': 15, '20d': 20 }
 
+// The shift/band toggles are saved to localStorage under these keys so that
+// clicking one sets the new default for every MFH chart -- every ticker,
+// both the /live dashboard and the standalone /moneyflow-horizon page -- not
+// just the currently open chart.
+const LS_KEY_SHIFT_TO_TARGET = 'mfh_shiftToTarget'
+const LS_KEY_SHOW_BAND = 'mfh_showBand'
+
+function readBoolPref(key: string, fallback: boolean): boolean {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const v = window.localStorage.getItem(key)
+    return v === null ? fallback : v === '1'
+  } catch {
+    return fallback
+  }
+}
+
+function writeBoolPref(key: string, value: boolean) {
+  try {
+    window.localStorage.setItem(key, value ? '1' : '0')
+  } catch {
+    // localStorage unavailable (private mode, disabled) -- toggle still
+    // works for this session, it just won't stick as the new default.
+  }
+}
+
 // Approximate a target date for a still-pending prediction (no resolved
 // target_date yet) by walking forward N trading days (weekends skipped,
 // market holidays not accounted for -- close enough for a visual toggle on
@@ -134,11 +160,16 @@ export default function HorizonLinesChart({
   // the day it's actually forecasting (target_date) -- lets you read a
   // prediction's line directly against the candle it was trying to call.
   // Deliberately not reset on ticker switch, like the series toggles above.
-  const [shiftToTarget, setShiftToTarget] = useState(false)
+  // Persisted to localStorage so toggling it sets the default for every MFH
+  // chart, not just this one.
+  const [shiftToTarget, setShiftToTarget] = useState(() => readBoolPref(LS_KEY_SHIFT_TO_TARGET, false))
   // Off (default): only the pred_close center line is drawn. On: a shaded
   // band between pred_low_price/pred_high_price is drawn behind each
-  // currently-visible series' line too. Not reset on ticker switch.
-  const [showBand, setShowBand] = useState(false)
+  // currently-visible series' line too. Not reset on ticker switch; also
+  // persisted as the new default for every MFH chart.
+  const [showBand, setShowBand] = useState(() => readBoolPref(LS_KEY_SHOW_BAND, false))
+  const toggleShiftToTarget = () => setShiftToTarget((v) => { writeBoolPref(LS_KEY_SHIFT_TO_TARGET, !v); return !v })
+  const toggleShowBand = () => setShowBand((v) => { writeBoolPref(LS_KEY_SHOW_BAND, !v); return !v })
   const isDraggingAxisRef = useRef(false)
   const lastDataRef = useRef<HistoryPayload | null>(null)
   const [, forceRerender] = useState(0)
@@ -796,16 +827,16 @@ export default function HorizonLinesChart({
         ))}
         <button
           className={`mfh-toggle${shiftToTarget ? '' : ' off'}`}
-          onClick={() => setShiftToTarget((v) => !v)}
-          title="Plot each line at the day it's forecasting (origin + N days) instead of the day the forecast was made"
+          onClick={toggleShiftToTarget}
+          title="Plot each line at the day it's forecasting (origin + N days) instead of the day the forecast was made -- sets the default for every MFH chart"
         >
           <span className="mfh-toggle-line" style={{ background: shiftToTarget ? 'var(--mfh-ink)' : 'var(--mfh-text-muted)' }} />
           shift to target day
         </button>
         <button
           className={`mfh-toggle${showBand ? '' : ' off'}`}
-          onClick={() => setShowBand((v) => !v)}
-          title="Shade the predicted high-low range around each visible line, not just its center forecast"
+          onClick={toggleShowBand}
+          title="Shade the predicted high-low range around each visible line, not just its center forecast -- sets the default for every MFH chart"
         >
           <span className="mfh-toggle-line" style={{ background: showBand ? 'var(--mfh-ink)' : 'var(--mfh-text-muted)' }} />
           range band
