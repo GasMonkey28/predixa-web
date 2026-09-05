@@ -6,6 +6,8 @@ type OhlcBar = { date: string; open: number | null; high: number | null; low: nu
 type Prediction = {
   origin_date: string
   pred_close_price: number
+  pred_high_price?: number
+  pred_low_price?: number
   is_pending?: boolean
   /** origin_date + N trading days -- the day this prediction is actually
    *  forecasting. Only populated once that day has resolved; null for
@@ -133,6 +135,10 @@ export default function HorizonLinesChart({
   // prediction's line directly against the candle it was trying to call.
   // Deliberately not reset on ticker switch, like the series toggles above.
   const [shiftToTarget, setShiftToTarget] = useState(false)
+  // Off (default): only the pred_close center line is drawn. On: a shaded
+  // band between pred_low_price/pred_high_price is drawn behind each
+  // currently-visible series' line too. Not reset on ticker switch.
+  const [showBand, setShowBand] = useState(false)
   const isDraggingAxisRef = useRef(false)
   const lastDataRef = useRef<HistoryPayload | null>(null)
   const [, forceRerender] = useState(0)
@@ -252,11 +258,11 @@ export default function HorizonLinesChart({
     const totalSlots = bars.length + extraDates.length
 
     const byDate = seriesData.map((s) => {
-      const map: Record<string, { predClose: number; pending: boolean }> = {}
+      const map: Record<string, { predClose: number; predHigh?: number; predLow?: number; pending: boolean }> = {}
       s.data.predictions.forEach((p) => {
         const d = displayDateFor(s.key, p)
         if (dateIdx[d] === undefined) return
-        map[d] = { predClose: p.pred_close_price, pending: !!p.is_pending }
+        map[d] = { predClose: p.pred_close_price, predHigh: p.pred_high_price, predLow: p.pred_low_price, pending: !!p.is_pending }
       })
       return { ...s, byDate: map }
     })
@@ -303,7 +309,12 @@ export default function HorizonLinesChart({
     byDate.forEach((s) =>
       Object.entries(s.byDate).forEach(([date, v]) => {
         const i = dateIdx[date]
-        if (i !== undefined && i >= firstVisibleIdx && i <= lastVisibleIdx) allPrices.push(v.predClose)
+        if (i === undefined || i < firstVisibleIdx || i > lastVisibleIdx) return
+        allPrices.push(v.predClose)
+        if (showBand && visibleRef.current[s.key]) {
+          if (v.predHigh != null) allPrices.push(v.predHigh)
+          if (v.predLow != null) allPrices.push(v.predLow)
+        }
       })
     )
     // Nothing landed in view (e.g. viewport wider than data) -- fall back to
@@ -428,22 +439,39 @@ export default function HorizonLinesChart({
       })
     }
 
+    type LinePt = { i: number; val: number; high: number | undefined; low: number | undefined; pending: boolean }
     let linesSvg = ''
     byDate.forEach((s) => {
       const pts = allDates
         .map((date, i) => {
           const v = s.byDate[date]
-          return v ? { i, val: v.predClose, pending: v.pending } : null
+          return v ? { i, val: v.predClose, high: v.predHigh, low: v.predLow, pending: v.pending } : null
         })
-        .filter((p): p is { i: number; val: number; pending: boolean } => p !== null)
+        .filter((p): p is LinePt => p !== null)
       if (!pts.length) return
 
       const firstPendingIdx = pts.findIndex((p) => p.pending)
       const solidPts = firstPendingIdx === -1 ? pts : pts.slice(0, firstPendingIdx + 1)
       const pendingPts = firstPendingIdx === -1 ? [] : pts.slice(firstPendingIdx)
-      const toPath = (arr: typeof pts) => arr.map((p) => `${xCenter(p.i).toFixed(1)},${yScale(p.val).toFixed(1)}`).join(' ')
+      const toPath = (arr: LinePt[]) => arr.map((p) => `${xCenter(p.i).toFixed(1)},${yScale(p.val).toFixed(1)}`).join(' ')
 
       linesSvg += `<g id="mfh-series-${s.key}" style="display:${visibleRef.current[s.key] ? '' : 'none'}">`
+
+      if (showBand) {
+        const toBandPolygon = (arr: LinePt[], opacity: number) => {
+          const withBand = arr.filter((p) => p.high != null && p.low != null)
+          if (withBand.length < 2) return ''
+          const top = withBand.map((p) => `${xCenter(p.i).toFixed(1)},${yScale(p.high as number).toFixed(1)}`)
+          const bottom = withBand
+            .slice()
+            .reverse()
+            .map((p) => `${xCenter(p.i).toFixed(1)},${yScale(p.low as number).toFixed(1)}`)
+          return `<polygon points="${[...top, ...bottom].join(' ')}" fill="${s.color}" fill-opacity="${opacity}" stroke="none"/>`
+        }
+        linesSvg += toBandPolygon(solidPts, 0.16)
+        linesSvg += toBandPolygon(pendingPts, 0.08)
+      }
+
       linesSvg += `<polyline points="${toPath(solidPts)}" fill="none" stroke="${s.color}" stroke-width="2"/>`
       if (pendingPts.length > 1) {
         linesSvg += `<polyline points="${toPath(pendingPts)}" fill="none" stroke="${s.color}" stroke-width="2" stroke-dasharray="4 3" opacity="0.8"/>`
@@ -510,7 +538,10 @@ export default function HorizonLinesChart({
         if (!visibleRef.current[s.key]) return
         const v = s.byDate[date]
         if (!v) return
-        rows += `<div class="mfh-tt-row"><span class="mfh-tt-name"><span class="mfh-tt-swatch" style="background:${s.color}"></span>${s.label}</span><span class="mfh-tt-val">$${v.predClose.toFixed(2)}${v.pending ? ' <span class="mfh-tt-pending">(pending)</span>' : ''}</span></div>`
+        const band = showBand && v.predHigh != null && v.predLow != null
+          ? ` <span class="mfh-tt-pending">($${v.predLow.toFixed(2)}–$${v.predHigh.toFixed(2)})</span>`
+          : ''
+        rows += `<div class="mfh-tt-row"><span class="mfh-tt-name"><span class="mfh-tt-swatch" style="background:${s.color}"></span>${s.label}</span><span class="mfh-tt-val">$${v.predClose.toFixed(2)}${v.pending ? ' <span class="mfh-tt-pending">(pending)</span>' : ''}${band}</span></div>`
       })
       tooltip.innerHTML = `<div class="mfh-tt-date">${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>${rows}`
 
@@ -652,7 +683,7 @@ export default function HorizonLinesChart({
       // (ticker switch, unmount) stops it explicitly elsewhere.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, y2y3Days, barW, yZoom, yPanOffset, scrollTick, shiftToTarget])
+  }, [data, y2y3Days, barW, yZoom, yPanOffset, scrollTick, shiftToTarget, showBand])
 
   function toggleSeries(key: string) {
     visibleRef.current[key] = !visibleRef.current[key]
@@ -770,6 +801,14 @@ export default function HorizonLinesChart({
         >
           <span className="mfh-toggle-line" style={{ background: shiftToTarget ? 'var(--mfh-ink)' : 'var(--mfh-text-muted)' }} />
           shift to target day
+        </button>
+        <button
+          className={`mfh-toggle${showBand ? '' : ' off'}`}
+          onClick={() => setShowBand((v) => !v)}
+          title="Shade the predicted high-low range around each visible line, not just its center forecast"
+        >
+          <span className="mfh-toggle-line" style={{ background: showBand ? 'var(--mfh-ink)' : 'var(--mfh-text-muted)' }} />
+          range band
         </button>
         {y2y3Days && y2y3Days.length > 0 && (
           <>
