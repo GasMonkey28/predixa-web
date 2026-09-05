@@ -7,6 +7,10 @@ type Prediction = {
   origin_date: string
   pred_close_price: number
   is_pending?: boolean
+  /** origin_date + N trading days -- the day this prediction is actually
+   *  forecasting. Only populated once that day has resolved; null for
+   *  still-pending (future) forecasts. */
+  target_date?: string | null
 }
 type HorizonDataset = { predictions: Prediction[]; ohlc: OhlcBar[] }
 type HistoryPayload = Record<string, HorizonDataset>
@@ -63,6 +67,23 @@ const SERIES = [
   { key: '20d', label: '20-day', color: 'var(--mfh-series-5)' },
 ] as const
 
+const HORIZON_DAYS: Record<string, number> = { '1d': 1, '5d': 5, '10d': 10, '15d': 15, '20d': 20 }
+
+// Approximate a target date for a still-pending prediction (no resolved
+// target_date yet) by walking forward N trading days (weekends skipped,
+// market holidays not accounted for -- close enough for a visual toggle on
+// forecasts that are inherently unresolved anyway).
+function addTradingDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  let added = 0
+  while (added < days) {
+    d.setDate(d.getDate() + 1)
+    const dow = d.getDay()
+    if (dow !== 0 && dow !== 6) added++
+  }
+  return d.toISOString().slice(0, 10)
+}
+
 const M = { top: 16, right: 58, bottom: 56, left: 58 }
 
 export default function HorizonLinesChart({
@@ -106,6 +127,12 @@ export default function HorizonLinesChart({
   const wrapRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const visibleRef = useRef<Record<string, boolean>>({ '1d': false, '5d': false, '10d': true, '15d': false, '20d': true })
+  // Off (default): each line is plotted at the day the forecast was MADE
+  // (origin_date). On: shifted forward by its own horizon so it's plotted at
+  // the day it's actually forecasting (target_date) -- lets you read a
+  // prediction's line directly against the candle it was trying to call.
+  // Deliberately not reset on ticker switch, like the series toggles above.
+  const [shiftToTarget, setShiftToTarget] = useState(false)
   const isDraggingAxisRef = useRef(false)
   const lastDataRef = useRef<HistoryPayload | null>(null)
   const [, forceRerender] = useState(0)
@@ -198,16 +225,24 @@ export default function HorizonLinesChart({
       dateIdx[b.date] = i
     })
 
+    // When shifted, a prediction is plotted at the day it's FORECASTING
+    // rather than the day it was made: the resolved target_date if known,
+    // else an approximated one for still-pending forecasts.
+    const displayDateFor = (seriesKey: string, p: Prediction): string => {
+      if (!shiftToTarget) return p.origin_date
+      return p.target_date || addTradingDays(p.origin_date, HORIZON_DAYS[seriesKey] ?? 0)
+    }
+
     // A forecast can exist for a day that has no candle yet (today, still in
-    // progress) -- give those dates their own trailing x-axis slot instead of
+    // progress, or -- when shifted -- a future day the target hasn't reached
+    // yet) -- give those dates their own trailing x-axis slot instead of
     // silently dropping them.
     const lastBarDate = bars.length ? bars[bars.length - 1].date : ''
     const extraDateSet = new Set<string>()
     seriesData.forEach((s) => {
       s.data.predictions.forEach((p) => {
-        if (dateIdx[p.origin_date] === undefined && p.origin_date > lastBarDate) {
-          extraDateSet.add(p.origin_date)
-        }
+        const d = displayDateFor(s.key, p)
+        if (dateIdx[d] === undefined && d > lastBarDate) extraDateSet.add(d)
       })
     })
     const extraDates = Array.from(extraDateSet).sort()
@@ -219,8 +254,9 @@ export default function HorizonLinesChart({
     const byDate = seriesData.map((s) => {
       const map: Record<string, { predClose: number; pending: boolean }> = {}
       s.data.predictions.forEach((p) => {
-        if (dateIdx[p.origin_date] === undefined) return
-        map[p.origin_date] = { predClose: p.pred_close_price, pending: !!p.is_pending }
+        const d = displayDateFor(s.key, p)
+        if (dateIdx[d] === undefined) return
+        map[d] = { predClose: p.pred_close_price, pending: !!p.is_pending }
       })
       return { ...s, byDate: map }
     })
@@ -616,7 +652,7 @@ export default function HorizonLinesChart({
       // (ticker switch, unmount) stops it explicitly elsewhere.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, y2y3Days, barW, yZoom, yPanOffset, scrollTick])
+  }, [data, y2y3Days, barW, yZoom, yPanOffset, scrollTick, shiftToTarget])
 
   function toggleSeries(key: string) {
     visibleRef.current[key] = !visibleRef.current[key]
@@ -727,6 +763,14 @@ export default function HorizonLinesChart({
             {s.label}
           </button>
         ))}
+        <button
+          className={`mfh-toggle${shiftToTarget ? '' : ' off'}`}
+          onClick={() => setShiftToTarget((v) => !v)}
+          title="Plot each line at the day it's forecasting (origin + N days) instead of the day the forecast was made"
+        >
+          <span className="mfh-toggle-line" style={{ background: shiftToTarget ? 'var(--mfh-ink)' : 'var(--mfh-text-muted)' }} />
+          shift to target day
+        </button>
         {y2y3Days && y2y3Days.length > 0 && (
           <>
             <span className="mfh-legend-item" title="No trade signal on a down day">
