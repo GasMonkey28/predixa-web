@@ -344,7 +344,7 @@ export function getJournalTargetsForFillAction(
           entry.buyPrice,
           exitPrice,
           entry.instrumentType,
-          entry.positionSize
+          Math.min(entry.positionSize, fill.quantity)
         ),
       }))
   }
@@ -366,7 +366,7 @@ export function getJournalTargetsForFillAction(
           entry.buyPrice,
           exitPrice,
           entry.instrumentType,
-          entry.positionSize
+          Math.min(entry.positionSize, fill.quantity)
         ),
       }))
   }
@@ -391,7 +391,7 @@ export function getJournalTargetsForFillAction(
         entry.buyPrice,
         exitPrice,
         entry.instrumentType,
-        entry.positionSize
+        Math.min(entry.positionSize, fill.quantity)
       ),
     }))
 }

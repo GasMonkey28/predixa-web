@@ -23,6 +23,7 @@ import {
   getSacrificePoolPoints,
   type OpenPositionSummary,
   applyRollOverDiff,
+  applyJournalClosePatch,
   createEmptyEntry,
   createMonthlyProfitEntry,
   getEntryProfit,
@@ -327,10 +328,14 @@ export default function TradeJournalPage() {
   }
 
   const updateEntry = useCallback((id: string, patch: Partial<TradeJournalEntry>) => {
+    const remainderId = crypto.randomUUID()
     setEntries((prev) =>
       renumberEntries(
-        prev.map((entry) => {
+        prev.flatMap((entry) => {
           if (entry.id !== id) return entry
+          if (patch.tradestationSoldFillId && patch.soldPrice != null) {
+            return applyJournalClosePatch(entry, patch, remainderId)
+          }
           const next = { ...entry, ...patch }
           if (Object.keys(patch).some((key) => PROFIT_FIELDS.has(key))) {
             return withRecalculatedProfit(next)
@@ -578,13 +583,13 @@ export default function TradeJournalPage() {
       const note = `Sacrifice ${points > 0 ? '+' : ''}${points}pts → ${label} pool`
       const closeReason = closeReasonBase ? `${closeReasonBase} · ${note}` : note
 
+      const remainderId = crypto.randomUUID()
       pushUndoSnapshot()
       setEntries((prev) =>
         renumberEntries(
-          prev.map((entry) => {
+          prev.flatMap((entry) => {
             if (entry.id !== sourceEntryId) return entry
-            return withRecalculatedProfit({
-              ...entry,
+            return applyJournalClosePatch(entry, {
               soldPrice: exitPrice,
               closeDate: fill.date,
               closeReason,
@@ -593,7 +598,7 @@ export default function TradeJournalPage() {
               positionSize: fill.quantity,
               tradestationSoldFillId: fill.id,
               profit: 0,
-            })
+            }, remainderId)
           })
         )
       )
@@ -641,17 +646,17 @@ export default function TradeJournalPage() {
       const note = `Contrib ${points > 0 ? '+' : ''}${points}pts → ${label} pool`
       const closeReason = closeReasonBase ? `${closeReasonBase} · ${note}` : note
 
+      const remainderId = crypto.randomUUID()
       pushUndoSnapshot()
       setEntries((prev) =>
         renumberEntries(
-          prev.map((entry) => {
+          prev.flatMap((entry) => {
             if (entry.id !== sourceEntryId) return entry
             const profitMonth = defaultProfitMonthOnClose({
               profitMonth: entry.profitMonth,
               closeDate: fill.date,
             })
-            return withRecalculatedProfit({
-              ...entry,
+            return applyJournalClosePatch(entry, {
               soldPrice: exitPrice,
               closeDate: fill.date,
               closeReason,
@@ -662,7 +667,7 @@ export default function TradeJournalPage() {
               positionSize: fill.quantity,
               tradestationSoldFillId: fill.id,
               profit: 0,
-            })
+            }, remainderId)
           })
         )
       )
@@ -754,17 +759,17 @@ export default function TradeJournalPage() {
         ? `${closeReasonBase} · ${contribNote}`
         : contribNote
 
+      const remainderId = crypto.randomUUID()
       pushUndoSnapshot()
       setEntries((prev) =>
         renumberEntries(
-          prev.map((entry) => {
+          prev.flatMap((entry) => {
             if (entry.id === sourceEntryId) {
               const profitMonth = defaultProfitMonthOnClose({
                 profitMonth: entry.profitMonth,
                 closeDate: fill.date,
               })
-              return withRecalculatedProfit({
-                ...entry,
+              return applyJournalClosePatch(entry, {
                 soldPrice: exitPrice,
                 closeDate: fill.date,
                 closeReason,
@@ -775,7 +780,7 @@ export default function TradeJournalPage() {
                 positionSize: fill.quantity,
                 tradestationSoldFillId: fill.id,
                 profit: 0,
-              })
+              }, remainderId)
             }
             if (entry.id === recipientEntryId && entry.buyPrice != null) {
               return withRecalculatedProfit({

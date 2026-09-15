@@ -231,24 +231,46 @@ export interface OpenPositionSummary {
   netPosition: number
 }
 
-/** Net = highest open long + highest open short (e.g. 3 + (−2) = 1). */
+/** Open contract/share quantities, independent of the row numbering. */
 export function calcOpenPositionSummary(entries: TradeJournalEntry[]): OpenPositionSummary {
   let highestLong = 0
   let highestShort = 0
-
   for (const entry of entries) {
     if (!isOpenPosition(entry)) continue
-    const num = getTradeNumber(entries, entry.id)
-    if (num == null) continue
-    if (num > 0) highestLong = Math.max(highestLong, num)
-    else if (num < 0) highestShort = Math.min(highestShort, num)
+    if (entry.buyPrice! > 0) highestLong += entry.positionSize
+    else highestShort -= entry.positionSize
   }
+  return { highestLong, highestShort, netPosition: highestLong + highestShort }
+}
 
-  return {
-    highestLong,
-    highestShort,
-    netPosition: highestLong + highestShort,
-  }
+/** Keep the unclosed quantity when applying a broker close to an open lot. */
+export function applyJournalClosePatch(
+  entry: TradeJournalEntry,
+  patch: Partial<TradeJournalEntry>,
+  remainderId: string
+): TradeJournalEntry[] {
+  const closed = withRecalculatedProfit({ ...entry, ...patch })
+  if (
+    !isOpenPosition(entry) || patch.soldPrice == null ||
+    patch.positionSize == null || patch.positionSize <= 0 ||
+    patch.positionSize >= entry.positionSize
+  ) return [closed]
+
+  const remainder = withRecalculatedProfit({
+    ...entry,
+    id: remainderId,
+    positionSize: entry.positionSize - patch.positionSize,
+    soldPrice: null,
+    closeDate: null,
+    closeReason: null,
+    profitMonth: null,
+    pointsContributed: null,
+    contributedToEntryId: null,
+    pointsSacrificed: null,
+    tradestationSoldFillId: null,
+    externalId: null,
+  })
+  return [closed, remainder]
 }
 
 export function getEntryProfit(entry: TradeJournalEntry): number | null {
