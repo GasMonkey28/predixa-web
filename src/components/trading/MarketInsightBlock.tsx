@@ -9,6 +9,7 @@ import MarketInsightTierStance from '@/components/trading/MarketInsightTierStanc
 import MarketInsightModelSignals from '@/components/trading/MarketInsightModelSignals'
 import SessionDateBadge from '@/components/trading/SessionDateBadge'
 import { useAutoRefresh } from '@/hooks/useAutoRefresh'
+import type { LocalRefreshWindow } from '@/lib/local-refresh-window'
 
 const sectionIcons: Record<string, typeof BarChart3> = {
   tiers: Layers,
@@ -17,14 +18,14 @@ const sectionIcons: Record<string, typeof BarChart3> = {
   agreement: AlertTriangle,
 }
 
-export default function MarketInsightBlock() {
+export default function MarketInsightBlock({ autoRefreshWindow }: { autoRefreshWindow?: LocalRefreshWindow }) {
   const [data, setData] = useState<MarketInsightResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/market-insight/daily?t=${Date.now()}`)
+      const res = await fetch(`/api/market-insight/daily?t=${Date.now()}`, { cache: 'no-store' })
       const json = (await res.json()) as MarketInsightResponse & { error?: string }
       if (!res.ok) throw new Error(json.error || 'Failed to load market insight')
       setData(json)
@@ -40,7 +41,7 @@ export default function MarketInsightBlock() {
     void load()
   }, [load])
 
-  useAutoRefresh(load)
+  useAutoRefresh(load, { localTimeWindow: autoRefreshWindow })
 
   if (loading) {
     return (
@@ -52,7 +53,7 @@ export default function MarketInsightBlock() {
     )
   }
 
-  if (error || !data) {
+  if (!data) {
     return (
       <p className="text-red-400 text-sm">{error || 'Market insight unavailable.'}</p>
     )
@@ -60,6 +61,7 @@ export default function MarketInsightBlock() {
 
   return (
     <div className="space-y-5">
+      {error && <p role="status" className="text-xs text-amber-300">Refresh failed. Showing the last loaded market insight.</p>}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-white">Market insight</h2>
@@ -92,7 +94,7 @@ export default function MarketInsightBlock() {
                 <h3 className="text-sm font-medium text-zinc-200">{section.title}</h3>
               </div>
               {section.id === 'tiers' ? (
-                <MarketInsightTierStance fallbackText={section.body} />
+                <MarketInsightTierStance fallbackText={section.body} autoRefreshWindow={autoRefreshWindow} />
               ) : section.id === 'models' ? (
                 <MarketInsightModelSignals facts={data.facts} fallbackText={section.body} />
               ) : (

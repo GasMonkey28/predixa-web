@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowDownRight,
@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 
 import SessionDateBadge from '@/components/trading/SessionDateBadge'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
+import type { LocalRefreshWindow } from '@/lib/local-refresh-window'
 import { getDominantSignal, getTierConfig } from '@/lib/tier-display'
 
 interface OpposingStrengthWarning {
@@ -124,32 +126,60 @@ function TierMiniCard({
 export default function MarketInsightTierStance({
   fallbackText,
   ticker = 'SPY',
+  autoRefreshWindow,
 }: {
   fallbackText?: string
   ticker?: string
+  autoRefreshWindow?: LocalRefreshWindow
 }) {
   const [data, setData] = useState<TierDailyData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastChecked, setLastChecked] = useState<Date | null>(null)
+  const requestRef = useRef<AbortController | null>(null)
+
+  const load = useCallback(async () => {
+    if (requestRef.current) return
+    const controller = new AbortController()
+    requestRef.current = controller
+    try {
+      const qs = new URLSearchParams({ t: String(Date.now()), ticker })
+      const res = await fetch(`/api/tiers/daily?${qs}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to load tiers')
+      if (controller.signal.aborted) return
+      setData(json)
+      setError(null)
+      setLastChecked(new Date())
+    } catch (e) {
+      if (!controller.signal.aborted) {
+        setError(e instanceof Error ? e.message : 'Failed to load tiers')
+      }
+    } finally {
+      if (requestRef.current === controller) requestRef.current = null
+      if (!controller.signal.aborted) setLoading(false)
+    }
+  }, [ticker])
 
   useEffect(() => {
-    async function load() {
-      try {
-        const qs = new URLSearchParams({ t: String(Date.now()), ticker })
-        const res = await fetch(`/api/tiers/daily?${qs}`)
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error || 'Failed to load tiers')
-        setData(json)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load tiers')
-      } finally {
-        setLoading(false)
-      }
-    }
     setLoading(true)
+    setData(null)
     setError(null)
-    load()
-  }, [ticker])
+    setLastChecked(null)
+    void load()
+    return () => {
+      requestRef.current?.abort()
+      requestRef.current = null
+    }
+  }, [load])
+
+  useAutoRefresh(load, {
+    enabled: autoRefreshWindow != null,
+    localTimeWindow: autoRefreshWindow,
+  })
 
   if (loading) {
     return (
@@ -163,7 +193,7 @@ export default function MarketInsightTierStance({
     )
   }
 
-  if (error || !data) {
+  if (!data) {
     return (
       <p className="text-sm text-zinc-400 leading-relaxed">
         {fallbackText || error || 'Tier data unavailable.'}
@@ -181,6 +211,18 @@ export default function MarketInsightTierStance({
   return (
     <div className="space-y-3">
       <SessionDateBadge date={data.date} />
+      {autoRefreshWindow && lastChecked && (
+        <p className="text-[10px] text-zinc-500">
+          Last checked {lastChecked.toLocaleTimeString([], {
+            hour: 'numeric', minute: '2-digit', second: '2-digit',
+          })} local time
+        </p>
+      )}
+      {error && (
+        <p role="status" className="text-xs text-amber-400">
+          Refresh failed: {error}. Showing the last successfully loaded tiers.
+        </p>
+      )}
 
       {/* Dominant signal — compact */}
       <div

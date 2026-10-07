@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, Minus, ShieldCheck, ShieldX } from 'lucide-react'
 
 import SessionDateBadge from '@/components/trading/SessionDateBadge'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
+import type { LocalRefreshWindow } from '@/lib/local-refresh-window'
 import type { Direction, MarketInsightFacts } from '@/lib/server/market-insight-types'
 
 // Mirrors the backtested y2y3 sizing/target/stop rules from the MES strategy
@@ -27,6 +29,12 @@ interface Model2Raw {
 interface Model2ApiData {
   today?: Model2Raw
   trading_days?: Array<Record<string, unknown>>
+}
+
+async function fetchPlaybookSource<T>(url: string, signal: AbortSignal): Promise<T> {
+  const response = await fetch(url, { cache: 'no-store', signal })
+  if (!response.ok) throw new Error(`Request failed (${response.status})`)
+  return response.json() as Promise<T>
 }
 
 function extractToday(data: Model2ApiData): Model2Raw | null {
@@ -77,37 +85,69 @@ function rowBorder(dir: Direction | null): string {
  * (RateTiers bias). Ends in a plain take-it / skip-it verdict from the same
  * agree-or-neutral filter rule validated in the backtest.
  */
-export default function TodaysPlaybookPanel({ compact = false }: { compact?: boolean }) {
+export default function TodaysPlaybookPanel({
+  compact = false,
+  autoRefreshWindow,
+}: {
+  compact?: boolean
+  autoRefreshWindow?: LocalRefreshWindow
+}) {
   const [facts, setFacts] = useState<MarketInsightFacts | null>(null)
   const [model2, setModel2] = useState<Model2ApiData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const requestRef = useRef<AbortController | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const [insightRes, model2Res] = await Promise.all([
-          fetch('/api/market-insight/daily').then((r) => r.json()),
-          fetch(`/api/model2/daily?t=${Date.now()}`).then((r) => r.json()),
-        ])
-        if (!cancelled) {
-          setFacts(insightRes?.facts ?? null)
-          setModel2(model2Res ?? null)
-        }
-      } catch {
-        if (!cancelled) {
-          setFacts(null)
-          setModel2(null)
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
+  const load = useCallback(async () => {
+    if (requestRef.current) return
+    const controller = new AbortController()
+    requestRef.current = controller
+    try {
+      const [insightResult, model2Result] = await Promise.allSettled([
+        fetchPlaybookSource<{ facts?: MarketInsightFacts }>(
+          `/api/market-insight/daily?t=${Date.now()}`, controller.signal,
+        ),
+        fetchPlaybookSource<Model2ApiData>(
+          `/api/model2/daily?t=${Date.now()}`, controller.signal,
+        ),
+      ])
+      if (controller.signal.aborted) return
+      const failedSources: string[] = []
+      if (insightResult.status === 'fulfilled') {
+        setFacts(insightResult.value?.facts ?? null)
+      } else {
+        failedSources.push('Market insight')
       }
-    }
-    load()
-    return () => {
-      cancelled = true
+      if (model2Result.status === 'fulfilled') {
+        setModel2(model2Result.value ?? null)
+      } else {
+        failedSources.push('Model 2')
+      }
+      setError(failedSources.length > 0
+        ? `${failedSources.join(' and ')} could not be refreshed. Last available data is shown where available.`
+        : null)
+    } catch (e) {
+      if (!controller.signal.aborted) {
+        setError(e instanceof Error ? e.message : 'Failed to load today’s playbook')
+      }
+    } finally {
+      if (requestRef.current === controller) requestRef.current = null
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    void load()
+    return () => {
+      requestRef.current?.abort()
+      requestRef.current = null
+    }
+  }, [load])
+
+  useAutoRefresh(load, {
+    enabled: autoRefreshWindow != null,
+    localTimeWindow: autoRefreshWindow,
+  })
 
   if (loading) {
     return (
@@ -127,7 +167,7 @@ export default function TodaysPlaybookPanel({ compact = false }: { compact?: boo
   if (!hasAny) {
     return (
       <p className="text-sm text-zinc-400 leading-relaxed">
-        Today&apos;s playbook isn&apos;t available yet — check back after this morning&apos;s model run.
+        {error || "Today's playbook isn't available yet — check back after this morning's model run."}
       </p>
     )
   }
@@ -169,6 +209,7 @@ export default function TodaysPlaybookPanel({ compact = false }: { compact?: boo
 
   return (
     <div className="space-y-3">
+      {error && <p role="status" className="text-xs text-amber-400">{error}</p>}
       {y2y3Today?.date && <SessionDateBadge date={y2y3Today.date} />}
 
       {/* Layer 1 — Horizon */}
