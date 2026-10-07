@@ -52,6 +52,7 @@ import {
   type TsFillJournalAction,
 } from '@/lib/tradestation-recent-fills'
 import { fetchAuthSession } from 'aws-amplify/auth'
+import TradeJournalOffsetCalculator from '@/components/trading/TradeJournalOffsetCalculator'
 
 function parseNumber(value: string): number | null {
   if (value.trim() === '') return null
@@ -1532,6 +1533,8 @@ export default function TradeJournalPage() {
               </div>
             )}
           </div>
+
+          <TradeJournalOffsetCalculator entries={entries} />
 
           <div className="border-b border-zinc-800/80 px-4 py-3">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
