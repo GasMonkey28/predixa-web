@@ -10,6 +10,7 @@ import SpyBriefingPanel from '@/components/trading/SpyBriefingPanel'
 import TodaysPlaybookPanel from '@/components/trading/TodaysPlaybookPanel'
 import GexRegimeBadge from '@/components/trading/GexRegimeBadge'
 import HorizonLinesChart from '@/app/moneyflow-horizon/HorizonLinesChart'
+import { SUMMARY_REFRESH_WINDOW } from '@/lib/local-refresh-window'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,9 @@ function SummaryPageContent() {
           <p className="text-gray-300 text-lg">
             One-page read of today&apos;s tiers, model alignment, weekly context, and price action.
           </p>
+          <p className="mt-2 text-sm text-blue-200">
+            Trading tiers &amp; today&apos;s play auto-refresh every 30 seconds, 8:00–9:00 AM in your device&apos;s local time while this tab is visible.
+          </p>
         </motion.div>
 
         <motion.div
@@ -46,7 +50,7 @@ function SummaryPageContent() {
               Full rules &amp; methodology →
             </Link>
           </div>
-          <TodaysPlaybookPanel />
+          <TodaysPlaybookPanel autoRefreshWindow={SUMMARY_REFRESH_WINDOW} />
         </motion.div>
 
         <motion.div
@@ -58,7 +62,7 @@ function SummaryPageContent() {
           {/* Left: insight + chart — same width, aligned with daily model1 column */}
           <div className="lg:col-span-2 space-y-4">
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 border-2 border-zinc-800/50 p-6 backdrop-blur-sm">
-              <MarketInsightBlock />
+              <MarketInsightBlock autoRefreshWindow={SUMMARY_REFRESH_WINDOW} />
             </div>
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950/80 border-2 border-zinc-800/50 p-6 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-3">

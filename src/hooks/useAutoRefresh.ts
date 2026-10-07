@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { startAutoRefresh, type LocalRefreshWindow } from '@/lib/local-refresh-window'
 
 export const DEFAULT_AUTO_REFRESH_MS = 30_000
 
@@ -17,10 +18,14 @@ export function useAutoRefresh(
     enabled?: boolean
     intervalMs?: number
     defaultOn?: boolean
+    /** Optional daily window in the user's device-local time. Initial loading is unaffected. */
+    localTimeWindow?: LocalRefreshWindow
   }
 ) {
   const enabled = options?.enabled !== false
   const intervalMs = options?.intervalMs ?? DEFAULT_AUTO_REFRESH_MS
+  const startHour = options?.localTimeWindow?.startHour
+  const endHour = options?.localTimeWindow?.endHour
   const [autoRefresh, setAutoRefresh] = useState(options?.defaultOn !== false)
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
@@ -32,21 +37,12 @@ export function useAutoRefresh(
   useEffect(() => {
     if (!autoRefresh || !enabled) return
 
-    const tick = () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
-      run()
-    }
-
-    const id = window.setInterval(tick, intervalMs)
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') run()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      window.clearInterval(id)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [autoRefresh, enabled, intervalMs, run])
+    return startAutoRefresh(
+      run,
+      intervalMs,
+      startHour != null && endHour != null ? { startHour, endHour } : undefined
+    )
+  }, [autoRefresh, enabled, intervalMs, run, startHour, endHour])
 
   return { autoRefresh, setAutoRefresh, intervalMs }
 }
