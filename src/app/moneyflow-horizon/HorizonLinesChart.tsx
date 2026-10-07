@@ -136,10 +136,12 @@ export default function HorizonLinesChart({
   symbol = 'SPY',
   height = 420,
   barWidth = 5.5,
+  compact = false,
 }: {
   symbol?: string
   height?: number
   barWidth?: number
+  compact?: boolean
 }) {
   const HH = height
   const [data, setData] = useState<HistoryPayload | null>(null)
@@ -172,6 +174,16 @@ export default function HorizonLinesChart({
   const tooltipRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [viewportWidth, setViewportWidth] = useState(0)
+  useEffect(() => {
+    const viewport = scrollRef.current
+    if (!viewport) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0) setViewportWidth(Math.round(entry.contentRect.width))
+    })
+    observer.observe(viewport)
+    return () => observer.disconnect()
+  }, [data, error])
   const visibleRef = useRef<Record<string, boolean>>({ '1d': false, '5d': false, '10d': true, '15d': false, '20d': true })
   // Which horizon lines are plotted at the day they're FORECASTING
   // (target_date) instead of the day the forecast was made (origin_date):
@@ -731,7 +743,7 @@ export default function HorizonLinesChart({
       // (ticker switch, unmount) stops it explicitly elsewhere.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, y2y3Days, barW, yZoom, yPanOffset, scrollTick, shiftMode, showBand])
+  }, [data, y2y3Days, barW, yZoom, yPanOffset, scrollTick, shiftMode, showBand, HH, viewportWidth])
 
   function toggleSeries(key: string) {
     visibleRef.current[key] = !visibleRef.current[key]
@@ -758,7 +770,7 @@ export default function HorizonLinesChart({
 
   return (
     <div
-      className="mfh-root rounded-xl border p-4"
+      className={`mfh-root min-w-0 rounded-xl border ${compact ? 'mfh-compact p-2.5' : 'p-4'}`}
       style={{ borderColor: 'var(--mfh-border)', background: 'var(--mfh-surface)' }}
     >
       <style>{`
@@ -815,7 +827,12 @@ export default function HorizonLinesChart({
         .mfh-stats { display: flex; gap: 18px; margin-bottom: 12px; flex-wrap: wrap; font-size: 12px; color: var(--mfh-text-secondary); }
         .mfh-stats b { color: var(--mfh-ink); }
         .mfh-scroll { overflow-x: auto; overflow-y: hidden; border-radius: 8px; }
-        .mfh-root svg { display: block; height: ${HH}px; cursor: grab; touch-action: none; }
+        .mfh-root svg { display: block; cursor: grab; touch-action: none; }
+        .mfh-compact .mfh-legend { gap: 6px; margin-bottom: 8px; }
+        .mfh-compact .mfh-legend-item { gap: 4px; font-size: 10px; }
+        .mfh-compact .mfh-toggle { gap: 4px; font-size: 11px; padding: 3px 7px; }
+        .mfh-compact .mfh-select { gap: 4px; font-size: 11px; padding: 3px 7px; flex-wrap: wrap; }
+        .mfh-compact .mfh-select select { font-size: 11px; }
         .mfh-root svg:active { cursor: grabbing; }
         .mfh-grid { stroke: var(--mfh-grid); stroke-width: 1; }
         .mfh-axis-label { fill: var(--mfh-text-muted); font-size: 10px; }
@@ -895,7 +912,7 @@ export default function HorizonLinesChart({
 
       <div className="mfh-scroll" ref={scrollRef}>
         <div className="mfh-chart-wrap" ref={wrapRef}>
-          <svg ref={svgRef} preserveAspectRatio="none" />
+          <svg ref={svgRef} preserveAspectRatio="none" style={{ height: HH }} />
           <div className="mfh-tooltip" ref={tooltipRef} />
         </div>
       </div>

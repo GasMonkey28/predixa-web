@@ -195,7 +195,7 @@ export default function Navigation() {
   return (
     <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
       <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12">
-        <div className="flex h-16 items-center justify-between gap-6">
+        <div className="flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-2 xl:flex-nowrap xl:py-0">
           {/* Logo/Brand */}
           <div className="flex items-center flex-shrink-0">
             <Link href="/" className="flex items-center space-x-2">
@@ -212,7 +212,7 @@ export default function Navigation() {
 
           {/* Navigation Items - Only show when authenticated */}
           {isAuthenticated && (
-            <div className="flex items-center justify-center flex-1 gap-1">
+            <div className="order-last flex w-full min-w-0 flex-wrap items-center justify-center gap-1 xl:order-none xl:w-auto xl:flex-1">
               {navigationItems.map((item) => {
                 // Check if item has sub-items (dropdown)
                 if ('items' in item && item.items) {

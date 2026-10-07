@@ -10,6 +10,9 @@ import HorizonLinesChart from '../moneyflow-horizon/HorizonLinesChart'
 
 const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO', 'COIN', 'MARA', 'MSTR', 'PLTR', 'HOOD', 'SOFI', 'WULF'] as const
 const ROTATE_OPTIONS = [15, 30] as const
+const LAYOUT_STORAGE_KEY = 'predixa.live.layout.v1'
+const DEFAULT_PANEL_WIDTH = 28
+const DEFAULT_MFH_HEIGHT = 340
 // Money-Flow Horizon Lambda now runs for the full 47-ticker y2y3 universe
 // (SPY + these 46). Every ticker in TICKERS above is covered.
 const MFH_TICKERS: string[] = [
@@ -25,6 +28,29 @@ export default function LiveDashboard() {
   const [rotate, setRotate] = useState(false)
   const [rotateSec, setRotateSec] = useState<(typeof ROTATE_OPTIONS)[number]>(30)
   const [showChain, setShowChain] = useState(false)
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
+  const [mfhHeight, setMfhHeight] = useState(DEFAULT_MFH_HEIGHT)
+  const [layoutLoaded, setLayoutLoaded] = useState(false)
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) || '{}')
+      if (typeof saved.panelWidth === 'number' && Number.isFinite(saved.panelWidth)) {
+        setPanelWidth(Math.min(44, Math.max(22, saved.panelWidth)))
+      }
+      if (typeof saved.mfhHeight === 'number' && Number.isFinite(saved.mfhHeight)) {
+        setMfhHeight(Math.min(560, Math.max(260, saved.mfhHeight)))
+      }
+    } catch { /* Use the compact defaults when storage is unavailable. */ }
+    setLayoutLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!layoutLoaded) return
+    try {
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ panelWidth, mfhHeight }))
+    } catch { /* Resizing still works without persistent storage. */ }
+  }, [panelWidth, mfhHeight, layoutLoaded])
   // Frozen historical snapshot instead of the live feed. Tiers has full
   // history for every ticker; y2y3 only the model's own rolling ~40 trading
   // days; money-move only as far back as the moneymove Lambda's dated
@@ -51,7 +77,7 @@ export default function LiveDashboard() {
   }, [rotate, rotateSec])
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-1.5 text-sm">
           <span className="mr-1 text-xs uppercase tracking-wide text-gray-400">Ticker</span>
@@ -139,7 +165,7 @@ export default function LiveDashboard() {
       </div>
 
       <section className="scroll-mt-4 space-y-2">
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-wrap items-baseline gap-2">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             {symbol} money move{historyDate ? ` — ${historyDate}` : ''}
           </h2>
@@ -147,11 +173,44 @@ export default function LiveDashboard() {
             {historyDate ? 'frozen historical snapshot' : 'expiring today · next two monthlies · all expirations'}
           </span>
         </div>
+        {hasMFH && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-300">
+            <span className="font-medium">Chart layout</span>
+            <label className="hidden items-center gap-2 xl:flex">
+              MFH panel width
+              <input
+                type="range" min="22" max="44" step="1" value={panelWidth}
+                onChange={(event) => setPanelWidth(Number(event.target.value))}
+                className="w-24 accent-blue-500" aria-label="Money Flow Horizon panel width"
+                aria-valuetext={`${panelWidth}% of the dashboard`}
+              />
+              <span className="w-8 tabular-nums">{panelWidth}%</span>
+            </label>
+            <label className="flex items-center gap-2">
+              MFH height
+              <input
+                type="range" min="260" max="560" step="20" value={mfhHeight}
+                onChange={(event) => setMfhHeight(Number(event.target.value))}
+                className="w-24 accent-blue-500" aria-label="Money Flow Horizon chart height"
+                aria-valuetext={`${mfhHeight} pixels`}
+              />
+              <span className="w-12 tabular-nums">{mfhHeight}px</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => { setPanelWidth(DEFAULT_PANEL_WIDTH); setMfhHeight(DEFAULT_MFH_HEIGHT) }}
+              className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+            >
+              Reset layout
+            </button>
+          </div>
+        )}
         <MoneyMoveChart
           symbol={symbol}
           date={historyDate}
+          rightPanelWidthPercent={panelWidth}
           rightPanel={
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-3">
               <TickerStats symbol={symbol} showOhlc={!hasMFH && !historyDate} date={historyDate} />
               {hasMFH && (
                 <div className="space-y-2">
@@ -159,7 +218,7 @@ export default function LiveDashboard() {
                     money-flow horizon · 5 / 10 / 15 / 20-day range
                     {historyDate && ' · always current, not affected by History'}
                   </div>
-                  <HorizonLinesChart symbol={symbol} height={572} barWidth={8.4} />
+                  <HorizonLinesChart symbol={symbol} height={mfhHeight} barWidth={5.5} compact />
                 </div>
               )}
             </div>
