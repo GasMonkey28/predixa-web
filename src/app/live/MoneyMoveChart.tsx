@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { clsx } from 'clsx'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -215,7 +215,7 @@ function MoneyMoveTrack({
 
   if (!series.length) {
     return (
-      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+      <div className="min-w-0 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{heading}</h3>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           No {heading.toLowerCase()} flow yet — recomputed every 5&nbsp;minutes.
@@ -225,9 +225,9 @@ function MoneyMoveTrack({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-        <div>
+    <div className="min-w-0 space-y-2">
+      <div className="flex min-h-[60px] min-w-0 flex-wrap content-start items-start justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{heading}</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400">{sub}</p>
         </div>
@@ -246,27 +246,25 @@ function MoneyMoveTrack({
               {toggle.label}
             </button>
           )}
-          <span className="uppercase tracking-wide">Top</span>
-          {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-            <button
-              key={n}
-              onClick={() => setTopN(n)}
-              className={clsx(
-                'rounded px-1.5 py-0.5 font-medium tabular-nums',
-                n === topN
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-              )}
+          <label className="flex items-center gap-1">
+            <span className="uppercase tracking-wide">Top</span>
+            <select
+              aria-label={`${heading} top contracts`}
+              value={topN}
+              onChange={(event) => setTopN(Number(event.target.value))}
+              className="rounded border border-gray-200 bg-gray-100 px-1 py-0.5 font-medium tabular-nums text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
             >
-              {n}
-            </button>
-          ))}
+              {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 
-      <div className="h-64 w-full">
+      <div className="h-56 w-full min-w-0">
         <ResponsiveContainer>
-          <LineChart data={rows} margin={{ top: 8, right: 64, bottom: 4, left: 8 }}>
+          <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
             <XAxis
               dataKey="t"
@@ -274,10 +272,10 @@ function MoneyMoveTrack({
               scale="time"
               domain={[open ?? 'dataMin', close ?? 'dataMax']}
               tickFormatter={fmtTime}
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: 10 }}
               minTickGap={40}
             />
-            <YAxis yAxisId="dollars" tickFormatter={fmtM} tick={{ fontSize: 11 }} width={60} />
+            <YAxis yAxisId="dollars" tickFormatter={fmtM} tick={{ fontSize: 10 }} width={46} />
             {hasTargets && (
               <YAxis
                 yAxisId="price"
@@ -285,7 +283,7 @@ function MoneyMoveTrack({
                 domain={priceDomain ?? ['auto', 'auto']}
                 tickFormatter={(v: number) => v.toFixed(0)}
                 tick={{ fontSize: 10 }}
-                width={40}
+                width={32}
               />
             )}
             <Tooltip
@@ -301,7 +299,7 @@ function MoneyMoveTrack({
               contentStyle={{ fontSize: 12 }}
               itemSorter={(i) => -(i.value as number)}
             />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Legend wrapperStyle={{ fontSize: 10 }} />
             {series.map((s) => (
               <Line
                 key={s.occ}
@@ -340,9 +338,9 @@ function MoneyMoveTrack({
       </div>
 
       {priceRows.length > 0 && (
-        <div className="h-52 w-full text-gray-900 dark:text-white">
+        <div className="h-[184px] w-full min-w-0 text-gray-900 dark:text-white">
           <ResponsiveContainer>
-            <LineChart data={priceRows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
+            <LineChart data={priceRows} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="t"
@@ -350,23 +348,23 @@ function MoneyMoveTrack({
                 scale="time"
                 domain={[open ?? 'dataMin', close ?? 'dataMax']}
                 tickFormatter={fmtTime}
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10 }}
                 minTickGap={40}
               />
               <YAxis
                 yAxisId="lvl"
                 domain={pricePathDomain ?? ['auto', 'auto']}
                 tickFormatter={(v: number) => v.toFixed(0)}
-                tick={{ fontSize: 11 }}
-                width={60}
+                tick={{ fontSize: 10 }}
+                width={46}
               />
-              <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="pad" orientation="right" width={32} tick={false} axisLine={false} tickLine={false} />
               <Tooltip
                 labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
                 formatter={(v: number, name) => [v.toFixed(2), name === '__spot' ? ul : name]}
                 contentStyle={{ fontSize: 12 }}
               />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
               {series.map((s) => (
                 <Line
                   key={s.occ}
@@ -396,9 +394,9 @@ function MoneyMoveTrack({
       )}
 
       {deltaRows.length > 0 && (
-        <div className="h-52 w-full">
+        <div className="h-[184px] w-full min-w-0">
           <ResponsiveContainer>
-            <LineChart data={deltaRows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
+            <LineChart data={deltaRows} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="t"
@@ -406,18 +404,18 @@ function MoneyMoveTrack({
                 scale="time"
                 domain={[open ?? 'dataMin', close ?? 'dataMax']}
                 tickFormatter={fmtTime}
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10 }}
                 minTickGap={40}
               />
-              <YAxis yAxisId="delta" tickFormatter={fmtM} tick={{ fontSize: 11 }} width={60} />
-              <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="delta" tickFormatter={fmtM} tick={{ fontSize: 10 }} width={46} />
+              <YAxis yAxisId="pad" orientation="right" width={32} tick={false} axisLine={false} tickLine={false} />
               <Tooltip
                 labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
                 formatter={(v: number, name) => [fmtM(v), name]}
                 contentStyle={{ fontSize: 12 }}
                 itemSorter={(i) => -Math.abs(i.value as number)}
               />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
               <ReferenceLine yAxisId="delta" y={0} stroke="currentColor" strokeOpacity={0.3} />
               {series.map((s) => (
                 <Line
@@ -437,9 +435,9 @@ function MoneyMoveTrack({
       )}
 
       {gap && (
-        <div className="h-52 w-full text-gray-900 dark:text-white">
+        <div className="h-[184px] w-full min-w-0 text-gray-900 dark:text-white">
           <ResponsiveContainer>
-            <LineChart data={gap.rows} margin={{ top: 4, right: 64, bottom: 4, left: 8 }}>
+            <LineChart data={gap.rows} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="t"
@@ -447,23 +445,23 @@ function MoneyMoveTrack({
                 scale="time"
                 domain={[open ?? 'dataMin', close ?? 'dataMax']}
                 tickFormatter={fmtTime}
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10 }}
                 minTickGap={40}
               />
               <YAxis
                 yAxisId="spread"
                 tickFormatter={(v: number) => `$${v.toFixed(1)}`}
-                tick={{ fontSize: 11 }}
-                width={60}
+                tick={{ fontSize: 10 }}
+                width={46}
                 label={{ value: 'top-2 target spread', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'currentColor' }}
               />
-              <YAxis yAxisId="pad" orientation="right" width={40} tick={false} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="pad" orientation="right" width={32} tick={false} axisLine={false} tickLine={false} />
               <Tooltip
                 labelFormatter={(t) => `${fmtTime(Number(t))} ET`}
                 formatter={(v: number, name) => [`$${v.toFixed(2)}`, name]}
                 contentStyle={{ fontSize: 12 }}
               />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
               {gap.hasCalls && (
                 <Line
                   yAxisId="spread"
@@ -493,33 +491,40 @@ function MoneyMoveTrack({
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-xs tabular-nums">
+      <div className="min-w-0">
+        <table className="w-full table-fixed text-[10px] tabular-nums [&_th]:break-words [&_td]:break-words">
+          <colgroup>
+            <col className="w-[36%]" />
+            <col className="w-[12%]" />
+            <col className="w-[16%]" />
+            <col className="w-[16%]" />
+            <col className="w-[20%]" />
+          </colgroup>
           <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-[10px] uppercase tracking-wide text-gray-400">
-              <th className="py-1.5 pr-4">Contract</th>
-              <th className="py-1.5 pr-4">Type</th>
-              <th className="py-1.5 pr-4">Opt px</th>
-              <th className="py-1.5 pr-4">Target</th>
-              <th className="py-1.5 pr-4">$ traded</th>
+            <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-[9px] text-gray-400">
+              <th className="py-1.5 pr-1">Contract</th>
+              <th className="py-1.5 pr-1">Type</th>
+              <th className="py-1.5 pr-1">Opt px</th>
+              <th className="py-1.5 pr-1">Target</th>
+              <th className="py-1.5">$ traded</th>
             </tr>
           </thead>
           <tbody>
             {series.map((s) => (
               <tr key={s.occ} className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-1 pr-4">
+                <td className="py-1 pr-1">
                   <span
-                    className="mr-2 inline-block h-2 w-2 rounded-sm align-middle"
+                    className="mr-1 inline-block h-1.5 w-1.5 rounded-sm align-middle"
                     style={{ background: colorOf.get(s.occ) }}
                   />
                   {s.label}
                 </td>
-                <td className={s.cp === 'C' ? 'py-1 pr-4 text-emerald-600 dark:text-emerald-400' : s.cp === 'P' ? 'py-1 pr-4 text-rose-600 dark:text-rose-400' : 'py-1 pr-4 text-gray-400'}>
+                <td className={s.cp === 'C' ? 'py-1 pr-1 text-emerald-600 dark:text-emerald-400' : s.cp === 'P' ? 'py-1 pr-1 text-rose-600 dark:text-rose-400' : 'py-1 pr-1 text-gray-400'}>
                   {s.cp === 'C' ? 'Call' : s.cp === 'P' ? 'Put' : '—'}
                 </td>
-                <td className="py-1 pr-4 text-gray-500">{typeof s.mid === 'number' ? s.mid.toFixed(2) : '—'}</td>
-                <td className="py-1 pr-4 font-medium text-gray-900 dark:text-white">{typeof s.breakeven === 'number' ? s.breakeven.toFixed(2) : '—'}</td>
-                <td className="py-1 pr-4 font-medium text-gray-900 dark:text-white">{fmtM(s.total)}</td>
+                <td className="py-1 pr-1 text-gray-500">{typeof s.mid === 'number' ? s.mid.toFixed(2) : '—'}</td>
+                <td className="py-1 pr-1 font-medium text-gray-900 dark:text-white">{typeof s.breakeven === 'number' ? s.breakeven.toFixed(2) : '—'}</td>
+                <td className="py-1 font-medium text-gray-900 dark:text-white">{fmtM(s.total)}</td>
               </tr>
             ))}
           </tbody>
@@ -539,10 +544,12 @@ export const MONEYMOVE_HISTORY_TICKERS = [
 export default function MoneyMoveChart({
   symbol = 'SPY',
   rightPanel,
+  rightPanelWidthPercent = 28,
   date,
 }: {
   symbol?: string
   rightPanel?: ReactNode
+  rightPanelWidthPercent?: number
   /** ISO date (YYYY-MM-DD) to show a frozen historical snapshot instead of
    *  today's live feed. Only as far back as the moneymove Lambda has
    *  archived, and only for MONEYMOVE_HISTORY_TICKERS. */
@@ -550,6 +557,10 @@ export default function MoneyMoveChart({
 }) {
   const [data, setData] = useState<Payload | null>(null)
   const [excludeToday, setExcludeToday] = useState(true)
+  const layoutClassName = rightPanel
+    ? 'grid min-w-0 grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(280px,var(--live-side-width))]'
+    : 'grid min-w-0 grid-cols-1 gap-5'
+  const layoutStyle = { '--live-side-width': `${rightPanelWidthPercent}%` } as CSSProperties
 
   useEffect(() => {
     let cancelled = false
@@ -585,13 +596,13 @@ export default function MoneyMoveChart({
     // computed yet today) shouldn't hide tiers/y2y3 in the side panel --
     // those are independent data sources and may well have this date.
     return (
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
-        <div className="min-w-0 flex-1 rounded-lg border border-gray-200 p-6 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+      <div className={layoutClassName} style={layoutStyle}>
+        <div className="min-w-0 rounded-lg border border-gray-200 p-6 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
           {date
             ? `No archived money-move data for ${symbol} on ${date} — history is only kept for the last few trading days${!MONEYMOVE_HISTORY_TICKERS.includes(symbol) ? ' (and not backfilled for this ticker yet)' : ''}.`
             : "No money-move data yet — it's recomputed every 5 minutes during market hours."}
         </div>
-        {rightPanel && <div className="min-w-0 xl:w-[68.4rem] xl:shrink-0">{rightPanel}</div>}
+        {rightPanel && <div className="min-w-0">{rightPanel}</div>}
       </div>
     )
   }
@@ -653,16 +664,12 @@ export default function MoneyMoveChart({
   ]
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
-        {/* Fixed-width tracks in a single non-wrapping row (scrolls instead of
-            squeezing) -- keeps "All expirations" always adjacent to the last
-            monthly column and right before the side panel, regardless of
-            how much room the (fixed-width) panel leaves. */}
-        <div className="min-w-0 flex-1 overflow-x-auto xl:max-w-[1360px]">
-          <div className="flex gap-5 pb-1">
+    <div className="min-w-0 space-y-4">
+      <div className={layoutClassName} style={layoutStyle}>
+        <div className="min-w-0">
+          <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-3">
             {columns.map((c) => (
-              <div key={c.key} className="w-80 shrink-0">
+              <div key={c.key} className="min-w-0">
                 {c.series.length ? (
                   <MoneyMoveTrack
                     heading={c.heading}
@@ -676,7 +683,7 @@ export default function MoneyMoveChart({
                     ul={symbol}
                   />
                 ) : (
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="min-w-0 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{c.heading}</h3>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                       No flow captured for this expiry yet.
@@ -688,7 +695,7 @@ export default function MoneyMoveChart({
           </div>
         </div>
         {rightPanel && (
-          <div className="min-w-0 xl:w-[68.4rem] xl:shrink-0">{rightPanel}</div>
+          <div className="min-w-0">{rightPanel}</div>
         )}
       </div>
 
