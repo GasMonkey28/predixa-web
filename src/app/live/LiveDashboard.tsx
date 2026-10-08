@@ -7,6 +7,7 @@ import MoneyMoveChart, { MONEYMOVE_HISTORY_TICKERS } from './MoneyMoveChart'
 import OptionChainLive from './OptionChainLive'
 import TickerStats from './TickerStats'
 import HorizonLinesChart from '../moneyflow-horizon/HorizonLinesChart'
+import MfhResizeHandle from './MfhResizeHandle'
 
 const TICKERS = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'GOOG', 'META', 'AMZN', 'MSFT', 'AMD', 'AVGO', 'COIN', 'MARA', 'MSTR', 'PLTR', 'HOOD', 'SOFI', 'WULF'] as const
 const ROTATE_OPTIONS = [15, 30] as const
@@ -31,6 +32,12 @@ export default function LiveDashboard() {
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
   const [mfhHeight, setMfhHeight] = useState(DEFAULT_MFH_HEIGHT)
   const [layoutLoaded, setLayoutLoaded] = useState(false)
+  const layoutRef = useRef<HTMLDivElement>(null)
+
+  function resizeMfh(width: number, height: number) {
+    setPanelWidth(Math.min(44, Math.max(22, Math.round(width * 10) / 10)))
+    setMfhHeight(Math.min(560, Math.max(260, Math.round(height))))
+  }
 
   useEffect(() => {
     try {
@@ -77,7 +84,7 @@ export default function LiveDashboard() {
   }, [rotate, rotateSec])
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div ref={layoutRef} className="min-w-0 space-y-4">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-1.5 text-sm">
           <span className="mr-1 text-xs uppercase tracking-wide text-gray-400">Ticker</span>
@@ -179,17 +186,17 @@ export default function LiveDashboard() {
             <label className="hidden items-center gap-2 xl:flex">
               MFH panel width
               <input
-                type="range" min="22" max="44" step="1" value={panelWidth}
+                type="range" min="22" max="44" step="0.1" value={panelWidth}
                 onChange={(event) => setPanelWidth(Number(event.target.value))}
                 className="w-24 accent-blue-500" aria-label="Money Flow Horizon panel width"
                 aria-valuetext={`${panelWidth}% of the dashboard`}
               />
-              <span className="w-8 tabular-nums">{panelWidth}%</span>
+              <span className="w-10 tabular-nums">{panelWidth}%</span>
             </label>
             <label className="flex items-center gap-2">
               MFH height
               <input
-                type="range" min="260" max="560" step="20" value={mfhHeight}
+                type="range" min="260" max="560" step="1" value={mfhHeight}
                 onChange={(event) => setMfhHeight(Number(event.target.value))}
                 className="w-24 accent-blue-500" aria-label="Money Flow Horizon chart height"
                 aria-valuetext={`${mfhHeight} pixels`}
@@ -218,7 +225,16 @@ export default function LiveDashboard() {
                     money-flow horizon · 5 / 10 / 15 / 20-day range
                     {historyDate && ' · always current, not affected by History'}
                   </div>
-                  <HorizonLinesChart symbol={symbol} height={mfhHeight} barWidth={5.5} compact />
+                  <div className="relative">
+                    <HorizonLinesChart symbol={symbol} height={mfhHeight} barWidth={5.5} compact />
+                    <MfhResizeHandle
+                      key={symbol}
+                      layoutRef={layoutRef}
+                      panelWidth={panelWidth}
+                      height={mfhHeight}
+                      onResize={resizeMfh}
+                    />
+                  </div>
                 </div>
               )}
             </div>
