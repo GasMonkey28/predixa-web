@@ -6,7 +6,7 @@ import {
   subtractDaysFromDate,
 } from '@/lib/server/summary-json'
 import {
-  findFridayOfWeekContaining,
+  findCalendarFridayOfWeekContaining,
   formatDateYYYYMMDD,
   getMarketAnchorDate,
 } from '@/lib/trading-calendar'
@@ -274,7 +274,8 @@ async function fetchCurrentWeekly(
   ticker: string
 ): Promise<Record<string, unknown> | null> {
   const anchor = getMarketAnchorDate()
-  const friday = findFridayOfWeekContaining(anchor)
+  // The weekly object is keyed by calendar Friday, including exchange holidays.
+  const friday = findCalendarFridayOfWeekContaining(anchor)
   const dateStr = formatDateYYYYMMDD(friday)
   const key = `weekly/${dateStr}/${ticker.toUpperCase()}.json`
   try {

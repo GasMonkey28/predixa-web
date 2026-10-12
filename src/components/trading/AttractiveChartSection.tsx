@@ -4,7 +4,7 @@ import { Activity } from 'lucide-react';
 import { useMemo } from 'react';
 import React from 'react';
 import CandlestickChart from '@/components/charts/CandlestickChart';
-import { getWeekDateRange } from '@/lib/trading-calendar';
+import { getWeekDateRange, parseDateYYYYMMDD } from '@/lib/trading-calendar';
 
 interface WeeklyPrediction {
   ticker: string
@@ -79,10 +79,7 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
       prefix: string
     ) => {
       const fwdJoinDateStr = weekPrediction.fwd_join_date
-      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
-      const fridayDate = new Date()
-      fridayDate.setFullYear(year, month - 1, day)
-      fridayDate.setHours(12, 0, 0, 0)
+      const fridayDate = parseDateYYYYMMDD(fwdJoinDateStr)
 
       const { monday, friday } = getWeekDateRange(fridayDate)
       const mondayStr = getETDateString(monday)
@@ -129,10 +126,7 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
           
           // Parse fwd_join_date as ET timezone (format: "2026-01-02")
           const fwdJoinDateStr = weekPrediction.fwd_join_date
-          const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
-          const fridayDate = new Date()
-          fridayDate.setFullYear(year, month - 1, day)
-          fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
+          const fridayDate = parseDateYYYYMMDD(fwdJoinDateStr)
           
           const { monday, friday } = getWeekDateRange(fridayDate)
           const mondayStr = getETDateString(monday)
@@ -155,19 +149,16 @@ function AttractiveChartSection({ data, chartType, onChartTypeChange, title = 'P
       const hasNextWeekOverlay = mapped.some((p: Record<string, unknown>) => p.nextWeek_close != null)
       if (!hasNextWeekOverlay) {
         const fwdJoinDateStr = weeklyPredictions.nextWeek.fwd_join_date
-        const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
-        const fridayDate = new Date()
-        fridayDate.setFullYear(year, month - 1, day)
-        fridayDate.setHours(12, 0, 0, 0)
+        const fridayDate = parseDateYYYYMMDD(fwdJoinDateStr)
         const { monday, friday } = getWeekDateRange(fridayDate)
         const lastPoint = mapped[mapped.length - 1] as Record<string, unknown>
         const anchorClose = (lastPoint.close as number) ?? 0
 
-        for (let d = new Date(monday); d <= friday; d.setDate(d.getDate() + 1)) {
-          if (d.getDay() === 0 || d.getDay() === 6) continue
+        for (let d = new Date(monday); d <= friday; d.setUTCDate(d.getUTCDate() + 1)) {
+          if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue
           const dateStr = getETDateString(d)
           mapped.push({
-            time: d.toLocaleDateString(),
+            time: d.toLocaleDateString(undefined, { timeZone: 'America/New_York' }),
             timestamp: `${dateStr}T16:00:00`,
             open: anchorClose,
             high: anchorClose,
