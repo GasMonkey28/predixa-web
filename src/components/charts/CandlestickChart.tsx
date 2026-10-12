@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { getWeekDateRange } from '@/lib/trading-calendar'
+import { getWeekDateRange, parseDateYYYYMMDD } from '@/lib/trading-calendar'
 
 interface CandlestickData {
   time: string
@@ -532,10 +532,7 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
       }
     ) => {
       const fwdJoinDateStr = weekPrediction.fwd_join_date
-      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
-      const fridayDate = new Date()
-      fridayDate.setFullYear(year, month - 1, day)
-      fridayDate.setHours(12, 0, 0, 0)
+      const fridayDate = parseDateYYYYMMDD(fwdJoinDateStr)
 
       const weekBars = getWeekLineSpan(fridayDate, allowFutureExtension)
       if (!weekBars) return
@@ -583,10 +580,7 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
 
     if (weeklyPredictions.currentWeek) {
       const fwdJoinDateStr = weeklyPredictions.currentWeek.fwd_join_date
-      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
-      const fridayDate = new Date()
-      fridayDate.setFullYear(year, month - 1, day)
-      fridayDate.setHours(12, 0, 0, 0)
+      const fridayDate = parseDateYYYYMMDD(fwdJoinDateStr)
       const extendFuture = !findBarsForWeek(fridayDate)
       renderWeekLines(
         weeklyPredictions.currentWeek,
@@ -603,10 +597,7 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
     if (weeklyPredictions.previousWeek) {
       // Parse fwd_join_date as ET timezone (format: "2026-01-02")
       const fwdJoinDateStr = weeklyPredictions.previousWeek.fwd_join_date
-      const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
-      const fridayDate = new Date()
-      fridayDate.setFullYear(year, month - 1, day)
-      fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
+      const fridayDate = parseDateYYYYMMDD(fwdJoinDateStr)
       
       // Find bars for this week (works for partial weeks)
       const weekBars = findBarsForWeek(fridayDate)
@@ -673,10 +664,7 @@ export default function CandlestickChart({ data, height = 400, weeklyPredictions
       for (const weekPrediction of weeklyPredictions.allWeeks) {
         // Parse fwd_join_date as ET timezone (format: "2026-01-02")
         const fwdJoinDateStr = weekPrediction.fwd_join_date
-        const [year, month, day] = fwdJoinDateStr.split('-').map(Number)
-        const fridayDate = new Date()
-        fridayDate.setFullYear(year, month - 1, day)
-        fridayDate.setHours(12, 0, 0, 0) // Noon to avoid timezone issues
+        const fridayDate = parseDateYYYYMMDD(fwdJoinDateStr)
         
         // Find bars for this week (works for partial weeks)
         const weekBars = findBarsForWeek(fridayDate)

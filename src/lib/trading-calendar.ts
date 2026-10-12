@@ -43,24 +43,18 @@ function formatCalendarDate(year: number, month: number, day: number): string {
 
 function dateFromDateStr(dateStr: string): Date {
   const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date()
-  date.setFullYear(year, month - 1, day)
-  date.setHours(12, 0, 0, 0)
-  return date
+  // Noon UTC always belongs to this NYSE calendar date, regardless of host timezone.
+  return new Date(Date.UTC(year, month - 1, day, 12))
 }
 
 function shiftDateStr(dateStr: string, days: number): string {
   const date = dateFromDateStr(dateStr)
-  date.setDate(date.getDate() + days)
+  date.setUTCDate(date.getUTCDate() + days)
   return getDateStringInTimeZone(NYSE_TIMEZONE, date)
 }
 
-function getDayOfWeekFromDateStr(dateStr: string, timeZone: string = NYSE_TIMEZONE): number {
-  const weekday = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    weekday: 'short',
-  }).format(dateFromDateStr(dateStr))
-  return WEEKDAY_MAP[weekday] ?? 0
+function getDayOfWeekFromDateStr(dateStr: string): number {
+  return dateFromDateStr(dateStr).getUTCDay()
 }
 
 type TimeZoneParts = {
@@ -81,7 +75,7 @@ function getTimeZoneParts(timeZone: string, fromDate: Date = new Date()): TimeZo
     weekday: 'short',
     hour: 'numeric',
     minute: 'numeric',
-    hour12: false,
+    hourCycle: 'h23',
   })
   const parts = Object.fromEntries(
     formatter
@@ -100,70 +94,79 @@ function getTimeZoneParts(timeZone: string, fromDate: Date = new Date()): TimeZo
   }
 }
 
-function nthWeekdayOfMonth(year: number, monthIndex: number, weekday: number, n: number): Date {
-  let count = 0
-  const cursor = new Date(year, monthIndex, 1)
-  while (cursor.getMonth() === monthIndex) {
-    if (cursor.getDay() === weekday) {
-      count++
-      if (count === n) {
-        return new Date(cursor)
-      }
-    }
-    cursor.setDate(cursor.getDate() + 1)
-  }
-  throw new Error(`Could not find weekday ${weekday} occurrence ${n} in month ${monthIndex}`)
+function nthWeekdayOfMonth(year: number, monthIndex: number, weekday: number, n: number): string {
+  const firstWeekday = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay()
+  return formatCalendarDate(year, monthIndex + 1, 1 + (weekday - firstWeekday + 7) % 7 + 7 * (n - 1))
 }
 
-function lastWeekdayOfMonth(year: number, monthIndex: number, weekday: number): Date {
-  const cursor = new Date(year, monthIndex + 1, 0)
-  while (cursor.getDay() !== weekday) {
-    cursor.setDate(cursor.getDate() - 1)
-  }
-  return cursor
+function lastWeekdayOfMonth(year: number, monthIndex: number, weekday: number): string {
+  const last = new Date(Date.UTC(year, monthIndex + 1, 0))
+  return formatCalendarDate(year, monthIndex + 1, last.getUTCDate() - (last.getUTCDay() - weekday + 7) % 7)
 }
 
-/** NYSE full-day closures for a calendar year (floating + fixed dates). */
+/** Gregorian Easter (Meeus/Jones/Butcher); Good Friday is two days earlier. */
+function goodFriday(year: number): string {
+  const a = year % 19
+  const b = Math.floor(year / 100)
+  const c = year % 100
+  const d = Math.floor(b / 4)
+  const e = b % 4
+  const f = Math.floor((b + 8) / 25)
+  const g = Math.floor((b - f + 1) / 3)
+  const h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4)
+  const k = c % 4
+  const l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451)
+  const month = Math.floor((h + l - 7 * m + 114) / 31)
+  const day = (h + l - 7 * m + 114) % 31 + 1
+  return shiftDateStr(formatCalendarDate(year, month, day), -2)
+}
+
+// Extraordinary full-day closures since the modern MLK calendar began in 1998.
+// Future exceptional closures must be added when announced by the exchange.
+const EXTRA_NYSE_CLOSURES = new Set([
+  '2001-09-11', '2001-09-12', '2001-09-13', '2001-09-14',
+  '2004-06-11', '2007-01-02', '2012-10-29', '2012-10-30',
+  '2018-12-05', '2025-01-09',
+])
+const holidayCache = new Map<number, Set<string>>()
+
+/**
+ * NYSE full-day closures, not US federal holidays. Early closes remain sessions.
+ * Rules: https://www.nyse.com/trade/hours-calendars
+ * In particular, Saturday New Year's Day is NOT observed on the prior Friday.
+ */
 function getNyseHolidayDates(year: number): Set<string> {
+  const cached = holidayCache.get(year)
+  if (cached) return cached
+
   const dates = new Set<string>([
-    formatCalendarDate(year, 1, 1),
-    formatDateYYYYMMDD(nthWeekdayOfMonth(year, 0, 1, 3)), // MLK Day
-    formatDateYYYYMMDD(nthWeekdayOfMonth(year, 1, 1, 3)), // Presidents' Day
-    formatDateYYYYMMDD(lastWeekdayOfMonth(year, 4, 1)), // Memorial Day
-    formatCalendarDate(year, 6, 19), // Juneteenth
-    formatCalendarDate(year, 7, 4), // Independence Day
-    formatDateYYYYMMDD(nthWeekdayOfMonth(year, 8, 1, 1)), // Labor Day
-    formatDateYYYYMMDD(nthWeekdayOfMonth(year, 10, 4, 4)), // Thanksgiving
-    formatCalendarDate(year, 12, 25), // Christmas
+    nthWeekdayOfMonth(year, 1, 1, 3), // Presidents' Day
+    goodFriday(year),
+    lastWeekdayOfMonth(year, 4, 1), // Memorial Day
+    nthWeekdayOfMonth(year, 8, 1, 1), // Labor Day
+    nthWeekdayOfMonth(year, 10, 4, 4), // Thanksgiving
   ])
+  if (year >= 1998) dates.add(nthWeekdayOfMonth(year, 0, 1, 3)) // MLK Day
+
+  const addFixedHoliday = (month: number, day: number, observeSaturday = true) => {
+    const date = formatCalendarDate(year, month, day)
+    const weekday = getDayOfWeekFromDateStr(date)
+    dates.add(date)
+    if (weekday === 0) dates.add(shiftDateStr(date, 1))
+    if (weekday === 6 && observeSaturday) dates.add(shiftDateStr(date, -1))
+  }
+  addFixedHoliday(1, 1, false)
+  if (year >= 2022) addFixedHoliday(6, 19)
+  addFixedHoliday(7, 4)
+  addFixedHoliday(12, 25)
+  holidayCache.set(year, dates)
   return dates
 }
 
-/**
- * Check if a date is an NYSE holiday (year-aware floating Mondays/Thursdays).
- */
 function isHolidayDateStr(dateStr: string): boolean {
-  const year = Number(dateStr.slice(0, 4))
-
-  if (getNyseHolidayDates(year).has(dateStr)) {
-    return true
-  }
-
-  const dayOfWeek = getDayOfWeekFromDateStr(dateStr)
-  if (dayOfWeek === 1) {
-    const prevSunday = shiftDateStr(dateStr, -1)
-    if (getNyseHolidayDates(Number(prevSunday.slice(0, 4))).has(prevSunday)) {
-      return true
-    }
-  }
-  if (dayOfWeek === 5) {
-    const nextSaturday = shiftDateStr(dateStr, 1)
-    if (getNyseHolidayDates(Number(nextSaturday.slice(0, 4))).has(nextSaturday)) {
-      return true
-    }
-  }
-
-  return false
+  return EXTRA_NYSE_CLOSURES.has(dateStr) || getNyseHolidayDates(Number(dateStr.slice(0, 4))).has(dateStr)
 }
 
 /**
@@ -212,7 +215,7 @@ export function findLastCalendarFriday(fromDate: Date = new Date()): Date {
 export function findPreviousWeekCalendarFriday(fromDate: Date = new Date()): Date {
   const lastFriday = findLastCalendarFriday(fromDate)
   const previousWeek = new Date(lastFriday)
-  previousWeek.setDate(previousWeek.getDate() - 7)
+  previousWeek.setUTCDate(previousWeek.getUTCDate() - 7)
   return previousWeek
 }
 
@@ -223,19 +226,26 @@ export function getWeeklyPublishCandidateDates(fromDate: Date = new Date(), week
   const seen = new Set<string>()
   const dates: string[] = []
   let friday = findLastCalendarFriday(fromDate)
+  const asOfDate = formatDateYYYYMMDD(fromDate)
 
   for (let week = 0; week < weeksBack; week++) {
-    for (const candidate of [
+    const candidates = [
       formatDateYYYYMMDD(friday),
       formatDateYYYYMMDD(findLastFridayOrMonday(friday)),
-    ]) {
+    ]
+    // Some publishers defer a closed Friday to Monday. Never fetch a future key.
+    const nextMonday = shiftDateStr(formatDateYYYYMMDD(friday), 3)
+    if (!isTradingDay(friday) && nextMonday <= asOfDate && isTradingDay(dateFromDateStr(nextMonday))) {
+      candidates.push(nextMonday)
+    }
+    for (const candidate of candidates) {
       if (!seen.has(candidate)) {
         seen.add(candidate)
         dates.push(candidate)
       }
     }
     const previousWeek = new Date(friday)
-    previousWeek.setDate(previousWeek.getDate() - 7)
+    previousWeek.setUTCDate(previousWeek.getUTCDate() - 7)
     friday = previousWeek
   }
 
@@ -304,7 +314,7 @@ export function findPreviousWeekFriday(fromDate: Date = new Date()): Date {
   
   // Go back one week from that Friday
   const previousWeekDate = new Date(currentWeekFriday)
-  previousWeekDate.setDate(previousWeekDate.getDate() - 7)
+  previousWeekDate.setUTCDate(previousWeekDate.getUTCDate() - 7)
   
   // Find the Friday of that week (or Monday if Friday was holiday)
   return findLastFridayOrMonday(previousWeekDate)
@@ -336,9 +346,9 @@ export function isFridayAfterWeeklyPredictionCutoff(fromDate: Date = new Date())
 }
 
 /**
- * Friday (or Monday substitute) of the Mon–Sun calendar week containing fromDate.
+ * Calendar Friday of the Mon–Sun week containing fromDate, including holidays.
  */
-export function findFridayOfWeekContaining(fromDate: Date = new Date()): Date {
+export function findCalendarFridayOfWeekContaining(fromDate: Date = new Date()): Date {
   let dateStr = getDateStringInTimeZone(NYSE_TIMEZONE, fromDate)
   const day = getDayOfWeekFromDateStr(dateStr)
 
@@ -350,7 +360,13 @@ export function findFridayOfWeekContaining(fromDate: Date = new Date()): Date {
     dateStr = shiftDateStr(dateStr, 5 - day)
   }
 
-  const friday = dateFromDateStr(dateStr)
+  return dateFromDateStr(dateStr)
+}
+
+/** Friday (or earlier Monday substitute) for callers that require a session. */
+export function findFridayOfWeekContaining(fromDate: Date = new Date()): Date {
+  const friday = findCalendarFridayOfWeekContaining(fromDate)
+  const dateStr = formatDateYYYYMMDD(friday)
   if (getDayOfWeekFromDateStr(dateStr) === 5 && !isTradingDay(friday)) {
     const monday = dateFromDateStr(shiftDateStr(dateStr, -4))
     if (isTradingDay(monday)) {
@@ -367,7 +383,7 @@ export function findFridayOfWeekContaining(fromDate: Date = new Date()): Date {
 export function findNextWeekFriday(fromDate: Date = new Date()): Date {
   const thisWeekFriday = findFridayOfWeekContaining(fromDate)
   const next = new Date(thisWeekFriday)
-  next.setDate(next.getDate() + 7)
+  next.setUTCDate(next.getUTCDate() + 7)
   return findFridayOfWeekContaining(next)
 }
 
@@ -385,10 +401,8 @@ export function getMarketAnchorDate(fromDate: Date = new Date()): Date {
 
 export function parseDateYYYYMMDD(dateStr: string): Date {
   const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date()
-  date.setFullYear(year, month - 1, day)
-  date.setHours(12, 0, 0, 0)
-  return date
+  // Noon UTC always belongs to this NYSE calendar date, regardless of host timezone.
+  return new Date(Date.UTC(year, month - 1, day, 12))
 }
 
 /** True when a prediction's fwd_join week overlaps the Mon–Fri span for weekFriday. */
@@ -415,24 +429,12 @@ export function formatDateYYYYMMDD(date: Date): string {
  * Dates are normalized to avoid timezone issues when comparing
  */
 export function getWeekDateRange(fridayDate: Date): { monday: Date; friday: Date } {
-  // Create a copy and normalize to avoid timezone issues
-  const friday = new Date(fridayDate)
-  // Set to noon to avoid timezone edge cases
-  friday.setHours(12, 0, 0, 0)
-  
-  const monday = new Date(friday)
-  // Go back to Monday (4 days before Friday)
-  monday.setDate(friday.getDate() - 4)
-  monday.setHours(0, 0, 0, 0) // Start of day
-  
-  // Adjust if Monday was a holiday (go to next trading day)
-  while (!isTradingDay(monday) && monday < friday) {
-    monday.setDate(monday.getDate() + 1)
+  const fridayStr = formatDateYYYYMMDD(fridayDate)
+  const friday = dateFromDateStr(fridayStr)
+  let mondayStr = shiftDateStr(fridayStr, -4)
+  // Date-only arithmetic must not depend on the browser/server timezone or DST.
+  while (!isTradingDay(dateFromDateStr(mondayStr)) && mondayStr < fridayStr) {
+    mondayStr = shiftDateStr(mondayStr, 1)
   }
-  
-  // Set Friday to start of day (we compare dates as strings, so time doesn't matter)
-  friday.setHours(0, 0, 0, 0)
-  
-  return { monday, friday }
+  return { monday: dateFromDateStr(mondayStr), friday }
 }
-
