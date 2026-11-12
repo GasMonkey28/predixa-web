@@ -40,6 +40,7 @@ import { loadTradeJournal, saveTradeJournal } from '@/lib/trade-journal-storage'
 import { fetchTradeJournalReason } from '@/lib/trade-journal-reason'
 import { type TradeStationPositionLine } from '@/lib/tradestation-map'
 import {
+  canBuyFillCloseShort,
   createJournalEntryFromFill,
   exitPriceFromFill,
   getContributeCloseTargets,
@@ -328,12 +329,18 @@ export default function TradeJournalPage() {
     setMonthlyProfitEntries((prev) => prev.filter((line) => line.id !== id))
   }
 
-  const updateEntry = useCallback((id: string, patch: Partial<TradeJournalEntry>) => {
+  const updateEntry = useCallback((
+    id: string,
+    patch: Partial<TradeJournalEntry>,
+    coverFill?: TradeStationRecentFill
+  ) => {
     const remainderId = crypto.randomUUID()
-    setEntries((prev) =>
-      renumberEntries(
+    setEntries((prev) => {
+      if (coverFill && getUsedTradeStationFillIds(prev).has(coverFill.id)) return prev
+      return renumberEntries(
         prev.flatMap((entry) => {
           if (entry.id !== id) return entry
+          if (coverFill && !canBuyFillCloseShort(coverFill, entry)) return entry
           if (patch.tradestationSoldFillId && patch.soldPrice != null) {
             return applyJournalClosePatch(entry, patch, remainderId)
           }
@@ -344,7 +351,7 @@ export default function TradeJournalPage() {
           return next
         })
       )
-    )
+    })
   }, [])
 
   const addEntry = async () => {
@@ -521,16 +528,22 @@ export default function TradeJournalPage() {
         return
       }
 
-      const soldPrice =
-        fill.soldValue ??
-        (fill.openOrClose === 'open' && fill.buyOrSell === 'sell' ? fill.price : null)
+      const target = entries.find((entry) => entry.id === entryId)
+      const useBuyAsCover = fill.openOrClose === 'open' && fill.buyOrSell === 'buy'
+      if (useBuyAsCover && (!target || !canBuyFillCloseShort(fill, target))) {
+        setTsMessage('Choose a matching open short with enough contracts for this buy fill.')
+        return
+      }
+      const soldPrice = useBuyAsCover
+        ? fill.price
+        : fill.soldValue ??
+          (fill.openOrClose === 'open' && fill.buyOrSell === 'sell' ? fill.price : null)
       if (soldPrice == null) {
         setTsMessage('Open fill — drop on Buy, not Sold.')
         return
       }
 
       const closeReason = await fetchTradeJournalReason(fill.date)
-      const target = entries.find((entry) => entry.id === entryId)
       const profitMonth = defaultProfitMonthOnClose({
         profitMonth: target?.profitMonth ?? null,
         closeDate: fill.date,
@@ -545,7 +558,7 @@ export default function TradeJournalPage() {
         instrumentType: fill.instrumentType,
         positionSize: fill.quantity,
         tradestationSoldFillId: fill.id,
-      })
+      }, useBuyAsCover ? fill : undefined)
       setTsMessage(
         _options?.takeProfit
           ? `Take profit logged on position ${getTradeNumber(entries, entryId) ?? '—'}`
@@ -973,6 +986,9 @@ export default function TradeJournalPage() {
                       const isCloseFill = fill.openOrClose === 'close'
                       const isLongOpen = fill.openOrClose === 'open' && fill.buyOrSell === 'buy'
                       const isShortOpen = fill.openOrClose === 'open' && fill.buyOrSell === 'sell'
+                      const canTakeProfit =
+                        isCloseFill ||
+                        (isLongOpen && entries.some((entry) => canBuyFillCloseShort(fill, entry)))
 
                       const renderFillActionMenu = (
                         action: TsFillJournalAction,
@@ -1335,7 +1351,7 @@ export default function TradeJournalPage() {
                               >
                                 Add row
                               </button>
-                              {isCloseFill &&
+                              {canTakeProfit &&
                                 renderFillActionMenu(
                                   'takeProfit',
                                   'Take profit',

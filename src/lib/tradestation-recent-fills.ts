@@ -306,6 +306,22 @@ function matchesFillInstrument(entry: TradeJournalEntry, fill: TradeStationRecen
   return entry.instrumentType === fill.instrumentType
 }
 
+export function canBuyFillCloseShort(
+  fill: TradeStationRecentFill,
+  entry: TradeJournalEntry
+): boolean {
+  return (
+    fill.openOrClose === 'open' &&
+    fill.buyOrSell === 'buy' &&
+    isValidFillPrice(fill.price) &&
+    isOpenPosition(entry) &&
+    isShortPosition(entry.buyPrice) &&
+    matchesFillInstrument(entry, fill) &&
+    fill.quantity > 0 &&
+    fill.quantity <= entry.positionSize
+  )
+}
+
 /** Journal rows eligible for Buy / Sell / Take profit from a recent fill. */
 export function getJournalTargetsForFillAction(
   fill: TradeStationRecentFill,
@@ -372,13 +388,16 @@ export function getJournalTargetsForFillAction(
   }
 
   if (action !== 'sold' && action !== 'takeProfit') return []
-  if (fill.openOrClose !== 'close' || fill.soldValue == null) return []
+  const useBuyAsCover =
+    action === 'takeProfit' && fill.openOrClose === 'open' && fill.buyOrSell === 'buy'
+  if (!useBuyAsCover && (fill.openOrClose !== 'close' || fill.soldValue == null)) return []
 
   const closingShort = fill.buyOrSell === 'buy'
   const closingLong = fill.buyOrSell === 'sell'
 
   return entries
     .filter((entry) => {
+      if (useBuyAsCover) return canBuyFillCloseShort(fill, entry)
       if (!isOpenPosition(entry) || !matchesFillInstrument(entry, fill)) return false
       if (closingShort) return isShortPosition(entry.buyPrice)
       if (closingLong) return isLongPosition(entry.buyPrice)

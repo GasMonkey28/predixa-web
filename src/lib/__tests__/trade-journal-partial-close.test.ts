@@ -1,4 +1,8 @@
-import { getJournalTargetsForFillAction, type TradeStationRecentFill } from '@/lib/tradestation-recent-fills'
+import {
+  extractRecentFillsFromOrders,
+  getJournalTargetsForFillAction,
+  type TradeStationRecentFill,
+} from '@/lib/tradestation-recent-fills'
 import {
   applyJournalClosePatch, calcOpenPositionSummary, calcMonthlyProfitSummaries,
   normalizeEntry, renumberEntries, isOpenPosition,
@@ -75,4 +79,36 @@ it('previews profit for only the quantity being closed', () => {
   const targets = getJournalTargetsForFillAction(fill, [openLot()], 'takeProfit')
   expect(targets).toHaveLength(1)
   expect(targets[0].projectedProfit).toBe(550)
+})
+
+it.each([undefined, 'Open'])('offers take profit for a buy reported as %s', (openOrClose) => {
+  const [fill] = extractRecentFillsFromOrders([{
+    OrderID: 'buy-cover',
+    Status: 'FLL',
+    ClosedDateTime: '2026-11-12T13:39:00Z',
+    Legs: [{
+      Symbol: 'MESZ26',
+      BuyOrSell: 'Buy',
+      OpenOrClose: openOrClose,
+      ExecQuantity: '1',
+      ExecutionPrice: '7587',
+    }],
+  }])
+  const short = openLot(2, -7645.25)
+  const blank = { ...short, id: 'blank', buyPrice: null }
+  const entries = [
+    short,
+    blank,
+    { ...short, id: 'long', buyPrice: 7500 },
+    { ...short, id: 'closed', soldPrice: 7600 },
+    { ...short, id: 'other-instrument', instrumentType: 'future' as const },
+  ]
+
+  expect(fill).toMatchObject({ openOrClose: 'open', buyValue: 7587, soldValue: null })
+  expect(getJournalTargetsForFillAction(fill, entries, 'takeProfit')).toMatchObject([
+    { entry: { id: short.id }, projectedProfit: 291.25 },
+  ])
+  expect(getJournalTargetsForFillAction(fill, entries, 'buy').map(({ entry }) => entry.id))
+    .toEqual([blank.id])
+  expect(getJournalTargetsForFillAction({ ...fill, quantity: 3 }, entries, 'takeProfit')).toEqual([])
 })
